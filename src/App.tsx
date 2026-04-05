@@ -549,43 +549,43 @@ export default function App() {
 
   // --- Render Helpers ---
   if (!isAuthReady) return (
-    <div className="flex flex-col items-center justify-center h-screen bg-surface-950 text-white gap-6">
-      <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(99,102,241,0.3)]" />
-      <span className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px]">Sincronizando Sistema</span>
+    <div className="flex flex-col items-center justify-center h-screen bg-black text-white gap-6">
+      <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(212,175,55,0.2)]" />
+      <span className="text-slate-600 font-black uppercase tracking-[0.4em] text-[9px]">Sincronizando Sistema</span>
     </div>
   );
 
   if (!user) {
     return (
-      <div className="relative flex flex-col items-center justify-center min-h-screen bg-surface-950 p-6 overflow-hidden">
+      <div className="relative flex flex-col items-center justify-center min-h-screen bg-black p-6 overflow-hidden">
         {/* Background Glows */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-brand-primary/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-brand-accent/10 blur-[120px] rounded-full" />
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-primary/5 blur-[150px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-white/5 blur-[150px] rounded-full" />
         
         <motion.div 
-          initial={{ opacity: 0, y: 40, scale: 0.95 }}
+          initial={{ opacity: 0, y: 40, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="max-w-md w-full glass-card p-8 md:p-12 text-center relative z-10"
+          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+          className="max-w-md w-full glass-card p-8 md:p-14 text-center relative z-10"
         >
-          <div className="flex justify-center mb-8">
-            <div className="p-4 bg-white/[0.03] rounded-[24px] border border-white/[0.05] shadow-2xl relative group">
-              <div className="absolute inset-0 bg-brand-primary/20 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="flex justify-center mb-10">
+            <div className="p-1 bg-gradient-to-tr from-brand-primary/40 to-transparent rounded-[28px] shadow-2xl relative group">
+              <div className="absolute inset-0 bg-brand-primary/10 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
               <img 
-                src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=256&h=256&fit=crop" 
-                className="w-16 h-16 rounded-xl object-cover relative z-10 shadow-2xl" 
+                src="https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=256&h=256&fit=crop" 
+                className="w-20 h-20 rounded-[24px] object-cover relative z-10 grayscale hover:grayscale-0 transition-all duration-700" 
                 alt="RL Logo"
                 referrerPolicy="no-referrer"
               />
             </div>
           </div>
           
-          <div className="space-y-2 mb-8">
-            <h1 className="text-xl font-bold text-white tracking-tighter uppercase">Reyne Lucas</h1>
-            <div className="flex items-center justify-center gap-3">
-              <div className="h-[1px] w-6 bg-brand-primary/30" />
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.4em]">Private Finance</span>
-              <div className="h-[1px] w-6 bg-brand-primary/30" />
+          <div className="space-y-3 mb-10">
+            <h1 className="text-2xl font-bold text-white tracking-[0.1em] uppercase">Reyne Lucas</h1>
+            <div className="flex items-center justify-center gap-4">
+              <div className="h-[1px] w-8 bg-brand-primary/20" />
+              <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em]">Private Finance</span>
+              <div className="h-[1px] w-8 bg-brand-primary/20" />
             </div>
           </div>
 
@@ -709,29 +709,28 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-surface-950 text-slate-200 font-sans selection:bg-brand-primary/30 overflow-x-hidden">
+    <div className="min-h-screen bg-black text-slate-300 font-sans selection:bg-brand-primary/20 overflow-x-hidden">
       {/* Background Glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-24 -left-24 w-96 h-96 bg-brand-primary/10 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 -right-24 w-80 h-80 bg-brand-secondary/10 rounded-full blur-[100px]" />
-        <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[500px] h-96 bg-brand-accent/5 rounded-full blur-[150px]" />
+        <div className="absolute -top-24 -left-24 w-[600px] h-[600px] bg-brand-primary/5 rounded-full blur-[160px]" />
+        <div className="absolute top-1/2 -right-24 w-[500px] h-[500px] bg-white/5 rounded-full blur-[140px]" />
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-surface-950/40 backdrop-blur-xl border-b border-white/[0.05]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/5 rounded-2xl border border-white/10 shadow-xl">
+      <header className="sticky top-0 z-40 bg-black/60 backdrop-blur-2xl border-b border-white/[0.03]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-24 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-1 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl">
               <img 
-                src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=64&h=64&fit=crop" 
-                className="w-8 h-8 rounded-xl object-cover" 
+                src="https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=64&h=64&fit=crop" 
+                className="w-10 h-10 rounded-xl object-cover grayscale" 
                 alt="RL Logo"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <h1 className="text-base font-bold text-white tracking-tight leading-none">REYNE LUCAS</h1>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-brand-primary font-bold">Private Finance</span>
+              <h1 className="text-lg font-bold text-white tracking-[0.1em] leading-none">REYNE LUCAS</h1>
+              <span className="text-[10px] uppercase tracking-[0.4em] text-brand-primary font-black">Private Finance</span>
             </div>
           </div>
 
@@ -1211,7 +1210,7 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setPayingLoan(null)}
-              className="absolute inset-0 bg-surface-950/80 backdrop-blur-md"
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -1222,13 +1221,13 @@ export default function App() {
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h2 className="text-xl font-bold text-white tracking-tight">Pagamento</h2>
-                  <p className="text-slate-500 text-sm font-medium mt-1">{payingLoan.clientName}</p>
+                  <p className="text-slate-600 text-sm font-medium mt-1">{payingLoan.clientName}</p>
                 </div>
                 <button 
                   onClick={() => setPayingLoan(null)}
                   className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
                 >
-                  <ChevronRight className="w-6 h-6 rotate-90 text-slate-500" />
+                  <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
                 </button>
               </div>
 
@@ -1319,7 +1318,7 @@ export default function App() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                className="absolute inset-0 bg-surface-950/80 backdrop-blur-md"
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
               />
               <motion.div 
                 initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -1331,11 +1330,11 @@ export default function App() {
                   <AlertCircle className="w-8 h-8 text-brand-danger" />
                 </div>
                 <h2 className="text-xl font-bold text-white mb-2">{confirmModal.title}</h2>
-                <p className="text-slate-400 text-sm mb-8">{confirmModal.message}</p>
+                <p className="text-slate-500 text-sm mb-8">{confirmModal.message}</p>
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                    className="flex-1 px-6 py-3 bg-white/5 text-slate-400 hover:bg-white/10 rounded-xl font-bold uppercase tracking-widest text-[10px] transition-all"
+                    className="flex-1 px-6 py-3 bg-white/5 text-slate-500 hover:bg-white/10 rounded-xl font-bold uppercase tracking-widest text-[10px] transition-all"
                   >
                     Cancelar
                   </button>
@@ -1356,7 +1355,7 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setViewingClientLoans(null)}
-              className="absolute inset-0 bg-surface-950/80 backdrop-blur-md"
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -1367,13 +1366,13 @@ export default function App() {
               <div className="flex items-center justify-between mb-8 shrink-0">
                 <div>
                   <h2 className="text-2xl font-bold text-white tracking-tight">Contratos de {viewingClientLoans}</h2>
-                  <p className="text-slate-500 text-sm font-medium mt-1">Histórico completo de empréstimos e pagamentos.</p>
+                  <p className="text-slate-600 text-sm font-medium mt-1">Histórico completo de empréstimos e pagamentos.</p>
                 </div>
                 <button 
                   onClick={() => setViewingClientLoans(null)}
                   className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
                 >
-                  <ChevronRight className="w-6 h-6 rotate-90 text-slate-500" />
+                  <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
                 </button>
               </div>
 
@@ -1472,30 +1471,32 @@ export default function App() {
 
 function StatCard({ title, value, icon, color, trend }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger', trend?: string }) {
   const colors = {
-    primary: 'text-brand-primary bg-brand-primary/10 border-brand-primary/20',
-    secondary: 'text-brand-secondary bg-brand-secondary/10 border-brand-secondary/20',
-    accent: 'text-brand-accent bg-brand-accent/10 border-brand-accent/20',
-    danger: 'text-brand-danger bg-brand-danger/10 border-brand-danger/20',
+    primary: 'text-brand-primary bg-brand-primary/5 border-brand-primary/10',
+    secondary: 'text-white bg-white/5 border-white/10',
+    accent: 'text-brand-accent bg-brand-accent/5 border-brand-accent/10',
+    danger: 'text-brand-danger bg-brand-danger/5 border-brand-danger/10',
   };
 
   return (
     <motion.div 
-      whileHover={{ y: -8, scale: 1.02 }}
-      className="glass-card p-6 space-y-4 group"
+      whileHover={{ y: -5, scale: 1.01 }}
+      className="glass-card p-7 space-y-5 group relative overflow-hidden"
     >
-      <div className="flex items-center justify-between">
-        <div className={cn("p-3 rounded-[18px] transition-transform group-hover:scale-110 duration-500", colors[color])}>
+      <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 blur-[60px] -mr-16 -mt-16 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+      
+      <div className="flex items-center justify-between relative z-10">
+        <div className={cn("p-3.5 rounded-[20px] transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(212,175,55,0.15)]", colors[color])}>
           {icon}
         </div>
         {trend && (
-          <span className={cn("text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-xl", colors[color])}>
+          <span className={cn("text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-xl border", colors[color])}>
             {trend}
           </span>
         )}
       </div>
-      <div>
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] block mb-1">{title}</span>
-        <div className="text-lg font-bold text-white tracking-tight">{value}</div>
+      <div className="relative z-10">
+        <span className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em] block mb-1.5">{title}</span>
+        <div className="text-2xl font-bold text-white tracking-tight group-hover:text-brand-primary transition-colors duration-500">{value}</div>
       </div>
     </motion.div>
   );
@@ -1503,16 +1504,16 @@ function StatCard({ title, value, icon, color, trend }: { title: string, value: 
 
 function StatusBadge({ status, onClick }: { status: Loan['status'], onClick: () => void }) {
   const styles = {
-    'Pendente': 'bg-brand-warning/10 text-brand-warning border-brand-warning/20',
-    'Pago': 'bg-brand-accent/10 text-brand-accent border-brand-accent/20',
-    'Atrasado': 'bg-brand-danger/10 text-brand-danger border-brand-danger/20',
+    'Pendente': 'bg-brand-warning/5 text-brand-warning border-brand-warning/10 hover:bg-brand-warning/10',
+    'Pago': 'bg-brand-accent/5 text-brand-accent border-brand-accent/10 hover:bg-brand-accent/10',
+    'Atrasado': 'bg-brand-danger/5 text-brand-danger border-brand-danger/10 hover:bg-brand-danger/10',
   };
 
   return (
     <button 
       onClick={onClick}
       className={cn(
-        "px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all active:scale-90",
+        "px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border transition-all active:scale-90",
         styles[status]
       )}
     >
