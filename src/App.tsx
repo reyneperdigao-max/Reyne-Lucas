@@ -48,7 +48,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { format, addMonths } from 'date-fns';
+import { format, addMonths, parseISO, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { db, auth } from './firebase';
 import { cn } from './lib/utils';
@@ -93,7 +93,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [authMode, setAuthMode] = useState<'login' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,9 +141,9 @@ export default function App() {
 
   const safeFormatDate = (dateStr: string | undefined, formatStr: string, fallback: string = '---') => {
     if (!dateStr) return fallback;
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return fallback;
     try {
+      const date = parseISO(dateStr);
+      if (isNaN(date.getTime())) return fallback;
       return format(date, formatStr, { locale: ptBR });
     } catch (e) {
       return fallback;
@@ -152,13 +152,13 @@ export default function App() {
 
   const isOverdue = (loan: Loan) => {
     if (!loan.dueDate || loan.status !== 'Pendente') return false;
-    const dueDate = new Date(loan.dueDate);
-    if (isNaN(dueDate.getTime())) return false;
-    // Compare only dates (ignoring time)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate < today;
+    try {
+      const dueDate = startOfDay(parseISO(loan.dueDate));
+      const today = startOfDay(new Date());
+      return dueDate < today;
+    } catch (e) {
+      return false;
+    }
   };
 
   // --- Firebase Auth ---
@@ -194,28 +194,6 @@ export default function App() {
         setError("O login por e-mail não está ativado no Firebase Console. Ative-o em Authentication > Sign-in method.");
       } else {
         setError("Falha ao entrar. Verifique seus dados.");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleEmailRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
-      console.error("Register Error:", err);
-      if (err.code === 'auth/email-already-in-use') {
-        setError("Este e-mail já está em uso.");
-      } else if (err.code === 'auth/weak-password') {
-        setError("A senha deve ter pelo menos 6 caracteres.");
-      } else if (err.code === 'auth/operation-not-allowed') {
-        setError("O cadastro por e-mail não está ativado no Firebase Console. Ative-o em Authentication > Sign-in method.");
-      } else {
-        setError("Falha ao criar conta.");
       }
     } finally {
       setIsSubmitting(false);
@@ -396,8 +374,13 @@ export default function App() {
 
   const handleInterestPayment = async () => {
     if (!payingLoan) return;
-    const today = new Date();
-    const currentDueDate = new Date(payingLoan.dueDate);
+    const today = startOfDay(new Date());
+    let currentDueDate: Date;
+    try {
+      currentDueDate = parseISO(payingLoan.dueDate);
+    } catch (e) {
+      currentDueDate = today;
+    }
     
     let newDueDate: Date;
     if (isNaN(currentDueDate.getTime())) {
@@ -427,8 +410,13 @@ export default function App() {
 
   const handleRenewLoan = async () => {
     if (!payingLoan) return;
-    const today = new Date();
-    const currentDueDate = new Date(payingLoan.dueDate);
+    const today = startOfDay(new Date());
+    let currentDueDate: Date;
+    try {
+      currentDueDate = parseISO(payingLoan.dueDate);
+    } catch (e) {
+      currentDueDate = today;
+    }
     
     // Add 1 month to the current due date to maintain the cycle (fixed day)
     // If the current due date is invalid, use today + 1 month
@@ -516,7 +504,7 @@ export default function App() {
       .reduce((acc, curr) => acc + (curr.jurosPagos || 0), 0);
     
     const atrasado = loans
-      .filter(l => l.status === 'Atrasado')
+      .filter(l => l.status === 'Atrasado' || isOverdue(l))
       .reduce((acc, curr) => acc + curr.totalBruto, 0);
     
     return {
@@ -654,7 +642,7 @@ export default function App() {
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : 'Entrar'}
                 </button>
-                <div className="flex items-center justify-between px-1">
+                <div className="flex items-center justify-center px-1">
                   <button
                     type="button"
                     onClick={() => {
@@ -665,70 +653,7 @@ export default function App() {
                   >
                     Esqueceu a senha?
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode('register');
-                      setError(null);
-                    }}
-                    className="text-[10px] text-brand-primary hover:text-brand-primary/80 transition-colors uppercase tracking-wider font-bold"
-                  >
-                    Criar Conta
-                  </button>
                 </div>
-              </motion.form>
-            )}
-
-            {authMode === 'register' && (
-              <motion.form
-                key="register"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                onSubmit={handleEmailRegister}
-                className="space-y-4"
-              >
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="email"
-                    placeholder="E-mail"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
-                    required
-                  />
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="password"
-                    placeholder="Senha"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-brand-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/20 hover:bg-brand-primary/90 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : 'Cadastrar'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('login');
-                    setError(null);
-                  }}
-                  className="w-full text-[10px] text-slate-500 hover:text-white transition-colors uppercase tracking-wider text-center"
-                >
-                  Já tem uma conta? Entrar
-                </button>
               </motion.form>
             )}
 
@@ -775,25 +700,6 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-white/5"></div>
-            </div>
-            <div className="relative flex justify-center text-[8px] uppercase tracking-[0.3em]">
-              <span className="bg-surface-950 px-4 text-slate-600">Ou continue com</span>
-            </div>
-          </div>
-
-          <motion.button
-            whileHover={{ scale: 1.02, y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-4 bg-white/5 border border-white/10 text-white font-bold py-4 px-8 rounded-xl hover:bg-white/10 transition-all text-[10px] uppercase tracking-widest"
-          >
-            <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
-            Google Account
-          </motion.button>
-          
           <p className="mt-10 text-[9px] font-black text-slate-600 uppercase tracking-widest">
             Sistema de Gestão de Ativos de Alta Performance
           </p>
@@ -1003,7 +909,7 @@ export default function App() {
                                 onClick={() => {
                                   const latestLoan = loans
                                     .filter(l => l.clientName === client.name)
-                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                                    .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())[0];
                                   if (latestLoan) openEditModal(latestLoan);
                                 }}
                                 className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-primary/20"
@@ -1107,7 +1013,7 @@ export default function App() {
                             R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-8 py-4">
-                            <StatusBadge status={loan.status} onClick={() => {
+                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} onClick={() => {
                               const nextStatus: Record<string, Loan['status']> = {
                                 'Pendente': 'Pago',
                                 'Pago': 'Atrasado',
@@ -1244,7 +1150,7 @@ export default function App() {
                       onChange={(e) => {
                         const newDate = e.target.value;
                         try {
-                          const dateObj = new Date(newDate);
+                          const dateObj = parseISO(newDate);
                           if (!isNaN(dateObj.getTime())) {
                             const nextMonth = addMonths(dateObj, 1);
                             setNewLoan({
@@ -1345,7 +1251,7 @@ export default function App() {
                     </div>
                     <div className="space-y-1">
                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Vencimento</span>
-                      <div className="text-sm font-bold text-white">{format(new Date(payingLoan.dueDate), 'dd/MM/yyyy')}</div>
+                      <div className="text-sm font-bold text-white">{safeFormatDate(payingLoan.dueDate, 'dd/MM/yyyy')}</div>
                     </div>
                     <div className="space-y-1 text-right">
                       <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Total Bruto</span>
@@ -1485,7 +1391,7 @@ export default function App() {
                   <tbody className="divide-y divide-white/[0.05]">
                     {loans
                       .filter(l => l.clientName === viewingClientLoans)
-                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())
                       .map((loan) => (
                         <tr key={loan.id} className="group hover:bg-white/[0.01] transition-colors">
                           <td className="px-6 py-4 text-white text-xs">
@@ -1504,7 +1410,7 @@ export default function App() {
                             R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-4">
-                            <StatusBadge status={loan.status} onClick={() => {
+                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} onClick={() => {
                               const nextStatus: Record<string, Loan['status']> = {
                                 'Pendente': 'Pago',
                                 'Pago': 'Atrasado',
