@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: loans
+    // Fields:
+    //   - clientName: string (required)
+    //   - date: string (required, format: YYYY-MM-DD)
+    //   - capital: number (required, positive)
+    //   - interestRate: number (required, fixed 0.10)
+    //   - totalBruto: number (required, capital * 1.1)
+    //   - status: string (required, enum: Pendente, Pago, Atrasado)
+    //   - uid: string (required, owner UID)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // Collection: users
+    // Fields:
+    //   - email: string (required)
+    //   - role: string (required, enum: admin, user)
+    //   - uid: string (required)
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidLoan(data) {
+      let requiredFields = ['clientName', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'uid', 'createdAt', 'capitalPago', 'jurosPagos'];
+      return data.keys().hasAll(requiredFields) &&
+             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() < 100 &&
+             data.date is string &&
+             data.dueDate is string &&
+             data.capital is number && (data.status == 'Pago' ? data.capital >= 0 : data.capital > 0) &&
+             data.interestRate is number && data.interestRate >= 0 &&
+             // Use a small epsilon for float comparison if needed, but here we expect exact match from JS
+             math.abs(data.totalBruto - (data.capital * (1 + data.interestRate))) < 0.01 &&
+             data.status in ['Pendente', 'Pago', 'Atrasado'] &&
+             data.uid == request.auth.uid &&
+             data.createdAt is string &&
+             data.capitalPago is number &&
+             data.jurosPagos is number &&
+             (!('clientPhone' in data) || data.clientPhone is string);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'uid']) &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'user'] &&
+             data.uid == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
+    }
+
+    match /loans/{loanId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isAuthenticated() && isValidLoan(request.resource.data);
+      allow update: if isDocOwner() && isValidLoan(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+  }
+}
