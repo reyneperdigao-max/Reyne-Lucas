@@ -42,3 +42,26 @@
 .btn-ghost {
   @apply bg-white/[0.05] hover:bg-white/[0.1] text-white px-6 py-3 rounded-2xl text-sm font-bold transition-all border border-white/[0.05] active:scale-95;
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-contract, #printable-contract * {
+    visibility: visible;
+  }
+  #printable-contract {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+    padding: 40px !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

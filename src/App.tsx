@@ -23,7 +23,8 @@ import {
   Lock,
   ArrowLeft,
   UserPlus,
-  KeyRound
+  KeyRound,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -97,8 +98,6 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(true);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +107,7 @@ export default function App() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
+  const [viewingContract, setViewingContract] = useState<Loan | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -165,23 +165,6 @@ export default function App() {
 
   // --- Firebase Auth ---
   useEffect(() => {
-    const testConnection = async () => {
-      try {
-        // Test connection to Firestore as required by guidelines
-        await getDocFromServer(doc(db, '_connection_test_', 'ping'));
-        setIsConnecting(false);
-      } catch (err: any) {
-        console.warn("Firestore connection test (ignore if expected):", err.message);
-        if (err.message.includes('the client is offline') || err.message.includes('failed-precondition')) {
-          setConnectionError("Erro de conexão com o banco de dados. Verifique sua internet.");
-        }
-        // We don't block the app if it's just a permission error on the test doc
-        setIsConnecting(false);
-      }
-    };
-
-    testConnection();
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsAuthReady(true);
@@ -589,12 +572,10 @@ export default function App() {
   };
 
   // --- Render Helpers ---
-  if (!isAuthReady || isConnecting) return (
+  if (!isAuthReady) return (
     <div className="flex flex-col items-center justify-center h-screen bg-black text-white gap-6">
       <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(212,175,55,0.2)]" />
-      <span className="text-slate-600 font-black uppercase tracking-[0.4em] text-[9px]">
-        {isConnecting ? 'Verificando Conexão' : 'Sincronizando Sistema'}
-      </span>
+      <span className="text-slate-600 font-black uppercase tracking-[0.4em] text-[9px]">Sincronizando Sistema</span>
     </div>
   );
 
@@ -633,7 +614,7 @@ export default function App() {
           </div>
 
           <AnimatePresence mode="wait">
-            {(error || connectionError) && (
+            {error && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -641,7 +622,7 @@ export default function App() {
                 className="mb-6 p-3 rounded-xl bg-brand-danger/10 border border-brand-danger/20 text-brand-danger text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 overflow-hidden"
               >
                 <AlertCircle className="w-3 h-3 shrink-0" />
-                {error || connectionError}
+                {error}
               </motion.div>
             )}
 
@@ -1074,6 +1055,13 @@ export default function App() {
                                 <History className="w-4 h-4" />
                               </button>
                               <button 
+                                onClick={() => setViewingContract(loan)}
+                                className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
+                                title="Emitir Comprovante"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                              <button 
                                 onClick={() => setPayingLoan(loan)}
                                 className="flex items-center gap-2 px-4 py-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-accent/20"
                               >
@@ -1478,6 +1466,16 @@ export default function App() {
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
+                                  setViewingContract(loan);
+                                }}
+                                className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
+                                title="Emitir Comprovante"
+                              >
+                                <FileText className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  setViewingClientLoans(null);
                                   openEditModal(loan);
                                 }}
                                 className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
@@ -1501,6 +1499,103 @@ export default function App() {
                       ))}
                   </tbody>
                 </table>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        {viewingContract && (
+          <div key="modal-contract" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingContract(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl no-print"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              id="printable-contract"
+              className="relative w-full max-w-2xl bg-white text-black p-12 rounded-none shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex justify-between items-start mb-12 border-b-2 border-black pb-8">
+                <div>
+                  <h1 className="text-3xl font-black uppercase tracking-tighter mb-1">Comprovante de Contrato</h1>
+                  <p className="text-sm font-bold text-slate-600">Reyne Lucas Private Finance</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Emissão</p>
+                  <p className="font-bold">{format(new Date(), 'dd/MM/yyyy')}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-12 mb-12">
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contratante</p>
+                    <p className="text-lg font-bold uppercase">{viewingContract.clientName}</p>
+                    {viewingContract.clientPhone && <p className="text-sm text-slate-600">{viewingContract.clientPhone}</p>}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data do Empréstimo</p>
+                    <p className="font-bold">{safeFormatDate(viewingContract.date, 'dd/MM/yyyy')}</p>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor do Capital</p>
+                    <p className="text-lg font-bold">R$ {viewingContract.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Taxa de Juros</p>
+                    <p className="font-bold">{((viewingContract.interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-8 rounded-none border-l-4 border-black mb-12">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm font-bold uppercase tracking-widest">Data de Vencimento</span>
+                  <span className="text-lg font-black">{safeFormatDate(viewingContract.dueDate, 'dd/MM/yyyy')}</span>
+                </div>
+                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+                  <span className="text-sm font-bold uppercase tracking-widest">Total Bruto a Pagar</span>
+                  <span className="text-2xl font-black">R$ {viewingContract.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="space-y-12 mt-20">
+                <div className="grid grid-cols-2 gap-12">
+                  <div className="border-t border-black pt-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-center">Assinatura do Credor</p>
+                  </div>
+                  <div className="border-t border-black pt-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-center">Assinatura do Cliente</p>
+                  </div>
+                </div>
+                
+                <div className="text-center space-y-4 no-print">
+                  <div className="flex gap-4 justify-center">
+                    <button 
+                      onClick={() => window.print()}
+                      className="px-8 py-4 bg-black text-white font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all flex items-center gap-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Imprimir Contrato
+                    </button>
+                    <button 
+                      onClick={() => setViewingContract(null)}
+                      className="px-8 py-4 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-12 pt-8 border-t border-slate-100 text-center">
+                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-[0.3em]">Este documento serve como comprovante legal da operação financeira realizada.</p>
               </div>
             </motion.div>
           </div>
