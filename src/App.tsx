@@ -97,6 +97,8 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +165,23 @@ export default function App() {
 
   // --- Firebase Auth ---
   useEffect(() => {
+    const testConnection = async () => {
+      try {
+        // Test connection to Firestore as required by guidelines
+        await getDocFromServer(doc(db, '_connection_test_', 'ping'));
+        setIsConnecting(false);
+      } catch (err: any) {
+        console.warn("Firestore connection test (ignore if expected):", err.message);
+        if (err.message.includes('the client is offline') || err.message.includes('failed-precondition')) {
+          setConnectionError("Erro de conexão com o banco de dados. Verifique sua internet.");
+        }
+        // We don't block the app if it's just a permission error on the test doc
+        setIsConnecting(false);
+      }
+    };
+
+    testConnection();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsAuthReady(true);
@@ -199,7 +218,10 @@ export default function App() {
           setError("O login por e-mail não está ativado no Firebase Console.");
           break;
         case 'auth/network-request-failed':
-          setError("Erro de rede. Verifique sua conexão.");
+          setError("Erro de conexão. Verifique sua internet ou se o Firebase está bloqueado.");
+          break;
+        case 'auth/internal-error':
+          setError("Erro interno do Firebase. Tente novamente.");
           break;
         default:
           setError("Falha ao entrar. Tente novamente.");
@@ -567,10 +589,12 @@ export default function App() {
   };
 
   // --- Render Helpers ---
-  if (!isAuthReady) return (
+  if (!isAuthReady || isConnecting) return (
     <div className="flex flex-col items-center justify-center h-screen bg-black text-white gap-6">
       <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(212,175,55,0.2)]" />
-      <span className="text-slate-600 font-black uppercase tracking-[0.4em] text-[9px]">Sincronizando Sistema</span>
+      <span className="text-slate-600 font-black uppercase tracking-[0.4em] text-[9px]">
+        {isConnecting ? 'Verificando Conexão' : 'Sincronizando Sistema'}
+      </span>
     </div>
   );
 
@@ -609,7 +633,7 @@ export default function App() {
           </div>
 
           <AnimatePresence mode="wait">
-            {error && (
+            {(error || connectionError) && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -617,7 +641,7 @@ export default function App() {
                 className="mb-6 p-3 rounded-xl bg-brand-danger/10 border border-brand-danger/20 text-brand-danger text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 overflow-hidden"
               >
                 <AlertCircle className="w-3 h-3 shrink-0" />
-                {error}
+                {error || connectionError}
               </motion.div>
             )}
 
