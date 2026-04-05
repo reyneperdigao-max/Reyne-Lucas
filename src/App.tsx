@@ -18,7 +18,12 @@ import {
   Wallet,
   Trash2,
   History,
-  Edit2
+  Edit2,
+  Mail,
+  Lock,
+  ArrowLeft,
+  UserPlus,
+  KeyRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -38,7 +43,10 @@ import {
   GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut,
-  User
+  User,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { format, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -85,6 +93,10 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +177,64 @@ export default function App() {
     } catch (err) {
       console.error("Login Error:", err);
       setError("Falha ao entrar com Google.");
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      console.error("Email Login Error:", err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError("E-mail ou senha incorretos.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError("O login por e-mail não está ativado no Firebase Console. Ative-o em Authentication > Sign-in method.");
+      } else {
+        setError("Falha ao entrar. Verifique seus dados.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEmailRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      console.error("Register Error:", err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError("Este e-mail já está em uso.");
+      } else if (err.code === 'auth/weak-password') {
+        setError("A senha deve ter pelo menos 6 caracteres.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError("O cadastro por e-mail não está ativado no Firebase Console. Ative-o em Authentication > Sign-in method.");
+      } else {
+        setError("Falha ao criar conta.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setError("E-mail de recuperação enviado!");
+      setAuthMode('login');
+    } catch (err: any) {
+      console.error("Forgot Password Error:", err);
+      setError("Falha ao enviar e-mail de recuperação.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -508,26 +578,209 @@ export default function App() {
           initial={{ opacity: 0, y: 40, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="max-w-md w-full glass-card p-12 text-center relative z-10"
+          className="max-w-md w-full glass-card p-8 md:p-12 text-center relative z-10"
         >
-          <div className="flex justify-center mb-10">
-            <div className="p-6 bg-white/[0.03] rounded-[32px] border border-white/[0.05] shadow-2xl relative group">
+          <div className="flex justify-center mb-8">
+            <div className="p-4 bg-white/[0.03] rounded-[24px] border border-white/[0.05] shadow-2xl relative group">
               <div className="absolute inset-0 bg-brand-primary/20 blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               <img 
                 src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=256&h=256&fit=crop" 
-                className="w-20 h-20 rounded-2xl object-cover relative z-10 shadow-2xl" 
+                className="w-16 h-16 rounded-xl object-cover relative z-10 shadow-2xl" 
                 alt="RL Logo"
                 referrerPolicy="no-referrer"
               />
             </div>
           </div>
           
-          <div className="space-y-3 mb-12">
-            <h1 className="text-2xl font-bold text-white tracking-tighter">REYNE LUCAS</h1>
+          <div className="space-y-2 mb-8">
+            <h1 className="text-xl font-bold text-white tracking-tighter uppercase">Reyne Lucas</h1>
             <div className="flex items-center justify-center gap-3">
-              <div className="h-[1px] w-8 bg-brand-primary/30" />
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Private Finance</span>
-              <div className="h-[1px] w-8 bg-brand-primary/30" />
+              <div className="h-[1px] w-6 bg-brand-primary/30" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-[0.4em]">Private Finance</span>
+              <div className="h-[1px] w-6 bg-brand-primary/30" />
+            </div>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-6 p-3 rounded-xl bg-brand-danger/10 border border-brand-danger/20 text-brand-danger text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 overflow-hidden"
+              >
+                <AlertCircle className="w-3 h-3 shrink-0" />
+                {error}
+              </motion.div>
+            )}
+
+            {authMode === 'login' && (
+              <motion.form
+                key="login"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                onSubmit={handleEmailLogin}
+                className="space-y-4"
+              >
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    placeholder="E-mail"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    required
+                  />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    placeholder="Senha"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-brand-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/20 hover:bg-brand-primary/90 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : 'Entrar'}
+                </button>
+                <div className="flex items-center justify-between px-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('forgot');
+                      setError(null);
+                    }}
+                    className="text-[10px] text-slate-500 hover:text-white transition-colors uppercase tracking-wider"
+                  >
+                    Esqueceu a senha?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('register');
+                      setError(null);
+                    }}
+                    className="text-[10px] text-brand-primary hover:text-brand-primary/80 transition-colors uppercase tracking-wider font-bold"
+                  >
+                    Criar Conta
+                  </button>
+                </div>
+              </motion.form>
+            )}
+
+            {authMode === 'register' && (
+              <motion.form
+                key="register"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                onSubmit={handleEmailRegister}
+                className="space-y-4"
+              >
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    placeholder="E-mail"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    required
+                  />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    placeholder="Senha"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-brand-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/20 hover:bg-brand-primary/90 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : 'Cadastrar'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setError(null);
+                  }}
+                  className="w-full text-[10px] text-slate-500 hover:text-white transition-colors uppercase tracking-wider text-center"
+                >
+                  Já tem uma conta? Entrar
+                </button>
+              </motion.form>
+            )}
+
+            {authMode === 'forgot' && (
+              <motion.form
+                key="forgot"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                onSubmit={handleForgotPassword}
+                className="space-y-4"
+              >
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    placeholder="E-mail de recuperação"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-brand-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/20 hover:bg-brand-primary/90 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : 'Recuperar Senha'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('login');
+                    setError(null);
+                  }}
+                  className="w-full text-[10px] text-slate-500 hover:text-white transition-colors uppercase tracking-wider text-center"
+                >
+                  Voltar para o Login
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          <div className="relative my-8">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/5"></div>
+            </div>
+            <div className="relative flex justify-center text-[8px] uppercase tracking-[0.3em]">
+              <span className="bg-surface-950 px-4 text-slate-600">Ou continue com</span>
             </div>
           </div>
 
@@ -535,13 +788,13 @@ export default function App() {
             whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-4 bg-white text-black font-black py-5 px-8 rounded-2xl shadow-2xl shadow-white/10 hover:bg-slate-50 transition-all text-sm uppercase tracking-widest"
+            className="w-full flex items-center justify-center gap-4 bg-white/5 border border-white/10 text-white font-bold py-4 px-8 rounded-xl hover:bg-white/10 transition-all text-[10px] uppercase tracking-widest"
           >
-            <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-            Acessar Plataforma
+            <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
+            Google Account
           </motion.button>
           
-          <p className="mt-10 text-[10px] font-black text-slate-600 uppercase tracking-widest">
+          <p className="mt-10 text-[9px] font-black text-slate-600 uppercase tracking-widest">
             Sistema de Gestão de Ativos de Alta Performance
           </p>
         </motion.div>
