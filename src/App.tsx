@@ -170,30 +170,39 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async () => {
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error("Login Error:", err);
-      setError("Falha ao entrar com Google.");
-    }
-  };
-
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) {
+      setError("Por favor, preencha todos os campos.");
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (err: any) {
       console.error("Email Login Error:", err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError("E-mail ou senha incorretos.");
-      } else if (err.code === 'auth/operation-not-allowed') {
-        setError("O login por e-mail não está ativado no Firebase Console. Ative-o em Authentication > Sign-in method.");
-      } else {
-        setError("Falha ao entrar. Verifique seus dados.");
+      switch (err.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+        case 'auth/invalid-email':
+          setError("E-mail ou senha incorretos.");
+          break;
+        case 'auth/user-disabled':
+          setError("Esta conta foi desativada.");
+          break;
+        case 'auth/too-many-requests':
+          setError("Muitas tentativas. Tente novamente mais tarde.");
+          break;
+        case 'auth/operation-not-allowed':
+          setError("O login por e-mail não está ativado no Firebase Console.");
+          break;
+        case 'auth/network-request-failed':
+          setError("Erro de rede. Verifique sua conexão.");
+          break;
+        default:
+          setError("Falha ao entrar. Tente novamente.");
       }
     } finally {
       setIsSubmitting(false);
@@ -202,15 +211,25 @@ export default function App() {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email) {
+      setError("Por favor, insira seu e-mail.");
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     try {
-      await sendPasswordResetEmail(auth, email);
-      setError("E-mail de recuperação enviado!");
+      await sendPasswordResetEmail(auth, email.trim());
+      setError("E-mail de recuperação enviado com sucesso!");
       setAuthMode('login');
     } catch (err: any) {
       console.error("Forgot Password Error:", err);
-      setError("Falha ao enviar e-mail de recuperação.");
+      if (err.code === 'auth/user-not-found') {
+        setError("E-mail não encontrado.");
+      } else if (err.code === 'auth/invalid-email') {
+        setError("E-mail inválido.");
+      } else {
+        setError("Falha ao enviar e-mail de recuperação.");
+      }
     } finally {
       setIsSubmitting(false);
     }
