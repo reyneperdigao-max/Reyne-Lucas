@@ -26,7 +26,8 @@ import {
   KeyRound,
   FileText,
   Share2,
-  MessageCircle
+  MessageCircle,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { jsPDF } from 'jspdf';
@@ -127,6 +128,7 @@ export default function App() {
   const [viewingContract, setViewingContract] = useState<Loan | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<SystemAction | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [showOnlyOverdue, setShowOnlyOverdue] = useState(false);
 
   const shareAsPDF = async () => {
     const isReceipt = !!viewingReceipt;
@@ -301,7 +303,7 @@ export default function App() {
         await navigator.share({
           files: [file],
           title: 'Comprovante Nexus Private',
-          text: `${isReceipt ? 'Recibo de pagamento' : 'Comprovante de empréstimo'} - ${clientName}`
+          text: `${isReceipt ? 'Recibo de pagamento' : 'CONTRATO DE EMPRÉSTIMO'} - ${clientName}`
         });
       } else {
         // Fallback to download if sharing is not supported
@@ -624,25 +626,6 @@ export default function App() {
     setIsAdding(true);
   };
 
-  const updateStatus = async (loan: Loan, status: Loan['status']) => {
-    try {
-      const updateData: any = { status };
-      
-      // If manually marking as Paid, assume full payment of remaining capital and interest
-      if (status === 'Pago') {
-        updateData.capitalPago = (loan.capitalPago || 0) + loan.capital;
-        updateData.jurosPagos = (loan.jurosPagos || 0) + (loan.totalBruto - loan.capital);
-        updateData.capital = 0;
-        updateData.totalBruto = 0;
-      }
-      
-      await updateDoc(doc(db, 'loans', loan.id), updateData);
-      await logAction('loan_updated', `Status alterado para ${status} - ${loan.clientName}`, loan.clientName, loan.id);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `loans/${loan.id}`);
-    }
-  };
-
   const handleAmortization = async () => {
     if (!payingLoan || !amortizationAmount) return;
     const amount = parseFloat(amortizationAmount);
@@ -818,11 +801,33 @@ export default function App() {
 
   // --- Financial Calculations ---
   const filteredLoans = useMemo(() => {
+    let result = loans;
     if (activeTab === 'Empréstimos') {
-      return loans.filter(l => l.status !== 'Pago');
+      result = loans.filter(l => l.status !== 'Pago');
+      if (!command.trim() && !showOnlyOverdue) {
+        result = [...result]
+          .sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime())
+          .slice(0, 5);
+      }
     }
-    return [];
-  }, [loans, activeTab]);
+    
+    if (showOnlyOverdue) {
+      result = result.filter(l => l.status === 'Atrasado' || isOverdue(l));
+    }
+    
+    if (command.trim()) {
+      const search = command.toLowerCase();
+      const cleanSearch = search.startsWith('cobrança ') ? search.substring(9).trim() : search;
+      if (cleanSearch) {
+        result = result.filter(l => 
+          l.clientName.toLowerCase().includes(cleanSearch) || 
+          (l.clientPhone && l.clientPhone.includes(cleanSearch))
+        );
+      }
+    }
+    
+    return result;
+  }, [loans, activeTab, command, showOnlyOverdue]);
 
   const clients = useMemo(() => {
     const clientMap = new Map<string, { name: string, phone: string, totalCapital: number, loanCount: number, activeDebt: number }>();
@@ -838,8 +843,36 @@ export default function App() {
       }
       clientMap.set(loan.clientName, existing);
     });
-    return Array.from(clientMap.values()).sort((a, b) => b.activeDebt - a.activeDebt);
-  }, [loans]);
+    
+    let result = Array.from(clientMap.values()).sort((a, b) => b.activeDebt - a.activeDebt);
+    
+    if (command.trim()) {
+      const search = command.toLowerCase();
+      const cleanSearch = search.startsWith('cobrança ') ? search.substring(9).trim() : search;
+      if (cleanSearch) {
+        result = result.filter(c => 
+          c.name.toLowerCase().includes(cleanSearch) || 
+          (c.phone && c.phone.includes(cleanSearch))
+        );
+      }
+    }
+    
+    return result;
+  }, [loans, command]);
+
+  const filteredActions = useMemo(() => {
+    if (command.trim()) {
+      const search = command.toLowerCase();
+      const cleanSearch = search.startsWith('cobrança ') ? search.substring(9).trim() : search;
+      if (cleanSearch) {
+        return actions.filter(a => 
+          a.clientName.toLowerCase().includes(cleanSearch) || 
+          a.description.toLowerCase().includes(cleanSearch)
+        );
+      }
+    }
+    return actions;
+  }, [actions, command]);
 
   const stats = useMemo(() => {
     const capitalLiberado = loans
@@ -852,15 +885,16 @@ export default function App() {
     const jurosRealizados = loans
       .reduce((acc, curr) => acc + (curr.jurosPagos || 0), 0);
     
-    const atrasado = loans
-      .filter(l => l.status === 'Atrasado' || isOverdue(l))
-      .reduce((acc, curr) => acc + curr.totalBruto, 0);
+    const overdueLoans = loans.filter(l => l.status === 'Atrasado' || isOverdue(l));
+    const atrasado = overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0);
+    const atrasadosCount = overdueLoans.length;
     
     return {
       capitalLiberado,
       capitalRecebido,
       jurosRealizados,
-      atrasado
+      atrasado,
+      atrasadosCount
     };
   }, [loans]);
 
@@ -1124,11 +1158,15 @@ export default function App() {
             trend="Lucro"
           />
           <StatCard 
-            title="Atrasado" 
-            value={`R$ ${stats.atrasado.toLocaleString('pt-BR')}`} 
+            title="Atrasados" 
+            value={`${stats.atrasadosCount} ${stats.atrasadosCount === 1 ? 'Empréstimo' : 'Empréstimos'}`} 
             icon={<AlertCircle className="w-5 h-5" />}
             color="danger"
             trend="Risco"
+            onClick={() => {
+              setActiveTab('Empréstimos');
+              setShowOnlyOverdue(true);
+            }}
           />
         </div>
 
@@ -1147,6 +1185,16 @@ export default function App() {
               onChange={(e) => setCommand(e.target.value)}
             />
             <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-2">
+              {showOnlyOverdue && (
+                <button 
+                  type="button"
+                  onClick={() => setShowOnlyOverdue(false)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-brand-danger/10 text-brand-danger border border-brand-danger/20 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-brand-danger hover:text-white transition-all mr-2"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Limpar Filtro</span>
+                </button>
+              )}
               <kbd className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[10px] text-slate-500 font-black tracking-widest">ENTER</kbd>
             </div>
           </form>
@@ -1179,7 +1227,10 @@ export default function App() {
               {(['Empréstimos', 'Clientes', 'Histórico'] as const).map((tab) => (
                 <button
                   key={tab}
-                  onClick={() => setActiveTab(tab)}
+                  onClick={() => {
+                    setActiveTab(tab);
+                    setShowOnlyOverdue(false);
+                  }}
                   className={cn(
                     "px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-300",
                     activeTab === tab 
@@ -1245,7 +1296,9 @@ export default function App() {
                   <tbody className="divide-y divide-white/[0.05]">
                     {clients.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-8 py-20 text-center text-slate-500 font-medium">Nenhum cliente cadastrado.</td>
+                        <td colSpan={6} className="px-8 py-20 text-center text-slate-500 font-medium">
+                          {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
+                        </td>
                       </tr>
                     ) : (
                       clients.map((client, index) => (
@@ -1339,19 +1392,21 @@ export default function App() {
                           </div>
                         </td>
                       </tr>
-                    ) : actions.length === 0 ? (
+                    ) : filteredActions.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-8 py-20 text-center">
                           <div className="flex flex-col items-center gap-4">
                             <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
                               <History className="w-8 h-8 text-slate-600" />
                             </div>
-                            <span className="text-slate-500 font-medium">Nenhuma ação registrada no sistema.</span>
+                            <span className="text-slate-500 font-medium">
+                              {command.trim() ? 'Nenhum registro encontrado para esta busca.' : 'Nenhuma ação registrada no sistema.'}
+                            </span>
                           </div>
                         </td>
                       </tr>
                     ) : (
-                      actions.map((action) => (
+                      filteredActions.map((action) => (
                         <tr key={action.id} className="group hover:bg-white/[0.01] transition-colors">
                           <td className="px-8 py-4 text-slate-400 text-xs font-medium">
                             {safeFormatDate(action.date, 'dd/MM/yyyy HH:mm')}
@@ -1436,7 +1491,9 @@ export default function App() {
                             <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
                               <Users className="w-8 h-8 text-slate-600" />
                             </div>
-                            <span className="text-slate-500 font-medium">Nenhum empréstimo encontrado.</span>
+                            <span className="text-slate-500 font-medium">
+                              {command.trim() ? 'Nenhum empréstimo encontrado para esta busca.' : 'Nenhum empréstimo pendente.'}
+                            </span>
                           </div>
                         </td>
                       </tr>
@@ -1484,14 +1541,7 @@ export default function App() {
                             R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-8 py-4">
-                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} onClick={() => {
-                              const nextStatus: Record<string, Loan['status']> = {
-                                'Pendente': 'Pago',
-                                'Pago': 'Atrasado',
-                                'Atrasado': 'Pendente'
-                              };
-                              updateStatus(loan, nextStatus[loan.status]);
-                            }} />
+                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
                           </td>
                           <td className="px-8 py-6 text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -1882,14 +1932,7 @@ export default function App() {
                             R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-4">
-                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} onClick={() => {
-                              const nextStatus: Record<string, Loan['status']> = {
-                                'Pendente': 'Pago',
-                                'Pago': 'Atrasado',
-                                'Atrasado': 'Pendente'
-                              };
-                              updateStatus(loan, nextStatus[loan.status]);
-                            }} />
+                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -1973,14 +2016,14 @@ export default function App() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comprovante de Operação</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contrato de Operação</p>
                   <p className="text-sm font-mono font-bold">#{viewingContract.id.slice(-8).toUpperCase()}</p>
                 </div>
               </div>
 
               {/* Transaction Title */}
               <div className="text-center mb-12">
-                <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Comprovante de Empréstimo</h2>
+                <h2 className="text-2xl font-black uppercase tracking-tight mb-2">CONTRATO DE EMPRÉSTIMO</h2>
                 <p className="text-sm text-slate-500">Emitido em {format(new Date(), "dd/MM/yyyy 'às' HH:mm:ss")}</p>
               </div>
 
@@ -2193,7 +2236,7 @@ export default function App() {
 
 // --- Sub-components ---
 
-function StatCard({ title, value, icon, color, trend }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger', trend?: string }) {
+function StatCard({ title, value, icon, color, trend, onClick }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger', trend?: string, onClick?: () => void }) {
   const colors = {
     primary: 'text-brand-primary bg-brand-primary/5 border-brand-primary/10',
     secondary: 'text-white bg-white/5 border-white/10',
@@ -2204,7 +2247,11 @@ function StatCard({ title, value, icon, color, trend }: { title: string, value: 
   return (
     <motion.div 
       whileHover={{ y: -5, scale: 1.01 }}
-      className="glass-card p-7 space-y-5 group relative overflow-hidden"
+      onClick={onClick}
+      className={cn(
+        "glass-card p-7 space-y-5 group relative overflow-hidden",
+        onClick && "cursor-pointer active:scale-95 transition-all"
+      )}
     >
       <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 blur-[60px] -mr-16 -mt-16 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
       
@@ -2226,23 +2273,22 @@ function StatCard({ title, value, icon, color, trend }: { title: string, value: 
   );
 }
 
-function StatusBadge({ status, onClick }: { status: Loan['status'], onClick: () => void }) {
+function StatusBadge({ status }: { status: Loan['status'] }) {
   const styles = {
-    'Pendente': 'bg-brand-warning/5 text-brand-warning border-brand-warning/10 hover:bg-brand-warning/10',
-    'Pago': 'bg-brand-accent/5 text-brand-accent border-brand-accent/10 hover:bg-brand-accent/10',
-    'Atrasado': 'bg-brand-danger/5 text-brand-danger border-brand-danger/10 hover:bg-brand-danger/10',
+    'Pendente': 'bg-brand-warning/5 text-brand-warning border-brand-warning/10',
+    'Pago': 'bg-brand-accent/5 text-brand-accent border-brand-accent/10',
+    'Atrasado': 'bg-brand-danger/5 text-brand-danger border-brand-danger/10',
   };
 
   return (
-    <button 
-      onClick={onClick}
+    <div 
       className={cn(
-        "px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border transition-all active:scale-90",
+        "px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border transition-all inline-block",
         styles[status]
       )}
     >
       {status}
-    </button>
+    </div>
   );
 }
 
