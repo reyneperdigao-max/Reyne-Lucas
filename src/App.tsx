@@ -24,9 +24,13 @@ import {
   ArrowLeft,
   UserPlus,
   KeyRound,
-  FileText
+  FileText,
+  Share2,
+  MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 import { 
   collection, 
   query, 
@@ -37,7 +41,8 @@ import {
   doc, 
   orderBy,
   getDocFromServer,
-  deleteDoc
+  deleteDoc,
+  getDocs
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -71,6 +76,17 @@ interface Loan {
   createdAt: string;
 }
 
+interface SystemAction {
+  id: string;
+  type: 'loan_created' | 'payment_received' | 'loan_deleted' | 'loan_updated';
+  description: string;
+  amount?: number;
+  clientName: string;
+  loanId: string;
+  date: string;
+  uid: string;
+}
+
 enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -99,6 +115,7 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [actions, setActions] = useState<SystemAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'Empréstimos' | 'Clientes' | 'Histórico'>('Empréstimos');
@@ -108,6 +125,205 @@ export default function App() {
   const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
   const [viewingContract, setViewingContract] = useState<Loan | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<SystemAction | null>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  const shareAsPDF = async () => {
+    const isReceipt = !!viewingReceipt;
+    const data = isReceipt ? viewingReceipt : viewingContract;
+    if (!data) return;
+    
+    const elementId = isReceipt ? 'printable-receipt' : 'printable-contract';
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    setIsGeneratingPDF(true);
+    try {
+      // Temporarily hide the buttons section for the snapshot
+      const buttons = element.querySelector('.no-print-section');
+      if (buttons) (buttons as HTMLElement).style.display = 'none';
+
+      // Reset scroll position to ensure html2canvas captures correctly
+      const originalScrollY = window.scrollY;
+      window.scrollTo(0, 0);
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          try {
+            // Fix modern CSS colors (oklch, oklab, color-mix, etc.) for html2canvas which doesn't support them
+            // We'll replace them with hex fallbacks in the entire document
+            const replaceColors = (text: string) => {
+              if (!text) return text;
+              // This regex handles up to 2 levels of nested parentheses, which is common in Tailwind 4
+              // It replaces oklch, oklab, color-mix, light-dark, and color functions with black
+              const nested = '(?:[^()]+|\\((?:[^()]+|\\([^()]*\\))*\\))*';
+              const regex = new RegExp(`(oklch|oklab|color-mix|light-dark|color)\\s*\\(${nested}\\)`, 'g');
+              return text.replace(regex, '#000000');
+            };
+
+            // Process style tags specifically
+            const styleTags = clonedDoc.getElementsByTagName('style');
+            for (let i = 0; i < styleTags.length; i++) {
+              try {
+                const style = styleTags[i];
+                if (style.innerHTML.includes('oklch') || style.innerHTML.includes('oklab') || style.innerHTML.includes('color-mix')) {
+                  style.innerHTML = replaceColors(style.innerHTML);
+                }
+              } catch (e) {
+                console.warn('Error processing style tag:', e);
+              }
+            }
+
+            // Also check all elements for inline style attributes specifically
+            // We avoid body.innerHTML replacement as it's too destructive and slow
+            const allElements = clonedDoc.getElementsByTagName('*');
+            for (let i = 0; i < allElements.length; i++) {
+              const el = allElements[i] as HTMLElement;
+              
+              // Fix inline styles
+              const inlineStyle = el.getAttribute('style');
+              if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('oklab') || inlineStyle.includes('color-mix') || inlineStyle.includes('light-dark'))) {
+                el.setAttribute('style', replaceColors(inlineStyle));
+              }
+
+              // Remove problematic properties that can cause parsing errors in html2canvas
+              if (el.style) {
+                // Some modern properties cause "unexpected EOF" or other parsing errors in older CSS parsers
+                const problematicProps = [
+                  'field-sizing', 
+                  'contain-intrinsic-size', 
+                  'content-visibility', 
+                  'view-transition-name',
+                  'container-type',
+                  'container-name',
+                  'scroll-timeline',
+                  'view-timeline',
+                  'anchor-name',
+                  'position-anchor'
+                ];
+                problematicProps.forEach(prop => {
+                  if (el.style.getPropertyValue(prop)) {
+                    el.style.removeProperty(prop);
+                  }
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Error during color replacement in PDF clone:', e);
+          }
+          
+          // Ensure the contract is perfectly styled for the PDF to match the system's look
+          const pdfStyle = clonedDoc.createElement('style');
+          pdfStyle.innerHTML = `
+            #${elementId} {
+              width: 672px !important; /* Match max-w-2xl (42rem = 672px) */
+              padding: 64px !important;
+              background: white !important;
+              color: black !important;
+              position: relative !important;
+              margin: 0 !important;
+              transform: none !important;
+              max-height: none !important;
+              overflow: visible !important;
+              border: none !important;
+              box-shadow: none !important;
+              display: block !important;
+              border-radius: 0 !important;
+            }
+            
+            /* Add a subtle watermark */
+            #${elementId}::before {
+              content: "NEXUS PRIVATE";
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%) rotate(-45deg);
+              font-size: 80px;
+              font-weight: 900;
+              color: rgba(0, 0, 0, 0.02);
+              z-index: 0;
+              pointer-events: none;
+              white-space: nowrap;
+            }
+
+            .no-print-section { display: none !important; }
+            
+            /* Ensure the fonts are loaded and applied */
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              font-family: "Plus Jakarta Sans", sans-serif !important;
+            }
+            .font-mono, [class*="font-mono"] {
+              font-family: "JetBrains Mono", monospace !important;
+            }
+          `;
+          // Add a footer for the PDF
+          const footer = clonedDoc.createElement('div');
+          footer.innerHTML = `
+            <div style="margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
+              <p style="font-size: 8px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">Nexus Private - Gestão de Ativos</p>
+              <p style="font-size: 8px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">www.nexusprivate.com.br</p>
+            </div>
+          `;
+          const contractEl = clonedDoc.getElementById(elementId);
+          if (contractEl) contractEl.appendChild(footer);
+
+          clonedDoc.head.appendChild(pdfStyle);
+        }
+      });
+
+      // Restore scroll position
+      window.scrollTo(0, originalScrollY);
+
+      if (buttons) (buttons as HTMLElement).style.display = '';
+
+      const imgData = canvas.toDataURL('image/png');
+      // Calculate PDF dimensions based on canvas
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      
+      const pdfBlob = pdf.output('blob');
+      const clientName = isReceipt ? (data as SystemAction).clientName : (data as Loan).clientName;
+      const fileName = `${isReceipt ? 'Recibo' : 'Contrato'}_${clientName.replace(/\s+/g, '_')}.pdf`;
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Comprovante Nexus Private',
+          text: `${isReceipt ? 'Recibo de pagamento' : 'Comprovante de empréstimo'} - ${clientName}`
+        });
+      } else {
+        // Fallback to download if sharing is not supported
+        const url = URL.createObjectURL(pdfBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        // User cancelled the share dialog - this is expected behavior, not an error
+        console.log('PDF sharing was cancelled by the user.');
+      } else {
+        console.error('Error generating/sharing PDF:', error);
+        alert('Ocorreu um erro ao gerar ou compartilhar o comprovante. Por favor, tente novamente.');
+      }
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -160,6 +376,18 @@ export default function App() {
       return dueDate < today;
     } catch (e) {
       return false;
+    }
+  };
+
+  const getDaysDiff = (dueDateStr: string) => {
+    try {
+      const dueDate = startOfDay(parseISO(dueDateStr));
+      const today = startOfDay(new Date());
+      const diffTime = dueDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch (e) {
+      return 0;
     }
   };
 
@@ -257,7 +485,7 @@ export default function App() {
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeLoans = onSnapshot(q, (snapshot) => {
       const loanData: Loan[] = [];
       snapshot.forEach((doc) => {
         loanData.push({ id: doc.id, ...doc.data() } as Loan);
@@ -268,8 +496,47 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, 'loans');
     });
 
-    return () => unsubscribe();
+    const qActions = query(
+      collection(db, 'actions'),
+      where('uid', '==', user.uid),
+      orderBy('date', 'desc')
+    );
+
+    const unsubscribeActions = onSnapshot(qActions, (snapshot) => {
+      const actionData: SystemAction[] = [];
+      snapshot.forEach((doc) => {
+        actionData.push({ id: doc.id, ...doc.data() } as SystemAction);
+      });
+      setActions(actionData);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'actions');
+    });
+
+    return () => {
+      unsubscribeLoans();
+      unsubscribeActions();
+    };
   }, [user, isAuthReady]);
+
+  const logAction = async (type: SystemAction['type'], description: string, clientName: string, loanId: string, amount?: number) => {
+    if (!user) return null;
+    try {
+      const actionData = {
+        type,
+        description,
+        clientName,
+        loanId,
+        amount: amount || 0,
+        date: new Date().toISOString(),
+        uid: user.uid
+      };
+      const docRef = await addDoc(collection(db, 'actions'), actionData);
+      return { id: docRef.id, ...actionData } as SystemAction;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'actions');
+      return null;
+    }
+  };
 
   const handleFirestoreError = (err: any, type: OperationType, path: string) => {
     const errInfo: FirestoreErrorInfo = {
@@ -307,6 +574,7 @@ export default function App() {
       if (editingLoanId) {
         const oldLoan = loans.find(l => l.id === editingLoanId);
         await updateDoc(doc(db, 'loans', editingLoanId), loanData);
+        await logAction('loan_updated', `Empréstimo atualizado para ${loanData.clientName}`, loanData.clientName, editingLoanId, loanData.capital);
         
         // If name or phone changed, bulk update all other loans for this client
         if (oldLoan && (oldLoan.clientName !== newLoan.clientName || oldLoan.clientPhone !== newLoan.clientPhone)) {
@@ -324,7 +592,8 @@ export default function App() {
         loanData.createdAt = new Date().toISOString();
         loanData.capitalPago = 0;
         loanData.jurosPagos = 0;
-        await addDoc(collection(db, 'loans'), loanData);
+        const docRef = await addDoc(collection(db, 'loans'), loanData);
+        await logAction('loan_created', `Novo empréstimo para ${loanData.clientName}`, loanData.clientName, docRef.id, loanData.capital);
       }
       
       setIsAdding(false);
@@ -368,6 +637,7 @@ export default function App() {
       }
       
       await updateDoc(doc(db, 'loans', loan.id), updateData);
+      await logAction('loan_updated', `Status alterado para ${status} - ${loan.clientName}`, loan.clientName, loan.id);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${loan.id}`);
     }
@@ -389,8 +659,10 @@ export default function App() {
         capitalPago: newCapitalPago,
         status: newCapital === 0 ? 'Pago' : payingLoan.status
       });
+      const action = await logAction('payment_received', `Amortização de capital: R$ ${amount.toLocaleString('pt-BR')}`, payingLoan.clientName, payingLoan.id, amount);
       setPayingLoan(null);
       setAmortizationAmount('');
+      if (action) setViewingReceipt(action);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
@@ -426,7 +698,9 @@ export default function App() {
         dueDate: format(newDueDate, 'yyyy-MM-dd'),
         jurosPagos: newJurosPagos
       });
+      const action = await logAction('payment_received', `Pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR')}`, payingLoan.clientName, payingLoan.id, interestAmount);
       setPayingLoan(null);
+      if (action) setViewingReceipt(action);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
@@ -466,7 +740,9 @@ export default function App() {
         status: 'Pendente',
         jurosPagos: newJurosPagos
       });
+      const action = await logAction('payment_received', `Renovação com pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR')}`, payingLoan.clientName, payingLoan.id, interestAmount);
       setPayingLoan(null);
+      if (action) setViewingReceipt(action);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
@@ -479,10 +755,62 @@ export default function App() {
       message: 'Tem certeza que deseja excluir este empréstimo? Esta ação não pode ser desfeita.',
       onConfirm: async () => {
         try {
+          const loanToDelete = loans.find(l => l.id === id);
           await deleteDoc(doc(db, 'loans', id));
+          
+          // Delete associated actions
+          const q = query(
+            collection(db, 'actions'), 
+            where('loanId', '==', id),
+            where('uid', '==', user.uid)
+          );
+          const snapshot = await getDocs(q);
+          const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(actionDeletions);
+
+          if (loanToDelete) {
+            await logAction('loan_deleted', `Empréstimo excluído - ${loanToDelete.clientName}`, loanToDelete.clientName, id, loanToDelete.capital);
+          }
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           handleFirestoreError(err, OperationType.DELETE, `loans/${id}`);
+        }
+      }
+    });
+  };
+
+  const clearHistory = async () => {
+    if (!user || actions.length === 0) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: 'Limpar Histórico',
+      message: 'Deseja excluir permanentemente todo o histórico de transações? Esta ação não pode ser desfeita.',
+      onConfirm: async () => {
+        try {
+          const q = query(collection(db, 'actions'), where('uid', '==', user.uid));
+          const snapshot = await getDocs(q);
+          const deletions = snapshot.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(deletions);
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, 'actions/bulk');
+        }
+      }
+    });
+  };
+
+  const deleteAction = async (id: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Excluir Registro',
+      message: 'Deseja excluir este registro do histórico? Esta ação não pode ser desfeita.',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'actions', id));
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          handleFirestoreError(err, OperationType.DELETE, `actions/${id}`);
         }
       }
     });
@@ -492,9 +820,6 @@ export default function App() {
   const filteredLoans = useMemo(() => {
     if (activeTab === 'Empréstimos') {
       return loans.filter(l => l.status !== 'Pago');
-    }
-    if (activeTab === 'Histórico') {
-      return loans.filter(l => l.status === 'Pago');
     }
     return [];
   }, [loans, activeTab]);
@@ -592,23 +917,23 @@ export default function App() {
           transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
           className="max-w-md w-full glass-card p-8 md:p-14 text-center relative z-10"
         >
-          <div className="flex justify-center mb-10">
+            <div className="flex justify-center mb-10">
             <div className="p-1 bg-gradient-to-tr from-brand-primary/40 to-transparent rounded-[28px] shadow-2xl relative group">
               <div className="absolute inset-0 bg-brand-primary/10 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
               <img 
-                src="https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=256&h=256&fit=crop" 
+                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=256&h=256&fit=crop" 
                 className="w-20 h-20 rounded-[24px] object-cover relative z-10 grayscale hover:grayscale-0 transition-all duration-700" 
-                alt="RL Logo"
+                alt="Nexus Logo"
                 referrerPolicy="no-referrer"
               />
             </div>
           </div>
           
           <div className="space-y-3 mb-10">
-            <h1 className="text-2xl font-bold text-white tracking-[0.1em] uppercase">Reyne Lucas</h1>
+            <h1 className="text-2xl font-bold text-white tracking-[0.1em] uppercase">Nexus Private</h1>
             <div className="flex items-center justify-center gap-4">
               <div className="h-[1px] w-8 bg-brand-primary/20" />
-              <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em]">Private Finance</span>
+              <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em]">crédito e gestão</span>
               <div className="h-[1px] w-8 bg-brand-primary/20" />
             </div>
           </div>
@@ -660,7 +985,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-brand-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/20 hover:bg-brand-primary/90 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -704,7 +1029,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-brand-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/20 hover:bg-brand-primary/90 transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -746,15 +1071,15 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="p-1 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl">
               <img 
-                src="https://images.unsplash.com/photo-1554469384-e58fac16e23a?w=64&h=64&fit=crop" 
+                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=64&h=64&fit=crop" 
                 className="w-10 h-10 rounded-xl object-cover grayscale" 
-                alt="RL Logo"
+                alt="Nexus Logo"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-[0.1em] leading-none">REYNE LUCAS</h1>
-              <span className="text-[10px] uppercase tracking-[0.4em] text-brand-primary font-black">Private Finance</span>
+              <h1 className="text-lg font-bold text-white tracking-[0.1em] leading-none">Nexus Private</h1>
+              <span className="text-[10px] uppercase tracking-[0.4em] text-brand-primary font-black">crédito e gestão</span>
             </div>
           </div>
 
@@ -766,7 +1091,7 @@ export default function App() {
             <div className="h-8 w-px bg-white/10 hidden md:block" />
             <button 
               onClick={handleLogout}
-              className="p-3 text-slate-400 hover:text-brand-danger hover:bg-brand-danger/10 rounded-2xl transition-all active:scale-90"
+              className="p-3 text-slate-400 hover:text-brand-danger hover:bg-brand-danger/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-danger/20"
             >
               <LogOut className="w-5 h-5" />
             </button>
@@ -883,10 +1208,22 @@ export default function App() {
                   });
                   setIsAdding(true);
                 }}
-                className="btn-primary flex items-center gap-2"
+                className="bg-gradient-to-r from-brand-primary to-indigo-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
               >
                 <Plus className="w-5 h-5" />
                 Novo Empréstimo
+              </motion.button>
+            )}
+
+            {activeTab === 'Histórico' && actions.length > 0 && (
+              <motion.button 
+                whileHover={{ scale: 1.02, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={clearHistory}
+                className="bg-gradient-to-r from-brand-danger to-rose-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-danger/25 hover:shadow-brand-danger/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+              >
+                <Trash2 className="w-5 h-5" />
+                Limpar Histórico
               </motion.button>
             )}
           </div>
@@ -918,7 +1255,7 @@ export default function App() {
                           <td className="px-8 py-6">
                             <button 
                               onClick={() => setViewingClientLoans(client.name)}
-                              className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-primary/20"
+                              className="flex items-center gap-2 px-3 py-1.5 bg-white/5 text-slate-300 hover:bg-brand-primary/20 hover:text-brand-primary rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-white/10 hover:border-brand-primary/30"
                             >
                               <History className="w-3.5 h-3.5" />
                               <span>{client.loanCount} {client.loanCount === 1 ? 'Contrato' : 'Contratos'}</span>
@@ -935,7 +1272,7 @@ export default function App() {
                                     .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())[0];
                                   if (latestLoan) openEditModal(latestLoan);
                                 }}
-                                className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-primary/20"
+                                className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-amber-500/20"
                               >
                                 <Edit2 className="w-4 h-4" />
                                 <span>Editar</span>
@@ -949,8 +1286,18 @@ export default function App() {
                                     onConfirm: async () => {
                                       try {
                                         const clientLoans = loans.filter(l => l.clientName === client.name);
-                                        const batch = clientLoans.map(l => deleteDoc(doc(db, 'loans', l.id)));
-                                        await Promise.all(batch);
+                                        const loanDeletions = clientLoans.map(l => deleteDoc(doc(db, 'loans', l.id)));
+                                        
+                                        // Delete associated actions
+                                        const q = query(
+                                          collection(db, 'actions'), 
+                                          where('clientName', '==', client.name),
+                                          where('uid', '==', user.uid)
+                                        );
+                                        const snapshot = await getDocs(q);
+                                        const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
+                                        
+                                        await Promise.all([...loanDeletions, ...actionDeletions]);
                                         setConfirmModal(prev => ({ ...prev, isOpen: false }));
                                       } catch (err) {
                                         handleFirestoreError(err, OperationType.DELETE, 'loans/bulk');
@@ -962,6 +1309,95 @@ export default function App() {
                               >
                                 <Trash2 className="w-4 h-4" />
                                 <span>Excluir</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : activeTab === 'Histórico' ? (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-white/[0.01] border-b border-white/[0.03]">
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Data/Hora</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Ação</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Descrição</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.05]">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={6} className="px-8 py-20 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                            <span className="text-slate-500 font-medium">Sincronizando logs...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : actions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-8 py-20 text-center">
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
+                              <History className="w-8 h-8 text-slate-600" />
+                            </div>
+                            <span className="text-slate-500 font-medium">Nenhuma ação registrada no sistema.</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      actions.map((action) => (
+                        <tr key={action.id} className="group hover:bg-white/[0.01] transition-colors">
+                          <td className="px-8 py-4 text-slate-400 text-xs font-medium">
+                            {safeFormatDate(action.date, 'dd/MM/yyyy HH:mm')}
+                          </td>
+                          <td className="px-8 py-4">
+                            <span className={cn(
+                              "text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border",
+                              action.type === 'loan_created' && "bg-brand-primary/10 text-brand-primary border-brand-primary/20",
+                              action.type === 'payment_received' && "bg-brand-accent/10 text-brand-accent border-brand-accent/20",
+                              action.type === 'loan_deleted' && "bg-brand-danger/10 text-brand-danger border-brand-danger/20",
+                              action.type === 'loan_updated' && "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                            )}>
+                              {action.type === 'loan_created' ? 'Novo Empréstimo' :
+                               action.type === 'payment_received' ? 'Pagamento' :
+                               action.type === 'loan_deleted' ? 'Exclusão' : 'Atualização'}
+                            </span>
+                          </td>
+                          <td className="px-8 py-4 text-white font-bold text-xs">
+                            {action.clientName}
+                          </td>
+                          <td className="px-8 py-4 text-slate-400 text-xs italic">
+                            {action.description}
+                          </td>
+                          <td className="px-8 py-4 text-white font-bold text-xs">
+                            {action.amount && action.amount > 0 ? `R$ ${action.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
+                          </td>
+                          <td className="px-8 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {action.type === 'payment_received' && (
+                                <button 
+                                  onClick={() => {
+                                    setViewingReceipt(action);
+                                  }}
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-emerald-500/20"
+                                  title="Gerar Recibo"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>Recibo</span>
+                                </button>
+                              )}
+                              <button 
+                                onClick={() => deleteAction(action.id)}
+                                className="p-2 text-slate-500 hover:text-brand-danger transition-colors"
+                                title="Excluir Registro"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -998,7 +1434,7 @@ export default function App() {
                         <td colSpan={7} className="px-8 py-20 text-center">
                           <div className="flex flex-col items-center gap-4">
                             <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
-                              {activeTab === 'Empréstimos' ? <Users className="w-8 h-8 text-slate-600" /> : <History className="w-8 h-8 text-slate-600" />}
+                              <Users className="w-8 h-8 text-slate-600" />
                             </div>
                             <span className="text-slate-500 font-medium">Nenhum empréstimo encontrado.</span>
                           </div>
@@ -1022,11 +1458,23 @@ export default function App() {
                           </td>
                           <td className="px-8 py-4 text-slate-400 text-xs font-medium">
                             <div className={cn(
-                              "flex items-center gap-1.5",
+                              "flex flex-col gap-1",
                               isOverdue(loan) && "text-brand-danger"
                             )}>
-                              <Clock className="w-3.5 h-3.5" />
-                              {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5" />
+                                {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                              </div>
+                              {loan.status === 'Pendente' && (
+                                <span className={cn(
+                                  "text-[9px] font-bold uppercase tracking-wider",
+                                  isOverdue(loan) ? "text-brand-danger" : "text-brand-accent"
+                                )}>
+                                  {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
+                                   getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
+                                   `Atrasado ${Math.abs(getDaysDiff(loan.dueDate))} dias`}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-8 py-4 text-brand-accent/80 text-xs">
@@ -1048,26 +1496,35 @@ export default function App() {
                           <td className="px-8 py-6 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button 
+                                onClick={() => generateWhatsAppMessage(loan)}
+                                className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl transition-all active:scale-95 border border-[#25D366]/20"
+                                title="Enviar Cobrança WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                              <button 
                                 onClick={() => setViewingClientLoans(loan.clientName)}
-                                className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
+                                className="p-2 bg-white/5 text-slate-400 hover:bg-brand-primary/20 hover:text-brand-primary rounded-xl transition-all active:scale-95 border border-white/10 hover:border-brand-primary/30"
                                 title="Ver Histórico"
                               >
                                 <History className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => setViewingContract(loan)}
-                                className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
+                                className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
                                 title="Emitir Comprovante"
                               >
                                 <FileText className="w-4 h-4" />
                               </button>
-                              <button 
-                                onClick={() => setPayingLoan(loan)}
-                                className="flex items-center gap-2 px-4 py-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-accent/20"
-                              >
-                                <DollarSign className="w-4 h-4" />
-                                <span>Pagamento</span>
-                              </button>
+                              {loan.status !== 'Pago' && (
+                                <button 
+                                  onClick={() => setPayingLoan(loan)}
+                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-brand-accent/20"
+                                >
+                                  <DollarSign className="w-4 h-4" />
+                                  <span>Pagamento</span>
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1171,33 +1628,6 @@ export default function App() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Emissão</label>
-                    <input 
-                      required
-                      type="date"
-                      className="w-full glass-input"
-                      value={newLoan.date}
-                      onChange={(e) => {
-                        const newDate = e.target.value;
-                        try {
-                          const dateObj = parseISO(newDate);
-                          if (!isNaN(dateObj.getTime())) {
-                            const nextMonth = addMonths(dateObj, 1);
-                            setNewLoan({
-                              ...newLoan, 
-                              date: newDate, 
-                              dueDate: format(nextMonth, 'yyyy-MM-dd')
-                            });
-                          } else {
-                            setNewLoan({...newLoan, date: newDate});
-                          }
-                        } catch (err) {
-                          setNewLoan({...newLoan, date: newDate});
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Vencimento</label>
                     <input 
                       required
@@ -1224,7 +1654,7 @@ export default function App() {
                   whileHover={{ scale: 1.02, y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"
-                  className="w-full btn-primary py-5 text-lg"
+                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white py-5 rounded-2xl font-bold shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all text-lg uppercase tracking-widest"
                 >
                   {editingLoanId ? 'Salvar Alterações' : 'Confirmar Cadastro'}
                 </motion.button>
@@ -1306,7 +1736,7 @@ export default function App() {
                     />
                     <button 
                       onClick={handleAmortization}
-                      className="px-6 bg-brand-accent text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-accent/20 hover:shadow-brand-accent/40 active:scale-95"
+                      className="px-6 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-accent/20 hover:shadow-brand-accent/40 active:scale-95"
                     >
                       Aplicar
                     </button>
@@ -1322,16 +1752,16 @@ export default function App() {
                   <div className="grid gap-3">
                     <button 
                       onClick={handleInterestPayment}
-                      className="w-full py-5 bg-brand-primary/10 hover:bg-brand-primary text-white rounded-2xl font-bold transition-all border border-brand-primary/20 flex items-center justify-between px-6 active:scale-[0.98] group"
+                      className="w-full py-5 bg-white/5 hover:bg-brand-primary/20 text-white rounded-2xl font-bold transition-all border border-white/10 hover:border-brand-primary/30 flex items-center justify-between px-6 active:scale-[0.98] group"
                     >
                       <span className="text-sm">Pagamento de Juros</span>
-                      <span className="text-brand-accent font-black text-sm group-hover:text-white transition-colors">
+                      <span className="text-brand-accent font-black text-sm group-hover:text-brand-primary transition-colors">
                         R$ {(payingLoan.totalBruto - payingLoan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </button>
                     <button 
                       onClick={handleRenewLoan}
-                      className="w-full py-5 bg-brand-primary text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/20 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
+                      className="w-full py-5 bg-gradient-to-r from-brand-primary to-indigo-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
                     >
                       <span className="text-sm">Pagar Juros e Renovar</span>
                       <span className="opacity-80 text-[10px] font-black uppercase tracking-tighter">+30 dias</span>
@@ -1365,15 +1795,15 @@ export default function App() {
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                    className="flex-1 px-6 py-3 bg-white/5 text-slate-500 hover:bg-white/10 rounded-xl font-bold uppercase tracking-widest text-[10px] transition-all"
+                    className="flex-1 px-6 py-3 bg-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300 rounded-xl font-bold uppercase tracking-widest text-[10px] transition-all border border-white/10"
                   >
                     Cancelar
                   </button>
                   <button 
                     onClick={confirmModal.onConfirm}
-                    className="flex-1 px-6 py-3 bg-brand-danger text-white hover:bg-brand-danger/90 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-lg shadow-brand-danger/20 transition-all active:scale-95"
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-brand-danger to-red-700 text-white rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-lg shadow-brand-danger/25 hover:shadow-brand-danger/40 transition-all active:scale-95"
                   >
-                    Excluir
+                    Confirmar Exclusão
                   </button>
                 </div>
               </motion.div>
@@ -1427,13 +1857,25 @@ export default function App() {
                           <td className="px-6 py-4 text-white text-xs">
                             R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="px-6 py-4 text-slate-400 text-xs font-medium">
+                           <td className="px-6 py-4 text-slate-400 text-xs font-medium">
                             <div className={cn(
-                              "flex items-center gap-1.5",
+                              "flex flex-col gap-1",
                               isOverdue(loan) && "text-brand-danger"
                             )}>
-                              <Clock className="w-3.5 h-3.5" />
-                              {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5" />
+                                {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                              </div>
+                              {loan.status === 'Pendente' && (
+                                <span className={cn(
+                                  "text-[9px] font-bold uppercase tracking-wider",
+                                  isOverdue(loan) ? "text-brand-danger" : "text-brand-accent"
+                                )}>
+                                  {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
+                                   getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
+                                   `Atrasado ${Math.abs(getDaysDiff(loan.dueDate))} dias`}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 text-white font-bold text-sm">
@@ -1517,85 +1959,229 @@ export default function App() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               id="printable-contract"
-              className="relative w-full max-w-2xl bg-white text-black p-12 rounded-none shadow-2xl overflow-y-auto max-h-[90vh]"
+              className="relative w-full max-w-2xl bg-white text-black p-16 rounded-none shadow-2xl overflow-y-auto max-h-[90vh] printable-content"
             >
-              <div className="flex justify-between items-start mb-12 border-b-2 border-black pb-8">
-                <div>
-                  <h1 className="text-3xl font-black uppercase tracking-tighter mb-1">Comprovante de Contrato</h1>
-                  <p className="text-sm font-bold text-slate-600">Reyne Lucas Private Finance</p>
+              {/* Bank-style Header */}
+              <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-black flex items-center justify-center rounded-sm">
+                    <span className="text-white font-black text-xl tracking-tighter">NP</span>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-black uppercase tracking-tighter leading-none">Nexus Private</h1>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Crédito e Gestão de Ativos</p>
+                  </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Emissão</p>
-                  <p className="font-bold">{format(new Date(), 'dd/MM/yyyy')}</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comprovante de Operação</p>
+                  <p className="text-sm font-mono font-bold">#{viewingContract.id.slice(-8).toUpperCase()}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-12 mb-12">
-                <div className="space-y-6">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contratante</p>
-                    <p className="text-lg font-bold uppercase">{viewingContract.clientName}</p>
-                    {viewingContract.clientPhone && <p className="text-sm text-slate-600">{viewingContract.clientPhone}</p>}
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Data do Empréstimo</p>
-                    <p className="font-bold">{safeFormatDate(viewingContract.date, 'dd/MM/yyyy')}</p>
-                  </div>
-                </div>
-                <div className="space-y-6">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Valor do Capital</p>
-                    <p className="text-lg font-bold">R$ {viewingContract.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Taxa de Juros</p>
-                    <p className="font-bold">{((viewingContract.interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</p>
-                  </div>
-                </div>
+              {/* Transaction Title */}
+              <div className="text-center mb-12">
+                <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Comprovante de Empréstimo</h2>
+                <p className="text-sm text-slate-500">Emitido em {format(new Date(), "dd/MM/yyyy 'às' HH:mm:ss")}</p>
               </div>
 
-              <div className="bg-slate-50 p-8 rounded-none border-l-4 border-black mb-12">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-sm font-bold uppercase tracking-widest">Data de Vencimento</span>
-                  <span className="text-lg font-black">{safeFormatDate(viewingContract.dueDate, 'dd/MM/yyyy')}</span>
+              {/* Main Data Grid */}
+              <div className="space-y-8 mb-16">
+                <div className="grid grid-cols-1 gap-6 border-y border-slate-100 py-8">
+                  <div className="flex justify-between items-end">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Beneficiário</span>
+                    <span className="text-lg font-bold uppercase border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract.clientName}</span>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">CPF/CNPJ/Telefone</span>
+                    <span className="text-sm font-bold border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract.clientPhone || 'Não informado'}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                  <span className="text-sm font-bold uppercase tracking-widest">Total Bruto a Pagar</span>
-                  <span className="text-2xl font-black">R$ {viewingContract.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                </div>
-              </div>
 
-              <div className="space-y-12 mt-20">
-                <div className="grid grid-cols-2 gap-12">
-                  <div className="border-t border-black pt-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-center">Assinatura do Credor</p>
+                <div className="grid grid-cols-2 gap-x-12 gap-y-8">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</p>
+                    <p className="text-xl font-bold">R$ {viewingContract.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
-                  <div className="border-t border-black pt-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-center">Assinatura do Cliente</p>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</p>
+                    <p className="text-xl font-bold">{((viewingContract.interestRate || 0) * 100).toLocaleString('pt-BR')}% <span className="text-xs text-slate-400 font-normal">ao mês</span></p>
                   </div>
-                </div>
-                
-                <div className="text-center space-y-4 no-print">
-                  <div className="flex gap-4 justify-center">
-                    <button 
-                      onClick={() => window.print()}
-                      className="px-8 py-4 bg-black text-white font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" />
-                      Imprimir Contrato
-                    </button>
-                    <button 
-                      onClick={() => setViewingContract(null)}
-                      className="px-8 py-4 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-xs hover:bg-slate-200 transition-all"
-                    >
-                      Fechar
-                    </button>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</p>
+                    <p className="text-xl font-bold">R$ {(viewingContract.totalBruto - viewingContract.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</p>
+                    <p className="text-lg font-bold">{safeFormatDate(viewingContract.date, 'dd/MM/yyyy')}</p>
+                  </div>
+                  <div className="space-y-1 col-span-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Vencimento</p>
+                    <p className="text-lg font-bold">{safeFormatDate(viewingContract.dueDate, 'dd/MM/yyyy')}</p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-12 pt-8 border-t border-slate-100 text-center">
-                <p className="text-[9px] text-slate-400 font-medium uppercase tracking-[0.3em]">Este documento serve como comprovante legal da operação financeira realizada.</p>
+              {/* Total Section */}
+              <div className="bg-slate-50 p-10 border border-slate-200 mb-16 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-slate-200/20 rounded-full -mr-16 -mt-16" />
+                <div className="relative z-10">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">Valor Total Bruto a Pagar</p>
+                  <p className="text-4xl font-black text-center tracking-tighter">
+                    R$ {viewingContract.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Bank Footer / Authentication */}
+              <div className="border-t-2 border-dashed border-slate-200 pt-8 mt-12">
+                <div className="flex justify-between items-start gap-12">
+                  <div className="flex-1 space-y-6">
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Termos e Condições</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                        Este documento serve como comprovante de operação financeira realizada através da plataforma Nexus Private. 
+                        A quitação do débito está sujeita à confirmação do recebimento dos valores na data de vencimento acordada.
+                        Este comprovante é nominal e intransferível.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col items-end gap-4 shrink-0">
+                    <div className="w-20 h-20 bg-white border-2 border-slate-100 p-1 flex items-center justify-center rounded-lg shadow-sm">
+                      {/* Mock QR Code */}
+                      <div className="w-full h-full grid grid-cols-4 grid-rows-4 gap-0.5 opacity-80">
+                        {[...Array(16)].map((_, i) => (
+                          <div key={i} className={`rounded-[1px] ${Math.random() > 0.4 ? 'bg-black' : 'bg-transparent'}`} />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Autenticação Mecânica</p>
+                      <p className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                        {viewingContract.id.toUpperCase()}-{new Date().getTime().toString().slice(-6)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action Buttons (Hidden in PDF) */}
+              <div className="text-center space-y-4 mt-12 no-print no-print-section">
+                <div className="flex flex-wrap gap-4 justify-center">
+                  <button
+                    onClick={shareAsPDF}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Share2 className="w-5 h-5" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando PDF...' : 'Compartilhar PDF'}
+                  </button>
+                  <button
+                    onClick={() => setViewingContract(null)}
+                    className="px-8 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {viewingReceipt && (
+          <div key="modal-receipt" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingReceipt(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl no-print"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              id="printable-receipt"
+              className="relative w-full max-w-2xl bg-white text-black p-16 rounded-none shadow-2xl overflow-y-auto max-h-[90vh] printable-content"
+            >
+              {/* Bank-style Header */}
+              <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-black flex items-center justify-center rounded-sm">
+                    <span className="text-white font-black text-xl tracking-tighter">NP</span>
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-black uppercase tracking-tighter leading-none">Nexus Private</h1>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Crédito e Gestão de Ativos</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Recibo de Pagamento</p>
+                  <p className="text-sm font-mono font-bold">#{viewingReceipt.id.slice(-8).toUpperCase()}</p>
+                </div>
+              </div>
+
+              {/* Receipt Title */}
+              <div className="text-center mb-12">
+                <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Recibo de Pagamento</h2>
+                <p className="text-sm text-slate-500">Emitido em {format(new Date(), "dd/MM/yyyy 'às' HH:mm:ss")}</p>
+              </div>
+
+              {/* Declaration Text */}
+              <div className="mb-16 text-lg leading-relaxed text-slate-800">
+                <p className="mb-6">
+                  Declaro para os devidos fins que recebi de <span className="font-bold uppercase">{viewingReceipt.clientName}</span>, 
+                  a importância de <span className="font-bold text-2xl">R$ {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>, 
+                  referente a:
+                </p>
+                <div className="bg-slate-50 p-8 border-l-4 border-black font-bold italic text-xl">
+                  "{viewingReceipt.description}"
+                </div>
+              </div>
+
+              {/* Details Grid */}
+              <div className="grid grid-cols-2 gap-x-12 gap-y-8 mb-16 border-t border-slate-100 pt-8">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data do Recebimento</p>
+                  <p className="text-lg font-bold">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy')}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID da Transação</p>
+                  <p className="text-sm font-mono font-bold">#{viewingReceipt.id.slice(-8).toUpperCase()}</p>
+                </div>
+              </div>
+
+              {/* Footer / Signature Area */}
+              <div className="mt-20 pt-12 border-t border-slate-100 text-center">
+                <div className="w-64 h-px bg-slate-300 mx-auto mb-4" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nexus Private - Gestão de Ativos</p>
+                <p className="text-[9px] text-slate-300 mt-1 italic">Este documento é um recibo eletrônico válido.</p>
+              </div>
+
+              {/* Action Buttons (Hidden in PDF) */}
+              <div className="mt-16 flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print">
+                <button
+                  onClick={shareAsPDF}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold rounded-xl shadow-xl shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isGeneratingPDF ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Share2 className="w-5 h-5" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando PDF...' : 'Compartilhar Recibo'}
+                </button>
+                <button
+                  onClick={() => setViewingReceipt(null)}
+                  className="px-8 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+                >
+                  Fechar
+                </button>
               </div>
             </motion.div>
           </div>

@@ -65,3 +65,31 @@
     display: none !important;
   }
 }
+
+/* Fix for html2canvas oklch unsupported color function */
+.printable-content, .printable-content * {
+  color-scheme: light !important;
+}
+
+.printable-content {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.printable-content .text-slate-600 { color: #475569 !important; }
+.printable-content .text-slate-500 { color: #64748b !important; }
+.printable-content .text-slate-400 { color: #94a3b8 !important; }
+.printable-content .text-slate-100 { color: #f1f5f9 !important; }
+.printable-content .bg-slate-50 { background-color: #f8fafc !important; }
+.printable-content .bg-slate-100 { background-color: #f1f5f9 !important; }
+.printable-content .border-slate-200 { border-color: #e2e8f0 !important; }
+.printable-content .border-slate-100 { border-color: #f1f5f9 !important; }
+.printable-content .border-black { border-color: #000000 !important; }
+.printable-content .bg-black { background-color: #000000 !important; }
+.printable-content .text-black { color: #000000 !important; }
+.printable-content .text-white { color: #ffffff !important; }
+.printable-content .text-brand-primary { color: #d4af37 !important; }
+.printable-content .bg-brand-primary { background-color: #d4af37 !important; }
+.printable-content .bg-brand-primary\/5 { background-color: #fdf9eb !important; }
+.printable-content .border-brand-primary\/10 { border-color: #f9f1d7 !important; }
+.printable-content .border-brand-primary\/20 { border-color: #f2e3af !important; }

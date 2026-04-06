@@ -53,6 +53,21 @@
         "uid": { "type": "string" }
       },
       "required": ["email", "role", "uid"]
+    },
+    "system_action": {
+      "title": "System Action",
+      "description": "Represents an action performed in the system.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "clientName": { "type": "string" },
+        "loanId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "uid": { "type": "string" }
+      },
+      "required": ["type", "description", "clientName", "loanId", "date", "uid"]
     }
   },
   "firestore": {
@@ -63,6 +78,10 @@
     "/users/{userId}": {
       "schema": "user",
       "description": "User profile data."
+    },
+    "/actions/{actionId}": {
+      "schema": "system_action",
+      "description": "Log of all system actions."
     }
   }
 }

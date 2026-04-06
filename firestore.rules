@@ -21,6 +21,16 @@ service cloud.firestore {
     //   - email: string (required)
     //   - role: string (required, enum: admin, user)
     //   - uid: string (required)
+    //
+    // Collection: actions
+    // Fields:
+    //   - type: string (required)
+    //   - description: string (required)
+    //   - amount: number (optional)
+    //   - clientName: string (required)
+    //   - loanId: string (required)
+    //   - date: string (required, ISO 8601)
+    //   - uid: string (required, owner UID)
     // ===============================================================
 
     // Helper Functions
@@ -38,6 +48,18 @@ service cloud.firestore {
 
     function isValidEmail(email) {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidAction(data) {
+      let requiredFields = ['type', 'description', 'clientName', 'loanId', 'date', 'uid'];
+      return data.keys().hasAll(requiredFields) &&
+             data.type is string &&
+             data.description is string &&
+             data.clientName is string &&
+             data.loanId is string &&
+             data.date is string &&
+             data.uid == request.auth.uid &&
+             (!('amount' in data) || data.amount is number);
     }
 
     function isValidLoan(data) {
@@ -75,6 +97,12 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
       allow create: if isAuthenticated() && isValidLoan(request.resource.data);
       allow update: if isDocOwner() && isValidLoan(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /actions/{actionId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
+      allow create: if isAuthenticated() && isValidAction(request.resource.data);
       allow delete: if isDocOwner();
     }
   }
