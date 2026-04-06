@@ -119,16 +119,20 @@ export default function App() {
   const [actions, setActions] = useState<SystemAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'Empréstimos' | 'Clientes' | 'Histórico'>('Empréstimos');
+  const [activeTab, setActiveTab] = useState<'Empréstimos' | 'Clientes' | 'Transações' | 'Histórico'>('Empréstimos');
   
   // Form State
   const [isAdding, setIsAdding] = useState(false);
   const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
-  const [viewingContract, setViewingContract] = useState<Loan | null>(null);
+  const [viewingContract, setViewingContract] = useState<Loan[] | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<SystemAction | null>(null);
+  const [lastAction, setLastAction] = useState<SystemAction | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [showOnlyOverdue, setShowOnlyOverdue] = useState(false);
+  const [showOnlyCapital, setShowOnlyCapital] = useState(false);
+  const [showOnlyInterest, setShowOnlyInterest] = useState(false);
+  const [filterDate, setFilterDate] = useState('');
 
   const shareAsPDF = async () => {
     const isReceipt = !!viewingReceipt;
@@ -295,7 +299,7 @@ export default function App() {
       pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
       
       const pdfBlob = pdf.output('blob');
-      const clientName = isReceipt ? (data as SystemAction).clientName : (data as Loan).clientName;
+      const clientName = isReceipt ? (data as SystemAction).clientName : (data as Loan[])[0].clientName;
       const fileName = `${isReceipt ? 'Recibo' : 'Contrato'}_${clientName.replace(/\s+/g, '_')}.pdf`;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
@@ -472,6 +476,20 @@ export default function App() {
 
   const handleLogout = () => signOut(auth);
 
+  // Keep payingLoan in sync with loans array
+  useEffect(() => {
+    if (payingLoan) {
+      const updatedLoan = loans.find(l => l.id === payingLoan.id);
+      if (updatedLoan && (
+        updatedLoan.capital !== payingLoan.capital || 
+        updatedLoan.dueDate !== payingLoan.dueDate ||
+        updatedLoan.status !== payingLoan.status
+      )) {
+        setPayingLoan(updatedLoan);
+      }
+    }
+  }, [loans, payingLoan]);
+
   // --- Firestore Logic ---
   useEffect(() => {
     if (!user || !isAuthReady) {
@@ -642,10 +660,25 @@ export default function App() {
         capitalPago: newCapitalPago,
         status: newCapital === 0 ? 'Pago' : payingLoan.status
       });
-      const action = await logAction('payment_received', `Amortização de capital: R$ ${amount.toLocaleString('pt-BR')}`, payingLoan.clientName, payingLoan.id, amount);
-      setPayingLoan(null);
+      
+      const description = `Amortização de capital: R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      let action: SystemAction | null = null;
+
+      if (lastAction && lastAction.loanId === payingLoan.id) {
+        const newAmount = (lastAction.amount || 0) + amount;
+        const newDescription = `${lastAction.description} + ${description}`;
+        await updateDoc(doc(db, 'actions', lastAction.id), {
+          amount: newAmount,
+          description: newDescription,
+          date: new Date().toISOString()
+        });
+        action = { ...lastAction, amount: newAmount, description: newDescription };
+      } else {
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount);
+      }
+
       setAmortizationAmount('');
-      if (action) setViewingReceipt(action);
+      if (action) setLastAction(action);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
@@ -681,9 +714,24 @@ export default function App() {
         dueDate: format(newDueDate, 'yyyy-MM-dd'),
         jurosPagos: newJurosPagos
       });
-      const action = await logAction('payment_received', `Pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR')}`, payingLoan.clientName, payingLoan.id, interestAmount);
-      setPayingLoan(null);
-      if (action) setViewingReceipt(action);
+
+      const description = `Pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      let action: SystemAction | null = null;
+
+      if (lastAction && lastAction.loanId === payingLoan.id) {
+        const newAmount = (lastAction.amount || 0) + interestAmount;
+        const newDescription = `${lastAction.description} + ${description}`;
+        await updateDoc(doc(db, 'actions', lastAction.id), {
+          amount: newAmount,
+          description: newDescription,
+          date: new Date().toISOString()
+        });
+        action = { ...lastAction, amount: newAmount, description: newDescription };
+      } else {
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount);
+      }
+
+      if (action) setLastAction(action);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
@@ -723,9 +771,24 @@ export default function App() {
         status: 'Pendente',
         jurosPagos: newJurosPagos
       });
-      const action = await logAction('payment_received', `Renovação com pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR')}`, payingLoan.clientName, payingLoan.id, interestAmount);
-      setPayingLoan(null);
-      if (action) setViewingReceipt(action);
+
+      const description = `Renovação com pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      let action: SystemAction | null = null;
+
+      if (lastAction && lastAction.loanId === payingLoan.id) {
+        const newAmount = (lastAction.amount || 0) + interestAmount;
+        const newDescription = `${lastAction.description} + ${description}`;
+        await updateDoc(doc(db, 'actions', lastAction.id), {
+          amount: newAmount,
+          description: newDescription,
+          date: new Date().toISOString()
+        });
+        action = { ...lastAction, amount: newAmount, description: newDescription };
+      } else {
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount);
+      }
+
+      if (action) setLastAction(action);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
@@ -784,12 +847,39 @@ export default function App() {
   };
 
   const deleteAction = async (id: string) => {
+    const action = actions.find(a => a.id === id);
+    if (!action) return;
+
     setConfirmModal({
       isOpen: true,
       title: 'Excluir Registro',
-      message: 'Deseja excluir este registro do histórico? Esta ação não pode ser desfeita.',
+      message: 'Deseja excluir este registro? Se for um pagamento, os valores do empréstimo serão estornados no dashboard e no contrato. Esta ação não pode ser desfeita.',
       onConfirm: async () => {
         try {
+          if (action.type === 'payment_received' && action.loanId) {
+            const loan = loans.find(l => l.id === action.loanId);
+            if (loan) {
+              const amount = action.amount || 0;
+              const isCapital = action.description.toLowerCase().includes('amortização');
+              const isInterest = action.description.toLowerCase().includes('juros');
+
+              const updates: any = {};
+              if (isCapital) {
+                updates.capital = loan.capital + amount;
+                updates.capitalPago = Math.max(0, (loan.capitalPago || 0) - amount);
+                updates.totalBruto = updates.capital * (1 + loan.interestRate);
+                if (loan.status === 'Pago') {
+                  updates.status = 'Pendente';
+                }
+              } else if (isInterest) {
+                updates.jurosPagos = Math.max(0, (loan.jurosPagos || 0) - amount);
+              }
+
+              if (Object.keys(updates).length > 0) {
+                await updateDoc(doc(db, 'loans', loan.id), updates);
+              }
+            }
+          }
           await deleteDoc(doc(db, 'actions', id));
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
@@ -801,6 +891,13 @@ export default function App() {
 
   // --- Financial Calculations ---
   const filteredLoans = useMemo(() => {
+    if (filterDate) {
+      return loans.filter(l => {
+        const day = parseISO(l.dueDate).getDate();
+        return day === parseInt(filterDate);
+      });
+    }
+
     let result = loans;
     if (activeTab === 'Empréstimos') {
       result = loans.filter(l => l.status !== 'Pago');
@@ -827,11 +924,19 @@ export default function App() {
     }
     
     return result;
-  }, [loans, activeTab, command, showOnlyOverdue]);
+  }, [loans, activeTab, command, showOnlyOverdue, filterDate]);
 
   const clients = useMemo(() => {
     const clientMap = new Map<string, { name: string, phone: string, totalCapital: number, loanCount: number, activeDebt: number }>();
-    loans.forEach(loan => {
+    
+    const relevantLoans = filterDate 
+      ? loans.filter(l => {
+          const day = parseISO(l.dueDate).getDate();
+          return day === parseInt(filterDate);
+        })
+      : loans;
+
+    relevantLoans.forEach(loan => {
       const existing = clientMap.get(loan.clientName) || { name: loan.clientName, phone: loan.clientPhone || '', totalCapital: 0, loanCount: 0, activeDebt: 0 };
       existing.totalCapital += loan.capital + (loan.capitalPago || 0);
       existing.loanCount += 1;
@@ -858,7 +963,7 @@ export default function App() {
     }
     
     return result;
-  }, [loans, command]);
+  }, [loans, command, filterDate]);
 
   const filteredActions = useMemo(() => {
     if (command.trim()) {
@@ -873,6 +978,17 @@ export default function App() {
     }
     return actions;
   }, [actions, command]);
+
+  const filteredTransactions = useMemo(() => {
+    let result = filteredActions.filter(a => a.type === 'payment_received');
+    if (showOnlyCapital) {
+      result = result.filter(a => a.description.toLowerCase().includes('capital'));
+    }
+    if (showOnlyInterest) {
+      result = result.filter(a => a.description.toLowerCase().includes('juros'));
+    }
+    return result;
+  }, [filteredActions, showOnlyCapital, showOnlyInterest]);
 
   const stats = useMemo(() => {
     const capitalLiberado = loans
@@ -1149,6 +1265,14 @@ export default function App() {
             icon={<Wallet className="w-5 h-5" />}
             color="accent"
             trend="Liquidado"
+            onClick={() => {
+              setActiveTab('Transações');
+              setShowOnlyCapital(true);
+              setShowOnlyInterest(false);
+              setShowOnlyOverdue(false);
+              setFilterDate('');
+              setCommand('');
+            }}
           />
           <StatCard 
             title="Juros Realizados" 
@@ -1156,6 +1280,14 @@ export default function App() {
             icon={<TrendingUp className="w-5 h-5" />}
             color="secondary"
             trend="Lucro"
+            onClick={() => {
+              setActiveTab('Transações');
+              setShowOnlyInterest(true);
+              setShowOnlyCapital(false);
+              setShowOnlyOverdue(false);
+              setFilterDate('');
+              setCommand('');
+            }}
           />
           <StatCard 
             title="Atrasados" 
@@ -1166,6 +1298,8 @@ export default function App() {
             onClick={() => {
               setActiveTab('Empréstimos');
               setShowOnlyOverdue(true);
+              setFilterDate('');
+              setCommand('');
             }}
           />
         </div>
@@ -1182,19 +1316,42 @@ export default function App() {
               placeholder="Buscar cliente"
               className="w-full bg-transparent rounded-2xl py-5 pl-16 pr-4 text-white placeholder:text-slate-600 focus:outline-none transition-all text-base font-bold tracking-tight"
               value={command}
-              onChange={(e) => setCommand(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCommand(val);
+                if (val.trim()) {
+                  setFilterDate('');
+                  setShowOnlyOverdue(false);
+                  setShowOnlyCapital(false);
+                  setShowOnlyInterest(false);
+                }
+              }}
             />
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-2">
-              {showOnlyOverdue && (
-                <button 
-                  type="button"
-                  onClick={() => setShowOnlyOverdue(false)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-brand-danger/10 text-brand-danger border border-brand-danger/20 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-brand-danger hover:text-white transition-all mr-2"
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <select 
+                  className="bg-transparent text-[10px] font-bold text-white uppercase tracking-widest focus:outline-none [color-scheme:dark] cursor-pointer"
+                  value={filterDate}
+                  onChange={(e) => {
+                    setFilterDate(e.target.value);
+                    if (e.target.value) {
+                      setActiveTab('Clientes');
+                      setCommand('');
+                      setShowOnlyOverdue(false);
+                      setShowOnlyCapital(false);
+                      setShowOnlyInterest(false);
+                    }
+                  }}
                 >
-                  <X className="w-3 h-3" />
-                  <span>Limpar Filtro</span>
-                </button>
-              )}
+                  <option value="" className="bg-slate-900">Dia</option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <option key={day} value={day.toString()} className="bg-slate-900">
+                      Dia {day}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <kbd className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[10px] text-slate-500 font-black tracking-widest">ENTER</kbd>
             </div>
           </form>
@@ -1223,25 +1380,86 @@ export default function App() {
         {/* Main Content Area */}
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <nav className="flex items-center bg-white/[0.03] p-1.5 rounded-2xl border border-white/[0.05] w-fit">
-              {(['Empréstimos', 'Clientes', 'Histórico'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => {
-                    setActiveTab(tab);
-                    setShowOnlyOverdue(false);
-                  }}
-                  className={cn(
-                    "px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-300",
-                    activeTab === tab 
-                      ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/30" 
-                      : "text-slate-500 hover:text-slate-300"
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </nav>
+            <div className="flex flex-col gap-2">
+              <nav className="flex items-center bg-white/[0.03] p-1.5 rounded-2xl border border-white/[0.05] w-fit">
+                {(['Empréstimos', 'Clientes', 'Transações', 'Histórico'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      setActiveTab(tab);
+                      setShowOnlyOverdue(false);
+                      setShowOnlyCapital(false);
+                      setShowOnlyInterest(false);
+                      setFilterDate('');
+                    }}
+                    className={cn(
+                      "px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-300",
+                      activeTab === tab 
+                        ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/30" 
+                        : "text-slate-500 hover:text-slate-300"
+                    )}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </nav>
+              {filterDate && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-lg w-fit">
+                  <Calendar className="w-3 h-3 text-brand-primary" />
+                  <span className="text-[9px] font-bold text-brand-primary uppercase tracking-widest">
+                    Vencimento dia: {filterDate}
+                  </span>
+                  <button 
+                    onClick={() => setFilterDate('')}
+                    className="p-1 hover:bg-brand-primary/20 rounded-md transition-colors"
+                  >
+                    <X className="w-2.5 h-2.5 text-brand-primary" />
+                  </button>
+                </div>
+              )}
+              {showOnlyOverdue && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-brand-danger/10 border border-brand-danger/20 rounded-lg w-fit">
+                  <AlertCircle className="w-3 h-3 text-brand-danger" />
+                  <span className="text-[9px] font-bold text-brand-danger uppercase tracking-widest">
+                    Apenas Atrasados
+                  </span>
+                  <button 
+                    onClick={() => setShowOnlyOverdue(false)}
+                    className="p-1 hover:bg-brand-danger/20 rounded-md transition-colors"
+                  >
+                    <X className="w-2.5 h-2.5 text-brand-danger" />
+                  </button>
+                </div>
+              )}
+              {showOnlyCapital && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-lg w-fit">
+                  <Wallet className="w-3 h-3 text-brand-accent" />
+                  <span className="text-[9px] font-bold text-brand-accent uppercase tracking-widest">
+                    Capital Recebido
+                  </span>
+                  <button 
+                    onClick={() => setShowOnlyCapital(false)}
+                    className="p-1 hover:bg-brand-accent/20 rounded-md transition-colors"
+                  >
+                    <X className="w-2.5 h-2.5 text-brand-accent" />
+                  </button>
+                </div>
+              )}
+              {showOnlyInterest && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-brand-secondary/10 border border-brand-secondary/20 rounded-lg w-fit">
+                  <TrendingUp className="w-3 h-3 text-brand-secondary" />
+                  <span className="text-[9px] font-bold text-brand-secondary uppercase tracking-widest">
+                    Juros Realizados
+                  </span>
+                  <button 
+                    onClick={() => setShowOnlyInterest(false)}
+                    className="p-1 hover:bg-brand-secondary/20 rounded-md transition-colors"
+                  >
+                    <X className="w-2.5 h-2.5 text-brand-secondary" />
+                  </button>
+                </div>
+              )}
+            </div>
             
             {activeTab === 'Empréstimos' && (
               <motion.button 
@@ -1281,7 +1499,7 @@ export default function App() {
 
           <div className="glass-card overflow-hidden">
             <div className="overflow-x-auto">
-              {activeTab === 'Clientes' ? (
+              {activeTab === 'Clientes' && !filterDate ? (
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-white/[0.01] border-b border-white/[0.03]">
@@ -1318,6 +1536,37 @@ export default function App() {
                           <td className="px-8 py-6 text-brand-primary font-bold">R$ {client.activeDebt.toLocaleString('pt-BR')}</td>
                           <td className="px-8 py-6 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => {
+                                  setEditingLoanId(null);
+                                  setNewLoan({
+                                    clientName: client.name,
+                                    clientPhone: client.phone || '',
+                                    capital: '',
+                                    interestRate: '',
+                                    date: format(new Date(), 'yyyy-MM-dd'),
+                                    dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                                  });
+                                  setIsAdding(true);
+                                }}
+                                className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-primary/20"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>Novo</span>
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  const activeLoans = loans.filter(l => l.clientName === client.name && l.status !== 'Pago');
+                                  if (activeLoans.length > 0) {
+                                    setViewingContract(activeLoans);
+                                  }
+                                }}
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-emerald-500/20"
+                                title="Gerar contrato com todos os empréstimos ativos"
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span>Contrato</span>
+                              </button>
                               <button 
                                 onClick={() => {
                                   const latestLoan = loans
@@ -1362,6 +1611,81 @@ export default function App() {
                               >
                                 <Trash2 className="w-4 h-4" />
                                 <span>Excluir</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : activeTab === 'Transações' ? (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-white/[0.01] border-b border-white/[0.03]">
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Data/Hora</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Descrição</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Recebido</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.05]">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-20 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                            <span className="text-slate-500 font-medium">Sincronizando transações...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filteredTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-8 py-20 text-center">
+                          <div className="flex flex-col items-center gap-4">
+                            <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
+                              <Wallet className="w-8 h-8 text-slate-600" />
+                            </div>
+                            <span className="text-slate-500 font-medium">
+                              {command.trim() ? 'Nenhuma transação encontrada para esta busca.' : 'Nenhuma transação financeira registrada.'}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTransactions.map((action) => (
+                        <tr key={action.id} className="group hover:bg-white/[0.01] transition-colors">
+                          <td className="px-8 py-4 text-slate-400 text-xs font-medium">
+                            {safeFormatDate(action.date, 'dd/MM/yyyy HH:mm')}
+                          </td>
+                          <td className="px-8 py-4 text-white font-bold text-xs">
+                            {action.clientName}
+                          </td>
+                          <td className="px-8 py-4 text-slate-400 text-xs italic">
+                            {action.description}
+                          </td>
+                          <td className="px-8 py-4">
+                            <span className="text-brand-accent font-black text-xs">
+                              R$ {action.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                          <td className="px-8 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => setViewingReceipt(action)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-emerald-500/20"
+                                title="Gerar Recibo"
+                              >
+                                <FileText className="w-4 h-4" />
+                                <span>Recibo</span>
+                              </button>
+                              <button 
+                                onClick={() => deleteAction(action.id)}
+                                className="p-2 text-slate-500 hover:text-brand-danger transition-colors"
+                                title="Excluir Registro"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -1492,7 +1816,7 @@ export default function App() {
                               <Users className="w-8 h-8 text-slate-600" />
                             </div>
                             <span className="text-slate-500 font-medium">
-                              {command.trim() ? 'Nenhum empréstimo encontrado para esta busca.' : 'Nenhum empréstimo pendente.'}
+                              {filterDate ? 'Nenhum Empréstimo Encontrado' : command.trim() ? 'Nenhum empréstimo encontrado para esta busca.' : 'Nenhum empréstimo pendente.'}
                             </span>
                           </div>
                         </td>
@@ -1560,7 +1884,7 @@ export default function App() {
                                 <History className="w-4 h-4" />
                               </button>
                               <button 
-                                onClick={() => setViewingContract(loan)}
+                                onClick={() => setViewingContract([loan])}
                                 className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
                                 title="Emitir Comprovante"
                               >
@@ -1568,7 +1892,7 @@ export default function App() {
                               </button>
                               {loan.status !== 'Pago' && (
                                 <button 
-                                  onClick={() => setPayingLoan(loan)}
+                                  onClick={() => { setPayingLoan(loan); setLastAction(null); }}
                                   className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-brand-accent/20"
                                 >
                                   <DollarSign className="w-4 h-4" />
@@ -1638,10 +1962,28 @@ export default function App() {
                     <input 
                       required
                       type="text"
+                      list="clients-list"
                       className="w-full glass-input"
                       value={newLoan.clientName}
-                      onChange={(e) => setNewLoan({...newLoan, clientName: e.target.value})}
+                      onChange={(e) => {
+                        const name = e.target.value;
+                        const existingClient = clients.find(c => c.name === name);
+                        if (existingClient) {
+                          setNewLoan({
+                            ...newLoan, 
+                            clientName: name,
+                            clientPhone: existingClient.phone || newLoan.clientPhone
+                          });
+                        } else {
+                          setNewLoan({...newLoan, clientName: name});
+                        }
+                      }}
                     />
+                    <datalist id="clients-list">
+                      {clients.map(c => (
+                        <option key={c.name} value={c.name} />
+                      ))}
+                    </datalist>
                   </div>
                   
                   <div className="space-y-2">
@@ -1720,7 +2062,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setPayingLoan(null)}
+              onClick={() => { setPayingLoan(null); setLastAction(null); }}
               className="absolute inset-0 bg-black/80 backdrop-blur-md"
             />
             <motion.div 
@@ -1735,90 +2077,140 @@ export default function App() {
                   <p className="text-slate-600 text-sm font-medium mt-1">{payingLoan.clientName}</p>
                 </div>
                 <button 
-                  onClick={() => setPayingLoan(null)}
+                  onClick={() => { setPayingLoan(null); setLastAction(null); }}
                   className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
                 >
                   <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
                 </button>
               </div>
 
-              <div className="space-y-8">
-                {/* Loan Summary Section */}
-                <div className="glass-card p-6 bg-white/[0.02] border-white/[0.05] space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1 h-4 bg-brand-primary rounded-full shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo do Empréstimo</h3>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Capital Atual</span>
-                      <div className="text-sm font-bold text-white">R$ {payingLoan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+              <AnimatePresence mode="wait">
+                {lastAction ? (
+                  <motion.div 
+                    key="success-view"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="py-8 text-center space-y-6"
+                  >
+                    <div className="w-20 h-20 bg-brand-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <TrendingUp className="w-10 h-10 text-brand-accent" />
                     </div>
-                    <div className="space-y-1 text-right">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Juros ({(payingLoan.interestRate * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)</span>
-                      <div className="text-sm font-bold text-brand-accent">R$ {(payingLoan.totalBruto - payingLoan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Ações Registradas!</h3>
+                      <p className="text-brand-accent font-bold text-lg mt-1">
+                        Total: R$ {lastAction.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                      <div className="bg-white/5 p-4 rounded-xl mt-4 text-left border border-white/10">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Resumo do Recibo:</p>
+                        <p className="text-slate-300 text-xs leading-relaxed">{lastAction.description}</p>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Vencimento</span>
-                      <div className="text-sm font-bold text-white">{safeFormatDate(payingLoan.dueDate, 'dd/MM/yyyy')}</div>
+                    <div className="flex flex-col gap-3 pt-4">
+                      <button 
+                        onClick={() => setLastAction(null)}
+                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-bold transition-all border border-white/10"
+                      >
+                        Realizar outra ação
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setViewingReceipt(lastAction);
+                          setPayingLoan(null);
+                          setLastAction(null);
+                        }}
+                        className="w-full py-4 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-brand-accent/20"
+                      >
+                        Finalizar e Ver Recibo
+                      </button>
                     </div>
-                    <div className="space-y-1 text-right">
-                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Total Bruto</span>
-                      <div className="text-sm font-bold text-brand-primary">R$ {payingLoan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="payment-options"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    className="space-y-8"
+                  >
+                    {/* Loan Summary Section */}
+                    <div className="glass-card p-6 bg-white/[0.02] border-white/[0.05] space-y-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-1 h-4 bg-brand-primary rounded-full shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo do Empréstimo</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Capital Atual</span>
+                          <div className="text-sm font-bold text-white">R$ {payingLoan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Juros ({(payingLoan.interestRate * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)</span>
+                          <div className="text-sm font-bold text-brand-accent">R$ {(payingLoan.totalBruto - payingLoan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Vencimento</span>
+                          <div className="text-sm font-bold text-white">{safeFormatDate(payingLoan.dueDate, 'dd/MM/yyyy')}</div>
+                        </div>
+                        <div className="space-y-1 text-right">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Total Bruto</span>
+                          <div className="text-sm font-bold text-brand-primary">R$ {payingLoan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Amortization Section */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-4 bg-brand-accent rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amortização</h3>
-                  </div>
-                  <div className="flex gap-3">
-                    <input 
-                      type="number"
-                      placeholder="Valor (R$)"
-                      className="flex-1 glass-input"
-                      value={amortizationAmount}
-                      onChange={(e) => setAmortizationAmount(e.target.value)}
-                    />
-                    <button 
-                      onClick={handleAmortization}
-                      className="px-6 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-accent/20 hover:shadow-brand-accent/40 active:scale-95"
-                    >
-                      Aplicar
-                    </button>
-                  </div>
-                </div>
+                    {/* Amortization Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-brand-accent rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Amortização</h3>
+                      </div>
+                      <div className="flex gap-3">
+                        <input 
+                          type="number"
+                          placeholder="Valor (R$)"
+                          className="flex-1 glass-input"
+                          value={amortizationAmount}
+                          onChange={(e) => setAmortizationAmount(e.target.value)}
+                        />
+                        <button 
+                          onClick={handleAmortization}
+                          className="px-6 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-accent/20 hover:shadow-brand-accent/40 active:scale-95"
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
 
-                {/* Interest Options */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-4 bg-brand-primary rounded-full shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opções de Juros</h3>
-                  </div>
-                  <div className="grid gap-3">
-                    <button 
-                      onClick={handleInterestPayment}
-                      className="w-full py-5 bg-white/5 hover:bg-brand-primary/20 text-white rounded-2xl font-bold transition-all border border-white/10 hover:border-brand-primary/30 flex items-center justify-between px-6 active:scale-[0.98] group"
-                    >
-                      <span className="text-sm">Pagamento de Juros</span>
-                      <span className="text-brand-accent font-black text-sm group-hover:text-brand-primary transition-colors">
-                        R$ {(payingLoan.totalBruto - payingLoan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                    </button>
-                    <button 
-                      onClick={handleRenewLoan}
-                      className="w-full py-5 bg-gradient-to-r from-brand-primary to-indigo-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
-                    >
-                      <span className="text-sm">Pagar Juros e Renovar</span>
-                      <span className="opacity-80 text-[10px] font-black uppercase tracking-tighter">+30 dias</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+                    {/* Interest Options */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-brand-primary rounded-full shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Opções de Juros</h3>
+                      </div>
+                      <div className="grid gap-3">
+                        <button 
+                          onClick={handleInterestPayment}
+                          className="w-full py-5 bg-white/5 hover:bg-brand-primary/20 text-white rounded-2xl font-bold transition-all border border-white/10 hover:border-brand-primary/30 flex items-center justify-between px-6 active:scale-[0.98] group"
+                        >
+                          <span className="text-sm">Pagamento de Juros</span>
+                          <span className="text-brand-accent font-black text-sm group-hover:text-brand-primary transition-colors">
+                            R$ {(payingLoan.totalBruto - payingLoan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </button>
+                        <button 
+                          onClick={handleRenewLoan}
+                          className="w-full py-5 bg-gradient-to-r from-brand-primary to-indigo-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
+                        >
+                          <span className="text-sm">Pagar Juros e Renovar</span>
+                          <span className="opacity-80 text-[10px] font-black uppercase tracking-tighter">+30 dias</span>
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </div>
         )}
@@ -1879,12 +2271,52 @@ export default function App() {
                   <h2 className="text-2xl font-bold text-white tracking-tight">Contratos de {viewingClientLoans}</h2>
                   <p className="text-slate-600 text-sm font-medium mt-1">Histórico completo de empréstimos e pagamentos.</p>
                 </div>
-                <button 
-                  onClick={() => setViewingClientLoans(null)}
-                  className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
-                >
-                  <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
-                </button>
+                <div className="flex items-center gap-4">
+                  <motion.button 
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      const activeLoans = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago');
+                      if (activeLoans.length > 0) {
+                        setViewingClientLoans(null);
+                        setViewingContract(activeLoans);
+                      }
+                    }}
+                    className="bg-emerald-500/10 text-emerald-500 px-4 py-2 rounded-xl font-bold border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2 text-[10px] uppercase tracking-widest"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Contrato Unificado
+                  </motion.button>
+                  <motion.button 
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      const clientName = viewingClientLoans;
+                      const clientPhone = loans.find(l => l.clientName === clientName)?.clientPhone || '';
+                      setViewingClientLoans(null);
+                      setEditingLoanId(null);
+                      setNewLoan({
+                        clientName,
+                        clientPhone,
+                        capital: '',
+                        interestRate: '',
+                        date: format(new Date(), 'yyyy-MM-dd'),
+                        dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                      });
+                      setIsAdding(true);
+                    }}
+                    className="bg-brand-primary/10 text-brand-primary px-4 py-2 rounded-xl font-bold border border-brand-primary/20 hover:bg-brand-primary hover:text-white transition-all flex items-center gap-2 text-[10px] uppercase tracking-widest"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Novo Empréstimo
+                  </motion.button>
+                  <button 
+                    onClick={() => setViewingClientLoans(null)}
+                    className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
+                  >
+                    <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar">
@@ -1941,6 +2373,7 @@ export default function App() {
                                   onClick={() => {
                                     setViewingClientLoans(null);
                                     setPayingLoan(loan);
+                                    setLastAction(null);
                                   }}
                                   className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
                                   title="Pagamento"
@@ -1951,7 +2384,7 @@ export default function App() {
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
-                                  setViewingContract(loan);
+                                  setViewingContract([loan]);
                                 }}
                                 className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
                                 title="Emitir Comprovante"
@@ -2017,7 +2450,11 @@ export default function App() {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contrato de Operação</p>
-                  <p className="text-sm font-mono font-bold">#{viewingContract.id.slice(-8).toUpperCase()}</p>
+                  <p className="text-sm font-mono font-bold">
+                    {viewingContract.length === 1 
+                      ? `#${viewingContract[0].id.slice(-8).toUpperCase()}`
+                      : `MÚLTIPLOS (${viewingContract.length})`}
+                  </p>
                 </div>
               </div>
 
@@ -2032,35 +2469,45 @@ export default function App() {
                 <div className="grid grid-cols-1 gap-6 border-y border-slate-100 py-8">
                   <div className="flex justify-between items-end">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Beneficiário</span>
-                    <span className="text-lg font-bold uppercase border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract.clientName}</span>
+                    <span className="text-lg font-bold uppercase border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract[0].clientName}</span>
                   </div>
                   <div className="flex justify-between items-end">
                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">CPF/CNPJ/Telefone</span>
-                    <span className="text-sm font-bold border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract.clientPhone || 'Não informado'}</span>
+                    <span className="text-sm font-bold border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract[0].clientPhone || 'Não informado'}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-x-12 gap-y-8">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</p>
-                    <p className="text-xl font-bold">R$ {viewingContract.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</p>
-                    <p className="text-xl font-bold">{((viewingContract.interestRate || 0) * 100).toLocaleString('pt-BR')}% <span className="text-xs text-slate-400 font-normal">ao mês</span></p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</p>
-                    <p className="text-xl font-bold">R$ {(viewingContract.totalBruto - viewingContract.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</p>
-                    <p className="text-lg font-bold">{safeFormatDate(viewingContract.date, 'dd/MM/yyyy')}</p>
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Vencimento</p>
-                    <p className="text-lg font-bold">{safeFormatDate(viewingContract.dueDate, 'dd/MM/yyyy')}</p>
-                  </div>
+                <div className="space-y-12">
+                  {viewingContract.map((loan, index) => (
+                    <div key={loan.id} className={cn("space-y-6", index > 0 && "pt-8 border-t border-slate-100")}>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-black text-white text-[10px] font-black px-2 py-0.5 rounded-sm">#{index + 1}</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID: {loan.id.slice(-8).toUpperCase()}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-12 gap-y-8">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</p>
+                          <p className="text-xl font-bold">R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</p>
+                          <p className="text-xl font-bold">{((loan.interestRate || 0) * 100).toLocaleString('pt-BR')}% <span className="text-xs text-slate-400 font-normal">ao mês</span></p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</p>
+                          <p className="text-xl font-bold">R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</p>
+                          <p className="text-lg font-bold">{safeFormatDate(loan.date, 'dd/MM/yyyy')}</p>
+                        </div>
+                        <div className="space-y-1 col-span-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Vencimento</p>
+                          <p className="text-lg font-bold">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -2070,7 +2517,7 @@ export default function App() {
                 <div className="relative z-10">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">Valor Total Bruto a Pagar</p>
                   <p className="text-4xl font-black text-center tracking-tighter">
-                    R$ {viewingContract.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
               </div>
@@ -2101,7 +2548,7 @@ export default function App() {
                     <div className="text-right">
                       <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Autenticação Mecânica</p>
                       <p className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                        {viewingContract.id.toUpperCase()}-{new Date().getTime().toString().slice(-6)}
+                        {viewingContract[0].id.toUpperCase()}-{new Date().getTime().toString().slice(-6)}
                       </p>
                     </div>
                   </div>
