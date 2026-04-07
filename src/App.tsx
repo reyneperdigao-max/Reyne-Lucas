@@ -27,6 +27,7 @@ import {
   FileText,
   Share2,
   MessageCircle,
+  Printer,
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -134,7 +135,7 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
 
-  const shareAsPDF = async () => {
+  const shareAsPDF = async (forceDownload = false) => {
     const isReceipt = !!viewingReceipt;
     const data = isReceipt ? viewingReceipt : viewingContract;
     if (!data) return;
@@ -149,27 +150,24 @@ export default function App() {
       const buttons = element.querySelector('.no-print-section');
       if (buttons) (buttons as HTMLElement).style.display = 'none';
 
+      // Use a slightly higher scale for better quality, but with fixed windowWidth
       const canvas = await html2canvas(element, {
-        scale: 1.5, // Slightly lower scale for better performance on mobile
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
         scrollX: 0,
         scrollY: 0,
+        windowWidth: 1024, // Standard desktop width for consistent rendering
         onclone: (clonedDoc) => {
           try {
-            // Fix modern CSS colors (oklch, oklab, color-mix, etc.) for html2canvas which doesn't support them
-            // We'll replace them with hex fallbacks in the entire document
             const replaceColors = (text: string) => {
               if (!text) return text;
-              // This regex handles up to 2 levels of nested parentheses, which is common in Tailwind 4
-              // It replaces oklch, oklab, color-mix, light-dark, and color functions with black
               const nested = '(?:[^()]+|\\((?:[^()]+|\\([^()]*\\))*\\))*';
               const regex = new RegExp(`(oklch|oklab|color-mix|light-dark|color)\\s*\\(${nested}\\)`, 'g');
               return text.replace(regex, '#000000');
             };
 
-            // Process style tags specifically
             const styleTags = clonedDoc.getElementsByTagName('style');
             for (let i = 0; i < styleTags.length; i++) {
               try {
@@ -177,57 +175,37 @@ export default function App() {
                 if (style.innerHTML.includes('oklch') || style.innerHTML.includes('oklab') || style.innerHTML.includes('color-mix')) {
                   style.innerHTML = replaceColors(style.innerHTML);
                 }
-              } catch (e) {
-                console.warn('Error processing style tag:', e);
-              }
+              } catch (e) {}
             }
 
-            // Also check all elements for inline style attributes specifically
-            // We avoid body.innerHTML replacement as it's too destructive and slow
             const allElements = clonedDoc.getElementsByTagName('*');
             for (let i = 0; i < allElements.length; i++) {
               const el = allElements[i] as HTMLElement;
               
-              // Fix inline styles
+              // Remove animations and transitions
+              el.style.animation = 'none';
+              el.style.transition = 'none';
+              el.style.transform = 'none';
+
               const inlineStyle = el.getAttribute('style');
               if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('oklab') || inlineStyle.includes('color-mix') || inlineStyle.includes('light-dark'))) {
                 el.setAttribute('style', replaceColors(inlineStyle));
               }
 
-              // Remove problematic properties that can cause parsing errors in html2canvas
               if (el.style) {
-                // Some modern properties cause "unexpected EOF" or other parsing errors in older CSS parsers
-                const problematicProps = [
-                  'field-sizing', 
-                  'contain-intrinsic-size', 
-                  'content-visibility', 
-                  'view-transition-name',
-                  'container-type',
-                  'container-name',
-                  'scroll-timeline',
-                  'view-timeline',
-                  'anchor-name',
-                  'position-anchor'
-                ];
+                const problematicProps = ['field-sizing', 'contain-intrinsic-size', 'content-visibility', 'view-transition-name', 'container-type', 'container-name', 'scroll-timeline', 'view-timeline', 'anchor-name', 'position-anchor'];
                 problematicProps.forEach(prop => {
-                  try {
-                    if (el.style.getPropertyValue(prop)) {
-                      el.style.removeProperty(prop);
-                    }
-                  } catch (e) {}
+                  try { if (el.style.getPropertyValue(prop)) el.style.removeProperty(prop); } catch (e) {}
                 });
               }
             }
-          } catch (e) {
-            console.warn('Error during color replacement in PDF clone:', e);
-          }
+          } catch (e) {}
           
-          // Ensure the contract is perfectly styled for the PDF to match the system's look
           const pdfStyle = clonedDoc.createElement('style');
           pdfStyle.innerHTML = `
             #${elementId} {
-              width: 672px !important; /* Match max-w-2xl (42rem = 672px) */
-              padding: 64px !important;
+              width: 800px !important;
+              padding: 60px !important;
               background: white !important;
               color: black !important;
               position: relative !important;
@@ -240,35 +218,13 @@ export default function App() {
               display: block !important;
               border-radius: 0 !important;
             }
-            
-            /* Add a subtle watermark */
-            #${elementId}::before {
-              content: "NEXUS PRIVATE";
-              position: absolute;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%) rotate(-45deg);
-              font-size: 80px;
-              font-weight: 900;
-              color: rgba(0, 0, 0, 0.02);
-              z-index: 0;
-              pointer-events: none;
-              white-space: nowrap;
-            }
-
             .no-print-section { display: none !important; }
-            
-            /* Ensure the fonts are loaded and applied */
             * {
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
               font-family: "Plus Jakarta Sans", sans-serif !important;
             }
-            .font-mono, [class*="font-mono"] {
-              font-family: "JetBrains Mono", monospace !important;
-            }
           `;
-          // Add a footer for the PDF
           const footer = clonedDoc.createElement('div');
           footer.innerHTML = `
             <div style="margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
@@ -278,35 +234,30 @@ export default function App() {
           `;
           const contractEl = clonedDoc.getElementById(elementId);
           if (contractEl) contractEl.appendChild(footer);
-
           clonedDoc.head.appendChild(pdfStyle);
         }
       });
 
       if (buttons) (buttons as HTMLElement).style.display = '';
 
-      if (canvas.width === 0 || canvas.height === 0) {
-        throw new Error('Canvas generation failed: dimensions are zero.');
-      }
+      if (canvas.width === 0 || canvas.height === 0) throw new Error('Canvas generation failed');
 
-      // Use JPEG for smaller file size and better performance
-      const imgData = canvas.toDataURL('image/jpeg', 0.85);
-      
-      // Calculate PDF dimensions based on canvas
+      // Use PNG for better quality if JPEG is failing or looking bad
+      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
         unit: 'px',
         format: [canvas.width, canvas.height]
       });
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
-      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
       const pdfBlob = pdf.output('blob');
       const clientName = isReceipt ? (data as SystemAction).clientName : (data as Loan[])[0].clientName;
       const fileName = `${isReceipt ? 'Recibo' : 'Contrato'}_${clientName.replace(/\s+/g, '_')}.pdf`;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      // Improved sharing logic with explicit fallback
+      if (!forceDownload && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
             files: [file],
@@ -315,34 +266,39 @@ export default function App() {
           });
         } catch (shareError: any) {
           if (shareError.name !== 'AbortError') {
-            throw shareError;
+            console.warn('Share failed, falling back to download:', shareError);
+            triggerDownload(pdfBlob, fileName);
           }
         }
       } else {
-        // Fallback to download if sharing is not supported
-        const url = URL.createObjectURL(pdfBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.click();
-        URL.revokeObjectURL(url);
+        triggerDownload(pdfBlob, fileName);
       }
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        // User cancelled the share dialog - this is expected behavior, not an error
-        console.log('PDF sharing was cancelled by the user.');
-      } else {
-        console.error('Error generating/sharing PDF:', error);
-        setConfirmModal({
-          isOpen: true,
-          title: 'Erro na Geração',
-          message: 'Ocorreu um erro ao gerar ou compartilhar o comprovante. Deseja tentar novamente?',
-          onConfirm: () => shareAsPDF()
-        });
-      }
+      console.error('Error generating PDF:', error);
+      setConfirmModal({
+        isOpen: true,
+        title: 'Erro na Geração',
+        message: 'Ocorreu um erro ao processar o PDF. Tente baixar o arquivo diretamente ou usar a função de impressão.',
+        onConfirm: () => shareAsPDF(true)
+      });
     } finally {
       setIsGeneratingPDF(false);
     }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const triggerDownload = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -2573,7 +2529,7 @@ export default function App() {
               <div className="text-center space-y-4 mt-12 no-print no-print-section">
                 <div className="flex flex-wrap gap-4 justify-center">
                   <button
-                    onClick={shareAsPDF}
+                    onClick={() => shareAsPDF(false)}
                     disabled={isGeneratingPDF}
                     className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
                   >
@@ -2582,11 +2538,26 @@ export default function App() {
                     ) : (
                       <Share2 className="w-5 h-5" />
                     )}
-                    {isGeneratingPDF ? 'Gerando PDF...' : 'Compartilhar PDF'}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                  </button>
+                  <button
+                    onClick={() => shareAsPDF(true)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <FileText className="w-5 h-5" />
+                    Baixar PDF
+                  </button>
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
+                  >
+                    <Printer className="w-5 h-5" />
+                    Imprimir
                   </button>
                   <button
                     onClick={() => setViewingContract(null)}
-                    className="px-8 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+                    className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
                   >
                     Fechar
                   </button>
@@ -2669,7 +2640,7 @@ export default function App() {
               {/* Action Buttons (Hidden in PDF) */}
               <div className="mt-16 flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print">
                 <button
-                  onClick={shareAsPDF}
+                  onClick={() => shareAsPDF(false)}
                   disabled={isGeneratingPDF}
                   className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold rounded-xl shadow-xl shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
                 >
@@ -2678,11 +2649,26 @@ export default function App() {
                   ) : (
                     <Share2 className="w-5 h-5" />
                   )}
-                  {isGeneratingPDF ? 'Gerando PDF...' : 'Compartilhar Recibo'}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                </button>
+                <button
+                  onClick={() => shareAsPDF(true)}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <FileText className="w-5 h-5 text-emerald-600" />
+                  Baixar Recibo
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
+                >
+                  <Printer className="w-5 h-5" />
+                  Imprimir
                 </button>
                 <button
                   onClick={() => setViewingReceipt(null)}
-                  className="px-8 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 shadow-sm"
+                  className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
                 >
                   Fechar
                 </button>
