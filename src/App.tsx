@@ -107,7 +107,7 @@ interface FirestoreErrorInfo {
 }
 
 // --- Constants ---
-const PIX_KEY = "SUA_CHAVE_PIX_AQUI"; // Placeholder
+// PIX_KEY is now managed in user profile settings
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -136,8 +136,10 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ displayName?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string } | null>(null);
   const [newDisplayName, setNewDisplayName] = useState('');
+  const [newPixKey, setNewPixKey] = useState('');
+  const [newPixName, setNewPixName] = useState('');
 
   const shareAsPDF = async (forceDownload = false) => {
     if (isGeneratingPDF) return;
@@ -156,11 +158,20 @@ export default function App() {
       });
 
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 3, // Higher scale for better quality
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
         onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById(elementId);
+          if (clonedElement) {
+            clonedElement.style.height = 'auto';
+            clonedElement.style.maxHeight = 'none';
+            clonedElement.style.overflow = 'visible';
+          }
+          
           // 1. Remove all link tags to prevent external CSS from leaking oklch/oklab
           const links = Array.from(clonedDoc.getElementsByTagName('link'));
           links.forEach(link => {
@@ -264,10 +275,21 @@ export default function App() {
       });
 
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
+      
+      // Calculate dimensions for PDF
+      const imgProps = {
+        width: canvas.width,
+        height: canvas.height
+      };
+      const pdfWidth = 210; // A4 width in mm
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Create PDF with dynamic height if content is long
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, Math.max(pdfHeight, 297)]
+      });
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       const fileName = viewingContract ? 'contrato.pdf' : 'comprovante.pdf';
@@ -286,8 +308,17 @@ export default function App() {
           pdf.save(fileName);
         }
       }
-    } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
+    } catch (error: any) {
+      // Ignore share cancellation errors as they are user-initiated
+      const isCancellation = 
+        error?.name === 'AbortError' || 
+        error?.message?.includes('cancellation') ||
+        error?.message?.includes('share was cancelled') ||
+        error?.message?.includes('Abort due to cancellation');
+      
+      if (!isCancellation) {
+        console.error('Erro ao gerar PDF:', error);
+      }
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -391,7 +422,9 @@ export default function App() {
               email: u.email,
               role: 'user',
               uid: u.uid,
-              displayName: u.displayName || ''
+              displayName: u.displayName || '',
+              pixKey: '',
+              pixName: ''
             }, { merge: true });
           }
         });
@@ -409,7 +442,9 @@ export default function App() {
     try {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
-        displayName: newDisplayName
+        displayName: newDisplayName,
+        pixKey: newPixKey,
+        pixName: newPixName
       });
       setIsSettingsOpen(false);
     } catch (err) {
@@ -1208,6 +1243,8 @@ export default function App() {
               onClick={() => {
                 setIsSettingsOpen(true);
                 setNewDisplayName(userProfile?.displayName || user?.displayName || '');
+                setNewPixKey(userProfile?.pixKey || '');
+                setNewPixName(userProfile?.pixName || '');
               }}
               className="p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
               title="Configurações"
@@ -2399,7 +2436,12 @@ export default function App() {
               {/* PIX Area */}
               <div className="bg-slate-50 rounded-3xl p-8 mb-10 border border-slate-100">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">Chave PIX para Pagamento</p>
-                <p className="text-base font-black text-center text-slate-900 break-all select-all">{PIX_KEY}</p>
+                <p className="text-base font-black text-center text-slate-900 break-all select-all mb-1">{userProfile?.pixKey || "NÃO CONFIGURADA"}</p>
+                {userProfile?.pixName && (
+                  <p className="text-[10px] font-bold text-center text-slate-500 uppercase tracking-widest">
+                    Titular: {userProfile.pixName}
+                  </p>
+                )}
               </div>
 
               {/* Auth Footer */}
@@ -2547,6 +2589,38 @@ export default function App() {
                 />
                 <p className="text-[10px] text-slate-500 italic">
                   Este nome aparecerá nos recibos como: "Eu, [Nome], declaro..."
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Chave PIX (para comprovantes)
+                </label>
+                <input 
+                  type="text"
+                  value={newPixKey}
+                  onChange={(e) => setNewPixKey(e.target.value)}
+                  placeholder="CPF, E-mail, Telefone ou Chave Aleatória"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-brand-primary/50 transition-all"
+                />
+                <p className="text-[10px] text-slate-500 italic">
+                  Esta chave aparecerá nos comprovantes de empréstimo para o cliente realizar o pagamento.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Nome do Titular da Conta
+                </label>
+                <input 
+                  type="text"
+                  value={newPixName}
+                  onChange={(e) => setNewPixName(e.target.value)}
+                  placeholder="Nome completo do titular"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-brand-primary/50 transition-all"
+                />
+                <p className="text-[10px] text-slate-500 italic">
+                  O nome do titular aparecerá logo abaixo da chave PIX no comprovante.
                 </p>
               </div>
 
