@@ -186,10 +186,19 @@ export default function App() {
           styleTags.forEach(tag => {
             try {
               let css = tag.innerHTML;
-              css = css.replace(/(oklch|oklab)\s*\((?:[^()]+|\([^()]*\))*\)/g, '#777777');
-              css = css.replace(/--[\w-]+\s*:\s*(oklch|oklab)[^;}]*/g, '--dummy: #777777');
-              css = css.replace(/oklch\([^)]+\)/g, '#777777');
-              css = css.replace(/oklab\([^)]+\)/g, '#777777');
+              // Replace oklch/oklab functions with a safe fallback color
+              // This regex is more aggressive to catch various formats
+              css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
+              
+              // Also catch cases where they might be used in variables
+              css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
+                const parts = match.split(':');
+                if (parts.length >= 2) {
+                  return `${parts[0]}: #777777`;
+                }
+                return match;
+              });
+              
               tag.innerHTML = css;
             } catch (e) {
               console.warn('Could not sanitize style tag', e);
@@ -254,8 +263,8 @@ export default function App() {
           for (let i = 0; i < elements.length; i++) {
             const el = elements[i] as HTMLElement;
             const styleAttr = el.getAttribute('style');
-            if (styleAttr && (styleAttr.includes('oklch') || styleAttr.includes('oklab'))) {
-              const sanitizedStyle = styleAttr.replace(/(oklch|oklab)\s*\((?:[^()]+|\([^()]*\))*\)/g, '#777777');
+            if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
+              const sanitizedStyle = styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
               el.setAttribute('style', sanitizedStyle);
             }
             if (el.style) {
@@ -264,6 +273,13 @@ export default function App() {
               el.style.filter = 'none';
               el.style.transition = 'none';
               el.style.animation = 'none';
+              
+              // Explicitly check for background images that might contain gradients with oklch/oklab
+              if (el.style.backgroundImage && (el.style.backgroundImage.includes('oklch') || el.style.backgroundImage.includes('oklab'))) {
+                el.style.backgroundImage = 'none';
+                el.style.backgroundColor = '#000000';
+              }
+
               if (el.classList.contains('bg-gradient-to-r') || el.classList.contains('bg-gradient-to-br')) {
                 el.style.backgroundImage = 'none';
                 el.style.backgroundColor = '#000000';
@@ -2424,44 +2440,61 @@ export default function App() {
                 </h2>
               </div>
 
-              {/* Details List */}
-              <div className="space-y-8 mb-12 relative z-10">
+              {/* Details List - Separated Loans */}
+              <div className="space-y-10 mb-12 relative z-10">
                 <div className="flex justify-between items-start border-b border-slate-100 pb-4">
                   <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Cliente</span>
                   <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{viewingContract[0].clientName}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</span>
-                    <p className="font-bold text-slate-900 text-xl">R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+
+                {viewingContract.map((loan, index) => (
+                  <div key={loan.id} className={`space-y-6 ${index !== viewingContract.length - 1 ? 'border-b border-slate-50 pb-8' : ''}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-6 h-6 bg-slate-900 rounded-lg flex items-center justify-center text-[10px] font-black text-white">
+                        {index + 1}
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Detalhamento do Empréstimo</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-8">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</span>
+                        <p className="font-bold text-slate-900 text-xl">R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</span>
+                        <p className="font-bold text-emerald-600 text-xl">+ R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-8">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</span>
+                        <p className="font-bold text-slate-900 text-lg">{((loan.interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</p>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</span>
+                        <p className="font-bold text-slate-900 text-lg">{safeFormatDate(loan.date, 'dd/MM/yyyy')}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vencimento</span>
+                        <p className="font-black text-brand-danger text-xl">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</p>
+                      </div>
+                      <div className="text-right space-y-0.5">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Bruto</span>
+                        <p className="font-black text-slate-900 text-xl">R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center opacity-30">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">ID do Registro</span>
+                      <span className="font-mono text-[8px] font-bold text-slate-500">{loan.id.toUpperCase()}</span>
+                    </div>
                   </div>
-                  <div className="space-y-1 text-right">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</span>
-                    <p className="font-bold text-emerald-600 text-xl">+ R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</span>
-                    <p className="font-bold text-slate-900 text-lg">{((viewingContract[0].interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</p>
-                  </div>
-                  <div className="space-y-1 text-right">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</span>
-                    <p className="font-bold text-slate-900 text-lg">{safeFormatDate(viewingContract[0].date, 'dd/MM/yyyy')}</p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center border-t border-slate-100 pt-6">
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-400">Vencimento</span>
-                  <span className="font-black text-brand-danger text-2xl">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</span>
-                </div>
-                <div className="flex justify-between items-center opacity-50">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID do Contrato</span>
-                  <span className="font-mono text-[10px] font-bold text-slate-500">
-                    {viewingContract.length === 1 
-                      ? viewingContract[0].id.toUpperCase()
-                      : `MÚLTIPLOS (${viewingContract.length})`}
-                  </span>
-                </div>
+                ))}
               </div>
 
               {/* PIX Area */}
@@ -2485,32 +2518,18 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <button
-                    onClick={() => shareAsPDF(false, 'image')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-4 px-6 py-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Share2 className="w-5 h-5" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Imagem'}
-                  </button>
-                  <button
-                    onClick={() => shareAsPDF(false, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <FileText className="w-5 h-5" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
-                  </button>
-                </div>
+                <button
+                  onClick={() => shareAsPDF(false, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingPDF ? (
+                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <FileText className="w-5 h-5" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
+                </button>
                 <button
                   onClick={() => setViewingContract(null)}
                   className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
