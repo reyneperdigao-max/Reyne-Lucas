@@ -149,6 +149,9 @@ export default function App() {
 
     setIsGeneratingPDF(true);
     try {
+      // Wait for fonts to be fully loaded to ensure consistent typography
+      await document.fonts.ready;
+
       // Hide elements before capture
       const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
       const originalDisplays: string[] = [];
@@ -170,16 +173,13 @@ export default function App() {
             clonedElement.style.height = 'auto';
             clonedElement.style.maxHeight = 'none';
             clonedElement.style.overflow = 'visible';
+            // Force a fixed width during capture to prevent responsive shifts
+            clonedElement.style.width = '800px'; 
           }
           
           // ... (rest of the sanitization logic)
-          // 1. Remove all link tags to prevent external CSS from leaking oklch/oklab
-          const links = Array.from(clonedDoc.getElementsByTagName('link'));
-          links.forEach(link => {
-            if (link.rel === 'stylesheet') {
-              link.remove();
-            }
-          });
+          // 1. DO NOT remove link tags anymore, as it strips layout styles.
+          // Instead, we will override problematic colors via CSS variables.
 
           // 2. Ultra-aggressive sanitization of ALL style tags
           const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
@@ -211,6 +211,7 @@ export default function App() {
               --color-slate-900: #0f172a !important;
               --color-emerald-600: #059669 !important;
               --color-brand-primary: #d4af37 !important;
+              --color-brand-danger: #ff4d4d !important;
             }
             * {
               box-shadow: none !important;
@@ -221,17 +222,31 @@ export default function App() {
               transition: none !important;
               animation: none !important;
               outline-color: #000000 !important;
+              /* Force standard font rendering */
+              -webkit-font-smoothing: antialiased !important;
+              -moz-osx-font-smoothing: grayscale !important;
             }
             .printable-content, .printable-content * {
               color-scheme: light !important;
               background-image: none !important;
               border-color: #e2e8f0 !important;
+              visibility: visible !important;
             }
+            /* Explicitly fix layout properties that might be affected by cloning */
+            .flex { display: flex !important; }
+            .grid { display: grid !important; }
+            .hidden { display: none !important; }
+            
+            /* Force standard colors for common classes to bypass oklch */
             .bg-slate-900 { background-color: #0f172a !important; }
+            .bg-slate-50 { background-color: #f8fafc !important; }
             .text-slate-900 { color: #0f172a !important; }
             .text-slate-600 { color: #475569 !important; }
             .text-slate-500 { color: #64748b !important; }
+            .text-slate-400 { color: #94a3b8 !important; }
             .bg-emerald-600 { background-color: #059669 !important; }
+            .text-emerald-600 { color: #059669 !important; }
+            .text-brand-danger { color: #ff4d4d !important; }
           `;
           clonedDoc.head.appendChild(style);
 
