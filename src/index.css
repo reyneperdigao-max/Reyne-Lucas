@@ -66,7 +66,7 @@
   }
 }
 
-/* Fix for html2canvas oklch unsupported color function */
+/* Fix for html2canvas oklch/oklab unsupported color function */
 .printable-content, .printable-content * {
   color-scheme: light !important;
   /* Force standard color space for html2canvas */
@@ -80,7 +80,8 @@
   color: #000000 !important;
 }
 
-/* Explicitly override common slate colors to avoid oklch */
+/* Explicitly override common slate colors to avoid oklch/oklab */
+.printable-content .text-slate-950 { color: #020617 !important; }
 .printable-content .text-slate-900 { color: #0f172a !important; }
 .printable-content .text-slate-800 { color: #1e293b !important; }
 .printable-content .text-slate-700 { color: #334155 !important; }
@@ -90,17 +91,28 @@
 .printable-content .text-slate-300 { color: #cbd5e1 !important; }
 .printable-content .text-slate-200 { color: #e2e8f0 !important; }
 .printable-content .text-slate-100 { color: #f1f5f9 !important; }
+.printable-content .text-slate-50 { color: #f8fafc !important; }
 
+.printable-content .bg-slate-950 { background-color: #020617 !important; }
 .printable-content .bg-slate-900 { background-color: #0f172a !important; }
 .printable-content .bg-slate-800 { background-color: #1e293b !important; }
 .printable-content .bg-slate-100 { background-color: #f1f5f9 !important; }
 .printable-content .bg-slate-50 { background-color: #f8fafc !important; }
 
+.printable-content .border-slate-300 { border-color: #cbd5e1 !important; }
 .printable-content .border-slate-200 { border-color: #e2e8f0 !important; }
 .printable-content .border-slate-100 { border-color: #f1f5f9 !important; }
 
+.printable-content .text-emerald-700 { color: #047857 !important; }
 .printable-content .text-emerald-600 { color: #059669 !important; }
+.printable-content .bg-emerald-700 { background-color: #047857 !important; }
 .printable-content .bg-emerald-600 { background-color: #059669 !important; }
+
+/* Additional gray/zinc overrides to prevent oklab leaks */
+.printable-content .text-zinc-500 { color: #71717a !important; }
+.printable-content .text-zinc-400 { color: #a1a1aa !important; }
+.printable-content .text-gray-500 { color: #6b7280 !important; }
+.printable-content .text-gray-400 { color: #9ca3af !important; }
 
 .printable-content .border-black { border-color: #000000 !important; }
 .printable-content .bg-black { background-color: #000000 !important; }

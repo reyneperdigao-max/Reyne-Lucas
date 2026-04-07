@@ -161,17 +161,33 @@ export default function App() {
         logging: false,
         backgroundColor: '#ffffff',
         onclone: (clonedDoc) => {
-          // 1. Sanitize all existing style tags to prevent html2canvas parser from crashing on oklch
+          // 1. Remove all link tags to prevent external CSS from leaking oklch/oklab
+          const links = Array.from(clonedDoc.getElementsByTagName('link'));
+          links.forEach(link => {
+            if (link.rel === 'stylesheet') {
+              link.remove();
+            }
+          });
+
+          // 2. Ultra-aggressive sanitization of ALL style tags
           const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
           styleTags.forEach(tag => {
             try {
-              tag.innerHTML = tag.innerHTML.replace(/oklch\([^)]+\)/g, '#777777');
+              let css = tag.innerHTML;
+              // Replace any occurrence of oklch or oklab followed by parentheses
+              css = css.replace(/(oklch|oklab)\s*\((?:[^()]+|\([^()]*\))*\)/g, '#777777');
+              // Also catch cases where it might be used in variables or other complex CSS
+              css = css.replace(/--[\w-]+\s*:\s*(oklch|oklab)[^;}]*/g, '--dummy: #777777');
+              // Catch any remaining oklch/oklab strings in the CSS
+              css = css.replace(/oklch\([^)]+\)/g, '#777777');
+              css = css.replace(/oklab\([^)]+\)/g, '#777777');
+              tag.innerHTML = css;
             } catch (e) {
               console.warn('Could not sanitize style tag', e);
             }
           });
 
-          // 2. Add a style block that redefines Tailwind variables and forces standard colors
+          // 3. Add a style block that redefines Tailwind variables and forces standard colors
           const style = clonedDoc.createElement('style');
           style.innerHTML = `
             :root {
@@ -188,27 +204,55 @@ export default function App() {
               --color-emerald-600: #059669 !important;
               --color-brand-primary: #d4af37 !important;
             }
-            .printable-content, .printable-content * {
+            /* Global override for ALL elements */
+            * {
               box-shadow: none !important;
               text-shadow: none !important;
               filter: none !important;
               backdrop-filter: none !important;
               -webkit-filter: none !important;
+              transition: none !important;
+              animation: none !important;
+              /* Force a standard color if oklch/oklab is somehow still present in computed styles */
+              outline-color: #000000 !important;
             }
+            .printable-content, .printable-content * {
+              color-scheme: light !important;
+              background-image: none !important; /* Remove gradients which often use oklch */
+              border-color: #e2e8f0 !important; /* Force standard border color */
+            }
+            /* Specifically target common Tailwind classes that might use oklch */
+            .bg-slate-900 { background-color: #0f172a !important; }
+            .text-slate-900 { color: #0f172a !important; }
+            .text-slate-600 { color: #475569 !important; }
+            .text-slate-500 { color: #64748b !important; }
+            .bg-emerald-600 { background-color: #059669 !important; }
           `;
           clonedDoc.head.appendChild(style);
 
-          // 3. Iterate through elements to remove problematic inline styles
+          // 4. Iterate through ALL elements to remove problematic inline styles
           const elements = clonedDoc.getElementsByTagName('*');
           for (let i = 0; i < elements.length; i++) {
             const el = elements[i] as HTMLElement;
+            
+            // Aggressively clear inline styles
+            const styleAttr = el.getAttribute('style');
+            if (styleAttr && (styleAttr.includes('oklch') || styleAttr.includes('oklab'))) {
+              const sanitizedStyle = styleAttr.replace(/(oklch|oklab)\s*\((?:[^()]+|\([^()]*\))*\)/g, '#777777');
+              el.setAttribute('style', sanitizedStyle);
+            }
+
             if (el.style) {
-              if (el.style.color && el.style.color.includes('oklch')) el.style.color = '#000000';
-              if (el.style.backgroundColor && el.style.backgroundColor.includes('oklch')) el.style.backgroundColor = 'transparent';
-              if (el.style.borderColor && el.style.borderColor.includes('oklch')) el.style.borderColor = '#e2e8f0';
               el.style.boxShadow = 'none';
               el.style.textShadow = 'none';
               el.style.filter = 'none';
+              el.style.transition = 'none';
+              el.style.animation = 'none';
+              
+              if (el.classList.contains('bg-gradient-to-r') || el.classList.contains('bg-gradient-to-br')) {
+                el.style.backgroundImage = 'none';
+                el.style.backgroundColor = '#000000';
+              }
             }
           }
         }
@@ -2339,7 +2383,7 @@ export default function App() {
         )}
       {viewingContract && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl my-8">
+          <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl my-8">
             <div id="printable-contract" className="p-8 sm:p-12 bg-white text-slate-900 printable-content">
               {/* Bank-style Header */}
               <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
@@ -2353,7 +2397,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Contrato de Operação</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comprovante de Contrato</p>
                   <p className="text-sm font-mono font-bold">
                     {viewingContract.length === 1 
                       ? `#${viewingContract[0].id.slice(-8).toUpperCase()}`
@@ -2362,132 +2406,72 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Transaction Title */}
+              {/* Title */}
               <div className="text-center mb-12">
-                <h2 className="text-2xl font-black uppercase tracking-tight mb-2">CONTRATO DE EMPRÉSTIMO</h2>
+                <h2 className="text-2xl font-black uppercase tracking-tight mb-2">Comprovante de Empréstimo</h2>
                 <p className="text-sm text-slate-500">Emitido em {format(new Date(), "dd/MM/yyyy 'às' HH:mm:ss")}</p>
               </div>
 
-              {/* Main Data Grid */}
-              <div className="space-y-8 mb-16">
-                <div className="grid grid-cols-1 gap-6 border-y border-slate-100 py-8">
-                  <div className="flex justify-between items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Beneficiário</span>
-                    <span className="text-lg font-bold uppercase border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract[0].clientName}</span>
-                  </div>
-                  <div className="flex justify-between items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">CPF/CNPJ/Telefone</span>
-                    <span className="text-sm font-bold border-b border-slate-100 pb-1 flex-1 ml-4 text-right">{viewingContract[0].clientPhone || 'Não informado'}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-12">
-                  {viewingContract.map((loan, index) => (
-                    <div key={loan.id} className={cn("space-y-6", index > 0 && "pt-8 border-t border-slate-100")}>
-                      <div className="flex items-center gap-2">
-                        <span className="bg-black text-white text-[10px] font-black px-2 py-0.5 rounded-sm">#{index + 1}</span>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID: {loan.id.slice(-8).toUpperCase()}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-12 gap-y-8">
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</p>
-                          <p className="text-xl font-bold">R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</p>
-                          <p className="text-xl font-bold">{((loan.interestRate || 0) * 100).toLocaleString('pt-BR')}% <span className="text-xs text-slate-400 font-normal">ao mês</span></p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</p>
-                          <p className="text-xl font-bold">R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</p>
-                          <p className="text-lg font-bold">{safeFormatDate(loan.date, 'dd/MM/yyyy')}</p>
-                        </div>
-                        <div className="space-y-1 col-span-2">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Vencimento</p>
-                          <p className="text-lg font-bold">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              {/* Declaration Text */}
+              <div className="mb-16 text-lg leading-relaxed text-slate-800">
+                <p className="mb-6">
+                  Eu, <span className="font-bold uppercase">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</span>, 
+                  declaro para os devidos fins a realização de uma operação de crédito para <span className="font-bold uppercase">{viewingContract[0].clientName}</span>, 
+                  na importância total de <span className="font-bold text-2xl">R$ {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>, 
+                  referente a:
+                </p>
+                <div className="bg-slate-50 p-8 border-l-4 border-black font-bold italic text-xl">
+                  "Contrato de empréstimo com taxa de {((viewingContract[0].interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês, com vencimento em {safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}."
                 </div>
               </div>
 
-              {/* Total Section */}
-              <div className="bg-slate-50 p-10 border border-slate-200 mb-16 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-slate-200/20 rounded-full -mr-16 -mt-16" />
-                <div className="relative z-10">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">Valor Total Bruto a Pagar</p>
-                  <p className="text-4xl font-black text-center tracking-tighter">
-                    R$ {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
+              {/* Details Grid */}
+              <div className="grid grid-cols-2 gap-x-12 gap-y-8 mb-16 border-t border-slate-100 pt-8">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</p>
+                  <p className="text-lg font-bold">{safeFormatDate(viewingContract[0].date, 'dd/MM/yyyy')}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data de Vencimento</p>
+                  <p className="text-lg font-bold">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</p>
+                  <p className="text-lg font-bold">R$ {viewingContract[0].capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID do Contrato</p>
+                  <p className="text-sm font-mono font-bold">#{viewingContract[0].id.slice(-8).toUpperCase()}</p>
                 </div>
               </div>
 
-              {/* Bank Footer / Authentication */}
-              <div className="border-t-2 border-dashed border-slate-200 pt-8 mt-12">
-                <div className="flex justify-between items-start gap-12">
-                  <div className="flex-1 space-y-6">
-                    <div className="space-y-1">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Termos e Condições</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                        Este documento serve como comprovante de operação financeira realizada através da plataforma Nexus Private. 
-                        A quitação do débito está sujeita à confirmação do recebimento dos valores na data de vencimento acordada.
-                        Este comprovante é nominal e intransferível.
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col items-end gap-4 shrink-0">
-                    <div className="w-20 h-20 bg-white border-2 border-slate-100 p-1 flex items-center justify-center rounded-lg shadow-sm">
-                      {/* Mock QR Code */}
-                      <div className="w-full h-full grid grid-cols-4 grid-rows-4 gap-0.5 opacity-80">
-                        {[...Array(16)].map((_, i) => (
-                          <div key={i} className={`rounded-[1px] ${Math.random() > 0.4 ? 'bg-black' : 'bg-transparent'}`} />
-                        ))}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Autenticação Mecânica</p>
-                      <p className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                        {viewingContract[0].id.toUpperCase()}-{new Date().getTime().toString().slice(-6)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+              {/* Footer / Signature Area */}
+              <div className="mt-20 pt-12 border-t border-slate-100 text-center">
+                <div className="w-64 h-px bg-slate-300 mx-auto mb-4" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nexus Private - Gestão de Ativos</p>
+                <p className="text-[9px] text-slate-300 mt-1 italic">Este documento é um comprovante eletrônico válido.</p>
               </div>
               
               {/* Action Buttons (Hidden in PDF) */}
-              <div className="text-center space-y-4 mt-12 no-print no-print-section">
-                <div className="flex flex-wrap gap-4 justify-center">
-                  <button
-                    onClick={() => shareAsPDF(false)}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Share2 className="w-5 h-5" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                  </button>
-                  <button
-                    onClick={handlePrint}
-                    className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200"
-                  >
-                    <Printer className="w-5 h-5" />
-                    Imprimir
-                  </button>
-                  <button
-                    onClick={() => setViewingContract(null)}
-                    className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200"
-                  >
-                    Fechar
-                  </button>
-                </div>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print mt-12">
+                <button
+                  onClick={() => shareAsPDF(false)}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingPDF ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Share2 className="w-5 h-5" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                </button>
+                <button
+                  onClick={() => setViewingContract(null)}
+                  className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
+                >
+                  Fechar
+                </button>
               </div>
             </div>
           </div>
@@ -2566,13 +2550,6 @@ export default function App() {
                     <Share2 className="w-5 h-5" />
                   )}
                   {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
-                >
-                  <Printer className="w-5 h-5" />
-                  Imprimir
                 </button>
                 <button
                   onClick={() => setViewingReceipt(null)}
