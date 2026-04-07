@@ -149,15 +149,13 @@ export default function App() {
       const buttons = element.querySelector('.no-print-section');
       if (buttons) (buttons as HTMLElement).style.display = 'none';
 
-      // Reset scroll position to ensure html2canvas captures correctly
-      const originalScrollY = window.scrollY;
-      window.scrollTo(0, 0);
-
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 1.5, // Slightly lower scale for better performance on mobile
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
         onclone: (clonedDoc) => {
           try {
             // Fix modern CSS colors (oklch, oklab, color-mix, etc.) for html2canvas which doesn't support them
@@ -212,9 +210,11 @@ export default function App() {
                   'position-anchor'
                 ];
                 problematicProps.forEach(prop => {
-                  if (el.style.getPropertyValue(prop)) {
-                    el.style.removeProperty(prop);
-                  }
+                  try {
+                    if (el.style.getPropertyValue(prop)) {
+                      el.style.removeProperty(prop);
+                    }
+                  } catch (e) {}
                 });
               }
             }
@@ -283,32 +283,41 @@ export default function App() {
         }
       });
 
-      // Restore scroll position
-      window.scrollTo(0, originalScrollY);
-
       if (buttons) (buttons as HTMLElement).style.display = '';
 
-      const imgData = canvas.toDataURL('image/png');
+      if (canvas.width === 0 || canvas.height === 0) {
+        throw new Error('Canvas generation failed: dimensions are zero.');
+      }
+
+      // Use JPEG for smaller file size and better performance
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
+      
       // Calculate PDF dimensions based on canvas
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
         unit: 'px',
         format: [canvas.width, canvas.height]
       });
 
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
       
       const pdfBlob = pdf.output('blob');
       const clientName = isReceipt ? (data as SystemAction).clientName : (data as Loan[])[0].clientName;
       const fileName = `${isReceipt ? 'Recibo' : 'Contrato'}_${clientName.replace(/\s+/g, '_')}.pdf`;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-      if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Comprovante Nexus Private',
-          text: `${isReceipt ? 'Recibo de pagamento' : 'CONTRATO DE EMPRÉSTIMO'} - ${clientName}`
-        });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Comprovante Nexus Private',
+            text: `${isReceipt ? 'Recibo de pagamento' : 'CONTRATO DE EMPRÉSTIMO'} - ${clientName}`
+          });
+        } catch (shareError: any) {
+          if (shareError.name !== 'AbortError') {
+            throw shareError;
+          }
+        }
       } else {
         // Fallback to download if sharing is not supported
         const url = URL.createObjectURL(pdfBlob);
@@ -324,7 +333,12 @@ export default function App() {
         console.log('PDF sharing was cancelled by the user.');
       } else {
         console.error('Error generating/sharing PDF:', error);
-        alert('Ocorreu um erro ao gerar ou compartilhar o comprovante. Por favor, tente novamente.');
+        setConfirmModal({
+          isOpen: true,
+          title: 'Erro na Geração',
+          message: 'Ocorreu um erro ao gerar ou compartilhar o comprovante. Deseja tentar novamente?',
+          onConfirm: () => shareAsPDF()
+        });
       }
     } finally {
       setIsGeneratingPDF(false);
