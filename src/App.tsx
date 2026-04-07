@@ -2377,53 +2377,62 @@ export default function App() {
           </div>
         )}
       {viewingContract && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl my-8">
-            <div id="printable-contract" className="p-8 sm:p-12 bg-white text-slate-900 printable-content">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
+            <div id="printable-contract" className="p-8 sm:p-16 bg-white text-slate-900 printable-content relative overflow-hidden">
+              {/* Background Watermark */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none rotate-12">
+                <span className="text-[120px] font-black tracking-tighter whitespace-nowrap">NEXUS PRIVATE</span>
+              </div>
+
               {/* Bank-style Header */}
-              <div className="flex flex-col items-center text-center mb-10">
-                <div className="w-20 h-20 bg-black flex items-center justify-center rounded-2xl mb-4 shadow-xl">
-                  <span className="text-white font-black text-3xl tracking-tighter">NP</span>
+              <div className="flex flex-col items-center text-center mb-12 relative z-10">
+                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20">
+                  <span className="text-white font-black text-4xl tracking-tighter">NP</span>
                 </div>
-                <h1 className="text-2xl font-black uppercase tracking-tighter">Nexus Private</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Comprovante de Operação de Crédito</p>
+                <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Nexus Private</h1>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Comprovante de Operação de Crédito</p>
               </div>
 
               {/* Main Amount */}
-              <div className="text-center mb-10 py-10 border-y border-slate-100">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Valor Total a Receber</p>
-                <h2 className="text-5xl font-black tracking-tighter text-slate-900">
+              <div className="text-center mb-12 py-12 border-y-2 border-slate-50 relative z-10">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Valor Total a Receber</p>
+                <h2 className="text-6xl sm:text-7xl font-black tracking-tighter text-slate-900">
                   R$ {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
               </div>
 
               {/* Details List */}
-              <div className="space-y-6 mb-10">
-                <div className="flex justify-between items-start border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 pt-1">Cliente</span>
-                  <span className="font-bold text-slate-900 uppercase text-right max-w-[200px]">{viewingContract[0].clientName}</span>
+              <div className="space-y-8 mb-12 relative z-10">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Cliente</span>
+                  <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{viewingContract[0].clientName}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</span>
-                  <span className="font-bold text-slate-900">R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</span>
+                    <p className="font-bold text-slate-900 text-xl">R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</span>
+                    <p className="font-bold text-emerald-600 text-xl">+ R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</span>
-                  <span className="font-bold text-emerald-600">+ R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</span>
+                    <p className="font-bold text-slate-900 text-lg">{((viewingContract[0].interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</span>
+                    <p className="font-bold text-slate-900 text-lg">{safeFormatDate(viewingContract[0].date, 'dd/MM/yyyy')}</p>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</span>
-                  <span className="font-bold text-slate-900">{((viewingContract[0].interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</span>
+                <div className="flex justify-between items-center border-t border-slate-100 pt-6">
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-400">Vencimento</span>
+                  <span className="font-black text-brand-danger text-2xl">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</span>
-                  <span className="font-bold text-slate-900">{safeFormatDate(viewingContract[0].date, 'dd/MM/yyyy')}</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vencimento</span>
-                  <span className="font-bold text-brand-danger">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
+                <div className="flex justify-between items-center opacity-50">
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID do Contrato</span>
                   <span className="font-mono text-[10px] font-bold text-slate-500">
                     {viewingContract.length === 1 
@@ -2434,41 +2443,41 @@ export default function App() {
               </div>
 
               {/* PIX Area */}
-              <div className="bg-slate-50 rounded-3xl p-8 mb-10 border border-slate-100">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 text-center">Chave PIX para Pagamento</p>
-                <p className="text-base font-black text-center text-slate-900 break-all select-all mb-1">{userProfile?.pixKey || "NÃO CONFIGURADA"}</p>
+              <div className="bg-slate-900 rounded-[32px] p-10 mb-12 shadow-2xl shadow-black/10 relative z-10">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-5 text-center">Chave PIX para Pagamento</p>
+                <p className="text-2xl font-black text-center text-white break-all select-all mb-2 tracking-tight">{userProfile?.pixKey || "NÃO CONFIGURADA"}</p>
                 {userProfile?.pixName && (
-                  <p className="text-[10px] font-bold text-center text-slate-500 uppercase tracking-widest">
+                  <p className="text-xs font-bold text-center text-brand-primary uppercase tracking-[0.2em] opacity-80">
                     Titular: {userProfile.pixName}
                   </p>
                 )}
               </div>
 
               {/* Auth Footer */}
-              <div className="text-center opacity-30 mb-10">
-                <p className="text-[9px] font-mono break-all uppercase">
+              <div className="text-center opacity-20 mb-12 relative z-10">
+                <p className="text-[10px] font-mono break-all uppercase tracking-tighter">
                   AUTENTICAÇÃO: {viewingContract[0].id.toUpperCase()}-{new Date().getTime()}
                 </p>
-                <p className="text-[9px] font-bold uppercase tracking-[0.3em] mt-3">Nexus Private - Gestão de Ativos</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-4">Nexus Private - Gestão de Ativos</p>
               </div>
 
               {/* Action Buttons (Hidden in PDF) */}
-              <div className="flex flex-col gap-4 no-print-section no-print">
+              <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
                 <button
                   onClick={() => shareAsPDF(false)}
                   disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-8 py-5 bg-slate-900 text-white font-bold rounded-2xl shadow-xl shadow-black/20 hover:shadow-black/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-4 px-10 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-sm rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGeneratingPDF ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <Share2 className="w-5 h-5" />
+                    <Share2 className="w-6 h-6" />
                   )}
                   {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Comprovante'}
                 </button>
                 <button
                   onClick={() => setViewingContract(null)}
-                  className="px-8 py-5 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                  className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
                 >
                   Fechar
                 </button>
@@ -2479,75 +2488,82 @@ export default function App() {
       )}
 
       {viewingReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl my-8">
-            <div id="printable-receipt" className="p-8 sm:p-12 bg-white text-slate-900 printable-content">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
+            <div id="printable-receipt" className="p-8 sm:p-16 bg-white text-slate-900 printable-content relative overflow-hidden">
+              {/* Background Watermark */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -rotate-12">
+                <span className="text-[120px] font-black tracking-tighter whitespace-nowrap">NEXUS PRIVATE</span>
+              </div>
+
               {/* Bank-style Header */}
-              <div className="flex flex-col items-center text-center mb-10">
-                <div className="w-20 h-20 bg-black flex items-center justify-center rounded-2xl mb-4 shadow-xl">
-                  <span className="text-white font-black text-3xl tracking-tighter">NP</span>
+              <div className="flex flex-col items-center text-center mb-12 relative z-10">
+                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20">
+                  <span className="text-white font-black text-4xl tracking-tighter">NP</span>
                 </div>
-                <h1 className="text-2xl font-black uppercase tracking-tighter">Nexus Private</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Comprovante de Recebimento</p>
+                <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Nexus Private</h1>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Comprovante de Recebimento</p>
               </div>
 
               {/* Main Amount */}
-              <div className="text-center mb-10 py-10 border-y border-slate-100">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Valor Recebido</p>
-                <h2 className="text-5xl font-black tracking-tighter text-slate-900">
+              <div className="text-center mb-12 py-12 border-y-2 border-slate-50 relative z-10">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Valor Recebido</p>
+                <h2 className="text-6xl sm:text-7xl font-black tracking-tighter text-slate-900">
                   R$ {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
               </div>
 
               {/* Details List */}
-              <div className="space-y-6 mb-10">
-                <div className="flex justify-between items-start border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 pt-1">Pagador</span>
-                  <span className="font-bold text-slate-900 uppercase text-right max-w-[200px]">{viewingReceipt.clientName}</span>
+              <div className="space-y-8 mb-12 relative z-10">
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Pagador</span>
+                  <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{viewingReceipt.clientName}</span>
                 </div>
-                <div className="flex justify-between items-start border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 pt-1">Recebedor</span>
-                  <span className="font-bold text-slate-900 uppercase text-right max-w-[200px]">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</span>
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Recebedor</span>
+                  <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data do Recebimento</span>
-                  <span className="font-bold text-slate-900">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy')}</span>
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data do Recebimento</span>
+                    <p className="font-bold text-slate-900 text-xl">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy')}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID da Transação</span>
+                    <p className="font-mono text-[10px] font-bold text-slate-500 mt-2">{viewingReceipt.id.toUpperCase()}</p>
+                  </div>
                 </div>
-                <div className="flex justify-between items-start border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 pt-1">Descrição</span>
-                  <span className="font-bold text-slate-900 text-right max-w-[200px]">{viewingReceipt.description}</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-slate-50 pb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID da Transação</span>
-                  <span className="font-mono text-[10px] font-bold text-slate-500">{viewingReceipt.id.toUpperCase()}</span>
+                <div className="bg-slate-50 rounded-2xl p-8 border border-slate-100">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-3">Descrição da Operação</span>
+                  <p className="font-bold text-slate-900 text-lg leading-relaxed italic">"{viewingReceipt.description}"</p>
                 </div>
               </div>
 
               {/* Auth Footer */}
-              <div className="text-center opacity-30 mb-10">
-                <p className="text-[9px] font-mono break-all uppercase">
+              <div className="text-center opacity-20 mb-12 relative z-10">
+                <p className="text-[10px] font-mono break-all uppercase tracking-tighter">
                   AUTENTICAÇÃO: {viewingReceipt.id.toUpperCase()}-{new Date().getTime()}
                 </p>
-                <p className="text-[9px] font-bold uppercase tracking-[0.3em] mt-3">Nexus Private - Gestão de Ativos</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-4">Nexus Private - Gestão de Ativos</p>
               </div>
 
               {/* Action Buttons (Hidden in PDF) */}
-              <div className="flex flex-col gap-4 no-print-section no-print">
+              <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
                 <button
                   onClick={() => shareAsPDF(false)}
                   disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-8 py-5 bg-emerald-600 text-white font-bold rounded-2xl shadow-xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-4 px-10 py-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-sm rounded-3xl shadow-2xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isGeneratingPDF ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <Share2 className="w-5 h-5" />
+                    <Share2 className="w-6 h-6" />
                   )}
                   {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Comprovante'}
                 </button>
                 <button
                   onClick={() => setViewingReceipt(null)}
-                  className="px-8 py-5 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                  className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
                 >
                   Fechar
                 </button>
