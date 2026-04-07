@@ -55,6 +55,8 @@ import {
 } from 'firebase/auth';
 import { format, addMonths, parseISO, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { db, auth } from './firebase';
 import { cn } from './lib/utils';
 
@@ -132,12 +134,66 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
 
-  const shareAsPDF = (forceDownload = false) => {
-    // No logic, just to test if the click itself freezes
+  const shareAsPDF = async (forceDownload = false) => {
+    if (isGeneratingPDF) return;
+    const elementId = viewingContract ? 'printable-contract' : 'printable-receipt';
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    setIsGeneratingPDF(true);
+    try {
+      // Hide elements before capture
+      const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
+      const originalDisplays: string[] = [];
+      noPrintElements.forEach(el => {
+        originalDisplays.push((el as HTMLElement).style.display);
+        (el as HTMLElement).style.display = 'none';
+      });
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      // Restore elements
+      noPrintElements.forEach((el, i) => {
+        (el as HTMLElement).style.display = originalDisplays[i];
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const fileName = viewingContract ? 'contrato.pdf' : 'comprovante.pdf';
+
+      if (forceDownload) {
+        pdf.save(fileName);
+      } else {
+        const pdfBlob = pdf.output('blob');
+        if (navigator.share) {
+          const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+          await navigator.share({
+            files: [file],
+            title: viewingContract ? 'Contrato Nexus Private' : 'Comprovante Nexus Private',
+          });
+        } else {
+          pdf.save(fileName);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   const handlePrint = () => {
-    // No logic, just to test if the click itself freezes
+    window.print();
   };
 
   const triggerDownload = (blob: Blob, fileName: string) => {
@@ -2174,7 +2230,7 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-            </motion.div>
+            </div>
           </div>
         )}
       {viewingContract && (
@@ -2304,14 +2360,20 @@ export default function App() {
                 <div className="flex flex-wrap gap-4 justify-center">
                   <button
                     onClick={() => shareAsPDF(false)}
-                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40"
+                    disabled={isGeneratingPDF}
+                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Share2 className="w-5 h-5" />
-                    Compartilhar
+                    {isGeneratingPDF ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Share2 className="w-5 h-5" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                   </button>
                   <button
                     onClick={() => shareAsPDF(true)}
-                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300"
+                    disabled={isGeneratingPDF}
+                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <FileText className="w-5 h-5" />
                     Baixar PDF
@@ -2333,7 +2395,8 @@ export default function App() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {viewingReceipt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
@@ -2394,34 +2457,42 @@ export default function App() {
               </div>
 
               {/* Action Buttons (Hidden in PDF) */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print">
-                  <span
-                    className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl cursor-pointer"
-                  >
+              <div className="flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print mt-12">
+                <button
+                  onClick={() => shareAsPDF(false)}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingPDF ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
                     <Share2 className="w-5 h-5" />
-                    Compartilhar (Teste sem clique)
-                  </span>
-                  <span
-                    onClick={() => shareAsPDF(true)}
-                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl cursor-pointer"
-                  >
-                    <FileText className="w-5 h-5 text-emerald-600" />
-                    Baixar Recibo
-                  </span>
-                  <span
-                    onClick={handlePrint}
-                    className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl cursor-pointer"
-                  >
-                    <Printer className="w-5 h-5" />
-                    Imprimir
-                  </span>
-                  <span
-                    onClick={() => setViewingReceipt(null)}
-                    className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl cursor-pointer"
-                  >
-                    Fechar
-                  </span>
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                </button>
+                <button
+                  onClick={() => shareAsPDF(true)}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FileText className="w-5 h-5 text-emerald-600" />
+                  Baixar Recibo
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
+                >
+                  <Printer className="w-5 h-5" />
+                  Imprimir
+                </button>
+                <button
+                  onClick={() => setViewingReceipt(null)}
+                  className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
+                >
+                  Fechar
+                </button>
               </div>
+            </div>
           </div>
         </div>
       )}
