@@ -141,7 +141,7 @@ export default function App() {
   const [newPixKey, setNewPixKey] = useState('');
   const [newPixName, setNewPixName] = useState('');
 
-  const shareAsPDF = async (forceDownload = false) => {
+  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf') => {
     if (isGeneratingPDF) return;
     const elementId = viewingContract ? 'printable-contract' : 'printable-receipt';
     const element = document.getElementById(elementId);
@@ -172,6 +172,7 @@ export default function App() {
             clonedElement.style.overflow = 'visible';
           }
           
+          // ... (rest of the sanitization logic)
           // 1. Remove all link tags to prevent external CSS from leaking oklch/oklab
           const links = Array.from(clonedDoc.getElementsByTagName('link'));
           links.forEach(link => {
@@ -185,11 +186,8 @@ export default function App() {
           styleTags.forEach(tag => {
             try {
               let css = tag.innerHTML;
-              // Replace any occurrence of oklch or oklab followed by parentheses
               css = css.replace(/(oklch|oklab)\s*\((?:[^()]+|\([^()]*\))*\)/g, '#777777');
-              // Also catch cases where it might be used in variables or other complex CSS
               css = css.replace(/--[\w-]+\s*:\s*(oklch|oklab)[^;}]*/g, '--dummy: #777777');
-              // Catch any remaining oklch/oklab strings in the CSS
               css = css.replace(/oklch\([^)]+\)/g, '#777777');
               css = css.replace(/oklab\([^)]+\)/g, '#777777');
               tag.innerHTML = css;
@@ -198,7 +196,6 @@ export default function App() {
             }
           });
 
-          // 3. Add a style block that redefines Tailwind variables and forces standard colors
           const style = clonedDoc.createElement('style');
           style.innerHTML = `
             :root {
@@ -215,7 +212,6 @@ export default function App() {
               --color-emerald-600: #059669 !important;
               --color-brand-primary: #d4af37 !important;
             }
-            /* Global override for ALL elements */
             * {
               box-shadow: none !important;
               text-shadow: none !important;
@@ -224,15 +220,13 @@ export default function App() {
               -webkit-filter: none !important;
               transition: none !important;
               animation: none !important;
-              /* Force a standard color if oklch/oklab is somehow still present in computed styles */
               outline-color: #000000 !important;
             }
             .printable-content, .printable-content * {
               color-scheme: light !important;
-              background-image: none !important; /* Remove gradients which often use oklch */
-              border-color: #e2e8f0 !important; /* Force standard border color */
+              background-image: none !important;
+              border-color: #e2e8f0 !important;
             }
-            /* Specifically target common Tailwind classes that might use oklch */
             .bg-slate-900 { background-color: #0f172a !important; }
             .text-slate-900 { color: #0f172a !important; }
             .text-slate-600 { color: #475569 !important; }
@@ -241,25 +235,20 @@ export default function App() {
           `;
           clonedDoc.head.appendChild(style);
 
-          // 4. Iterate through ALL elements to remove problematic inline styles
           const elements = clonedDoc.getElementsByTagName('*');
           for (let i = 0; i < elements.length; i++) {
             const el = elements[i] as HTMLElement;
-            
-            // Aggressively clear inline styles
             const styleAttr = el.getAttribute('style');
             if (styleAttr && (styleAttr.includes('oklch') || styleAttr.includes('oklab'))) {
               const sanitizedStyle = styleAttr.replace(/(oklch|oklab)\s*\((?:[^()]+|\([^()]*\))*\)/g, '#777777');
               el.setAttribute('style', sanitizedStyle);
             }
-
             if (el.style) {
               el.style.boxShadow = 'none';
               el.style.textShadow = 'none';
               el.style.filter = 'none';
               el.style.transition = 'none';
               el.style.animation = 'none';
-              
               if (el.classList.contains('bg-gradient-to-r') || el.classList.contains('bg-gradient-to-br')) {
                 el.style.backgroundImage = 'none';
                 el.style.backgroundColor = '#000000';
@@ -274,35 +263,53 @@ export default function App() {
         (el as HTMLElement).style.display = originalDisplays[i];
       });
 
-      const imgData = canvas.toDataURL('image/png');
-      
-      // Calculate dimensions for PDF
-      const imgProps = {
-        width: canvas.width,
-        height: canvas.height
-      };
-      const pdfWidth = 210; // A4 width in mm
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      // Create PDF with dynamic height if content is long
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pdfWidth, Math.max(pdfHeight, 297)]
-      });
-
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      const fileName = viewingContract ? 'contrato.pdf' : 'comprovante.pdf';
-
-      if (forceDownload) {
-        pdf.save(fileName);
+      if (format === 'image') {
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const fileName = viewingContract ? 'contrato.png' : 'comprovante.png';
+        
+        if (forceDownload) {
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = imgData;
+          link.click();
+        } else if (navigator.share) {
+          const blob = await (await fetch(imgData)).blob();
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await navigator.share({
+            files: [file],
+            title: viewingContract ? 'Contrato Nexus Private' : 'Comprovante Nexus Private',
+            text: viewingContract ? 'Segue o contrato da operação Nexus Private.' : 'Segue o comprovante de recebimento Nexus Private.',
+          });
+        } else {
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = imgData;
+          link.click();
+        }
       } else {
-        const pdfBlob = pdf.output('blob');
-        if (navigator.share) {
+        const imgData = canvas.toDataURL('image/png');
+        const imgProps = { width: canvas.width, height: canvas.height };
+        const pdfWidth = 210;
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: [pdfWidth, Math.max(pdfHeight, 297)]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        const fileName = viewingContract ? 'contrato.pdf' : 'comprovante.pdf';
+
+        if (forceDownload) {
+          pdf.save(fileName);
+        } else if (navigator.share) {
+          const pdfBlob = pdf.output('blob');
           const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
           await navigator.share({
             files: [file],
             title: viewingContract ? 'Contrato Nexus Private' : 'Comprovante Nexus Private',
+            text: viewingContract ? 'Segue o contrato da operação Nexus Private.' : 'Segue o comprovante de recebimento Nexus Private.',
           });
         } else {
           pdf.save(fileName);
@@ -2463,18 +2470,32 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareAsPDF(false)}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-4 px-10 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-sm rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingPDF ? (
-                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <Share2 className="w-6 h-6" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Comprovante'}
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => shareAsPDF(false, 'image')}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-4 px-6 py-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Share2 className="w-5 h-5" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Imagem'}
+                  </button>
+                  <button
+                    onClick={() => shareAsPDF(false, 'pdf')}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FileText className="w-5 h-5" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
+                  </button>
+                </div>
                 <button
                   onClick={() => setViewingContract(null)}
                   className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
@@ -2549,18 +2570,32 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareAsPDF(false)}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-4 px-10 py-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-sm rounded-3xl shadow-2xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingPDF ? (
-                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <Share2 className="w-6 h-6" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Comprovante'}
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => shareAsPDF(false, 'image')}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-4 px-6 py-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Share2 className="w-5 h-5" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Imagem'}
+                  </button>
+                  <button
+                    onClick={() => shareAsPDF(false, 'pdf')}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FileText className="w-5 h-5" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
+                  </button>
+                </div>
                 <button
                   onClick={() => setViewingReceipt(null)}
                   className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
