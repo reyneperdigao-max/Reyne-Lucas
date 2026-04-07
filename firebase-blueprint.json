@@ -49,6 +49,7 @@
       "type": "object",
       "properties": {
         "email": { "type": "string" },
+        "displayName": { "type": "string", "description": "The custom name of the user for receipts." },
         "role": { "type": "string", "enum": ["admin", "user"] },
         "uid": { "type": "string" }
       },

@@ -84,13 +84,16 @@ service cloud.firestore {
       return data.keys().hasAll(['email', 'role', 'uid']) &&
              data.email is string && isValidEmail(data.email) &&
              data.role in ['admin', 'user'] &&
-             data.uid == request.auth.uid;
+             data.uid == request.auth.uid &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100));
     }
 
     match /users/{userId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    request.resource.data.role == resource.data.role &&
+                    request.resource.data.uid == resource.data.uid;
     }
 
     match /loans/{loanId} {

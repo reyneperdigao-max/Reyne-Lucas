@@ -28,6 +28,7 @@ import {
   Share2,
   MessageCircle,
   Printer,
+  Settings,
   X
 } from 'lucide-react';
 import { 
@@ -41,7 +42,8 @@ import {
   orderBy,
   getDocFromServer,
   deleteDoc,
-  getDocs
+  getDocs,
+  setDoc
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -133,6 +135,9 @@ export default function App() {
   const [showOnlyCapital, setShowOnlyCapital] = useState(false);
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ displayName?: string } | null>(null);
+  const [newDisplayName, setNewDisplayName] = useState('');
 
   const shareAsPDF = async (forceDownload = false) => {
     if (isGeneratingPDF) return;
@@ -154,7 +159,59 @@ export default function App() {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          // 1. Sanitize all existing style tags to prevent html2canvas parser from crashing on oklch
+          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
+          styleTags.forEach(tag => {
+            try {
+              tag.innerHTML = tag.innerHTML.replace(/oklch\([^)]+\)/g, '#777777');
+            } catch (e) {
+              console.warn('Could not sanitize style tag', e);
+            }
+          });
+
+          // 2. Add a style block that redefines Tailwind variables and forces standard colors
+          const style = clonedDoc.createElement('style');
+          style.innerHTML = `
+            :root {
+              --color-slate-50: #f8fafc !important;
+              --color-slate-100: #f1f5f9 !important;
+              --color-slate-200: #e2e8f0 !important;
+              --color-slate-300: #cbd5e1 !important;
+              --color-slate-400: #94a3b8 !important;
+              --color-slate-500: #64748b !important;
+              --color-slate-600: #475569 !important;
+              --color-slate-700: #334155 !important;
+              --color-slate-800: #1e293b !important;
+              --color-slate-900: #0f172a !important;
+              --color-emerald-600: #059669 !important;
+              --color-brand-primary: #d4af37 !important;
+            }
+            .printable-content, .printable-content * {
+              box-shadow: none !important;
+              text-shadow: none !important;
+              filter: none !important;
+              backdrop-filter: none !important;
+              -webkit-filter: none !important;
+            }
+          `;
+          clonedDoc.head.appendChild(style);
+
+          // 3. Iterate through elements to remove problematic inline styles
+          const elements = clonedDoc.getElementsByTagName('*');
+          for (let i = 0; i < elements.length; i++) {
+            const el = elements[i] as HTMLElement;
+            if (el.style) {
+              if (el.style.color && el.style.color.includes('oklch')) el.style.color = '#000000';
+              if (el.style.backgroundColor && el.style.backgroundColor.includes('oklch')) el.style.backgroundColor = 'transparent';
+              if (el.style.borderColor && el.style.borderColor.includes('oklch')) el.style.borderColor = '#e2e8f0';
+              el.style.boxShadow = 'none';
+              el.style.textShadow = 'none';
+              el.style.filter = 'none';
+            }
+          }
+        }
       });
 
       // Restore elements
@@ -278,9 +335,46 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsAuthReady(true);
+      if (u) {
+        // Fetch user profile
+        const userRef = doc(db, 'users', u.uid);
+        const unsubProfile = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data() as any);
+          } else {
+            // Create profile if doesn't exist
+            setDoc(userRef, {
+              email: u.email,
+              role: 'user',
+              uid: u.uid,
+              displayName: u.displayName || ''
+            }, { merge: true });
+          }
+        });
+        return () => unsubProfile();
+      } else {
+        setUserProfile(null);
+      }
     });
     return () => unsubscribe();
   }, []);
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setIsSubmitting(true);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        displayName: newDisplayName
+      });
+      setIsSettingsOpen(false);
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      setError("Erro ao salvar configurações.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1101,6 +1195,16 @@ export default function App() {
               <span className="text-xs text-slate-500 font-medium">{user.email}</span>
             </div>
             <div className="h-8 w-px bg-white/10 hidden md:block" />
+            <button 
+              onClick={() => {
+                setIsSettingsOpen(true);
+                setNewDisplayName(userProfile?.displayName || user?.displayName || '');
+              }}
+              className="p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
+              title="Configurações"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
             <button 
               onClick={handleLogout}
               className="p-3 text-slate-400 hover:text-brand-danger hover:bg-brand-danger/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-danger/20"
@@ -2236,7 +2340,7 @@ export default function App() {
       {viewingContract && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
           <div className="bg-white w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl my-8">
-            <div id="printable-contract" className="p-8 sm:p-12 bg-white text-slate-900">
+            <div id="printable-contract" className="p-8 sm:p-12 bg-white text-slate-900 printable-content">
               {/* Bank-style Header */}
               <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
                 <div className="flex items-center gap-4">
@@ -2371,14 +2475,6 @@ export default function App() {
                     {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                   </button>
                   <button
-                    onClick={() => shareAsPDF(true)}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <FileText className="w-5 h-5" />
-                    Baixar PDF
-                  </button>
-                  <button
                     onClick={handlePrint}
                     className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200"
                   >
@@ -2401,7 +2497,7 @@ export default function App() {
       {viewingReceipt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
-            <div id="printable-receipt" className="p-8 sm:p-12 bg-white text-slate-900">
+            <div id="printable-receipt" className="p-8 sm:p-12 bg-white text-slate-900 printable-content">
               {/* Bank-style Header */}
               <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
                 <div className="flex items-center gap-4">
@@ -2428,7 +2524,8 @@ export default function App() {
               {/* Declaration Text */}
               <div className="mb-16 text-lg leading-relaxed text-slate-800">
                 <p className="mb-6">
-                  Declaro para os devidos fins que recebi de <span className="font-bold uppercase">{viewingReceipt.clientName}</span>, 
+                  Eu, <span className="font-bold uppercase">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</span>, 
+                  declaro para os devidos fins que recebi de <span className="font-bold uppercase">{viewingReceipt.clientName}</span>, 
                   a importância de <span className="font-bold text-2xl">R$ {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>, 
                   referente a:
                 </p>
@@ -2471,14 +2568,6 @@ export default function App() {
                   {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                 </button>
                 <button
-                  onClick={() => shareAsPDF(true)}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <FileText className="w-5 h-5 text-emerald-600" />
-                  Baixar Recibo
-                </button>
-                <button
                   onClick={handlePrint}
                   className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
                 >
@@ -2490,6 +2579,61 @@ export default function App() {
                   className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all"
                 >
                   Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+          <div className="bg-slate-900 w-full max-w-md rounded-[32px] border border-white/10 overflow-hidden shadow-2xl">
+            <div className="p-8 border-b border-white/5 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-brand-primary/10 rounded-xl">
+                  <Settings className="w-5 h-5 text-brand-primary" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Configurações</h2>
+              </div>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-2 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Nome do Usuário (para recibos)
+                </label>
+                <input 
+                  type="text"
+                  value={newDisplayName}
+                  onChange={(e) => setNewDisplayName(e.target.value)}
+                  placeholder="Ex: João Silva"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-brand-primary/50 transition-all"
+                />
+                <p className="text-[10px] text-slate-500 italic">
+                  Este nome aparecerá nos recibos como: "Eu, [Nome], declaro..."
+                </p>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="flex-1 px-6 py-4 bg-white/5 text-white font-bold rounded-2xl hover:bg-white/10 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSaveProfile}
+                  disabled={isSubmitting}
+                  className="flex-1 px-6 py-4 bg-brand-primary text-black font-bold rounded-2xl hover:bg-brand-primary/90 transition-all disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
             </div>
