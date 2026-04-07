@@ -30,9 +30,6 @@ import {
   Printer,
   X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
 import { 
   collection, 
   query, 
@@ -135,159 +132,12 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
 
-  const shareAsPDF = async (forceDownload = false) => {
-    const isReceipt = !!viewingReceipt;
-    const data = isReceipt ? viewingReceipt : viewingContract;
-    if (!data) return;
-    
-    const elementId = isReceipt ? 'printable-receipt' : 'printable-contract';
-    const element = document.getElementById(elementId);
-    if (!element) return;
-
-    setIsGeneratingPDF(true);
-    try {
-      // Temporarily hide the buttons section for the snapshot
-      const buttons = element.querySelector('.no-print-section');
-      if (buttons) (buttons as HTMLElement).style.display = 'none';
-
-      // Use a slightly higher scale for better quality, but with fixed windowWidth
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 1024, // Standard desktop width for consistent rendering
-        onclone: (clonedDoc) => {
-          try {
-            const replaceColors = (text: string) => {
-              if (!text) return text;
-              const nested = '(?:[^()]+|\\((?:[^()]+|\\([^()]*\\))*\\))*';
-              const regex = new RegExp(`(oklch|oklab|color-mix|light-dark|color)\\s*\\(${nested}\\)`, 'g');
-              return text.replace(regex, '#000000');
-            };
-
-            const styleTags = clonedDoc.getElementsByTagName('style');
-            for (let i = 0; i < styleTags.length; i++) {
-              try {
-                const style = styleTags[i];
-                if (style.innerHTML.includes('oklch') || style.innerHTML.includes('oklab') || style.innerHTML.includes('color-mix')) {
-                  style.innerHTML = replaceColors(style.innerHTML);
-                }
-              } catch (e) {}
-            }
-
-            const allElements = clonedDoc.getElementsByTagName('*');
-            for (let i = 0; i < allElements.length; i++) {
-              const el = allElements[i] as HTMLElement;
-              
-              // Remove animations and transitions
-              el.style.animation = 'none';
-              el.style.transition = 'none';
-              el.style.transform = 'none';
-
-              const inlineStyle = el.getAttribute('style');
-              if (inlineStyle && (inlineStyle.includes('oklch') || inlineStyle.includes('oklab') || inlineStyle.includes('color-mix') || inlineStyle.includes('light-dark'))) {
-                el.setAttribute('style', replaceColors(inlineStyle));
-              }
-
-              if (el.style) {
-                const problematicProps = ['field-sizing', 'contain-intrinsic-size', 'content-visibility', 'view-transition-name', 'container-type', 'container-name', 'scroll-timeline', 'view-timeline', 'anchor-name', 'position-anchor'];
-                problematicProps.forEach(prop => {
-                  try { if (el.style.getPropertyValue(prop)) el.style.removeProperty(prop); } catch (e) {}
-                });
-              }
-            }
-          } catch (e) {}
-          
-          const pdfStyle = clonedDoc.createElement('style');
-          pdfStyle.innerHTML = `
-            #${elementId} {
-              width: 800px !important;
-              padding: 60px !important;
-              background: white !important;
-              color: black !important;
-              position: relative !important;
-              margin: 0 !important;
-              transform: none !important;
-              max-height: none !important;
-              overflow: visible !important;
-              border: none !important;
-              box-shadow: none !important;
-              display: block !important;
-              border-radius: 0 !important;
-            }
-            .no-print-section { display: none !important; }
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              font-family: "Plus Jakarta Sans", sans-serif !important;
-            }
-          `;
-          const footer = clonedDoc.createElement('div');
-          footer.innerHTML = `
-            <div style="margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 16px; display: flex; justify-content: space-between; align-items: center;">
-              <p style="font-size: 8px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">Nexus Private - Gestão de Ativos</p>
-              <p style="font-size: 8px; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">www.nexusprivate.com.br</p>
-            </div>
-          `;
-          const contractEl = clonedDoc.getElementById(elementId);
-          if (contractEl) contractEl.appendChild(footer);
-          clonedDoc.head.appendChild(pdfStyle);
-        }
-      });
-
-      if (buttons) (buttons as HTMLElement).style.display = '';
-
-      if (canvas.width === 0 || canvas.height === 0) throw new Error('Canvas generation failed');
-
-      // Use PNG for better quality if JPEG is failing or looking bad
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [canvas.width, canvas.height]
-      });
-
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      const pdfBlob = pdf.output('blob');
-      const clientName = isReceipt ? (data as SystemAction).clientName : (data as Loan[])[0].clientName;
-      const fileName = `${isReceipt ? 'Recibo' : 'Contrato'}_${clientName.replace(/\s+/g, '_')}.pdf`;
-      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
-      // Improved sharing logic with explicit fallback
-      if (!forceDownload && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: 'Comprovante Nexus Private',
-            text: `${isReceipt ? 'Recibo de pagamento' : 'CONTRATO DE EMPRÉSTIMO'} - ${clientName}`
-          });
-        } catch (shareError: any) {
-          if (shareError.name !== 'AbortError') {
-            console.warn('Share failed, falling back to download:', shareError);
-            triggerDownload(pdfBlob, fileName);
-          }
-        }
-      } else {
-        triggerDownload(pdfBlob, fileName);
-      }
-    } catch (error: any) {
-      console.error('Error generating PDF:', error);
-      setConfirmModal({
-        isOpen: true,
-        title: 'Erro na Geração',
-        message: 'Ocorreu um erro ao processar o PDF. Tente baixar o arquivo diretamente ou usar a função de impressão.',
-        onConfirm: () => shareAsPDF(true)
-      });
-    } finally {
-      setIsGeneratingPDF(false);
-    }
+  const shareAsPDF = (forceDownload = false) => {
+    // No logic, just to test if the click itself freezes
   };
 
   const handlePrint = () => {
-    window.print();
+    // No logic, just to test if the click itself freezes
   };
 
   const triggerDownload = (blob: Blob, fileName: string) => {
@@ -1031,10 +881,7 @@ export default function App() {
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-primary/5 blur-[150px] rounded-full" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-white/5 blur-[150px] rounded-full" />
         
-        <motion.div 
-          initial={{ opacity: 0, y: 40, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+        <div 
           className="max-w-md w-full glass-card p-8 md:p-14 text-center relative z-10"
         >
             <div className="flex justify-center mb-10">
@@ -1058,25 +905,18 @@ export default function App() {
             </div>
           </div>
 
-          <AnimatePresence mode="wait">
+          <div>
             {error && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+              <div
                 className="mb-6 p-3 rounded-xl bg-brand-danger/10 border border-brand-danger/20 text-brand-danger text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 overflow-hidden"
               >
                 <AlertCircle className="w-3 h-3 shrink-0" />
                 {error}
-              </motion.div>
+              </div>
             )}
 
             {authMode === 'login' && (
-              <motion.form
-                key="login"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
+              <form
                 onSubmit={handleEmailLogin}
                 className="space-y-4"
               >
@@ -1105,7 +945,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1123,15 +963,11 @@ export default function App() {
                     Esqueceu a senha?
                   </button>
                 </div>
-              </motion.form>
+              </form>
             )}
 
             {authMode === 'forgot' && (
-              <motion.form
-                key="forgot"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
+              <form
                 onSubmit={handleForgotPassword}
                 className="space-y-4"
               >
@@ -1149,7 +985,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all text-xs uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1165,14 +1001,14 @@ export default function App() {
                 >
                   Voltar para o Login
                 </button>
-              </motion.form>
+              </form>
             )}
-          </AnimatePresence>
+          </div>
 
           <p className="mt-10 text-[9px] font-black text-slate-600 uppercase tracking-widest">
             Sistema de Gestão de Ativos de Alta Performance
           </p>
-        </motion.div>
+        </div>
       </div>
     );
   }
@@ -1186,7 +1022,7 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-black/60 backdrop-blur-2xl border-b border-white/[0.03]">
+      <header className="sticky top-0 z-40 bg-black border-b border-white/[0.03]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-24 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-1 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl">
@@ -1328,24 +1164,17 @@ export default function App() {
         </div>
 
         {/* Error Alert */}
-        <AnimatePresence>
-          {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="bg-brand-danger/10 border border-brand-danger/20 text-brand-danger p-5 rounded-[24px] flex items-center justify-between backdrop-blur-md"
-            >
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5" />
-                <span className="font-bold tracking-tight">{error}</span>
-              </div>
-              <button onClick={() => setError(null)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
-                <ChevronRight className="w-5 h-5 rotate-90" />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {error && (
+          <div className="bg-brand-danger/10 border border-brand-danger/20 text-brand-danger p-5 rounded-[24px] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5" />
+              <span className="font-bold tracking-tight">{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+              <ChevronRight className="w-5 h-5 rotate-90" />
+            </button>
+          </div>
+        )}
 
         {/* Main Content Area */}
         <div className="space-y-6">
@@ -1432,9 +1261,7 @@ export default function App() {
             </div>
             
             {activeTab === 'Empréstimos' && (
-              <motion.button 
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
+              <button 
                 onClick={() => {
                   setEditingLoanId(null);
                   setNewLoan({
@@ -1451,19 +1278,17 @@ export default function App() {
               >
                 <Plus className="w-5 h-5" />
                 Novo Empréstimo
-              </motion.button>
+              </button>
             )}
 
             {activeTab === 'Histórico' && actions.length > 0 && (
-              <motion.button 
-                whileHover={{ scale: 1.02, y: -2 }}
-                whileTap={{ scale: 0.98 }}
+              <button 
                 onClick={clearHistory}
                 className="bg-gradient-to-r from-brand-danger to-rose-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-danger/25 hover:shadow-brand-danger/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
               >
                 <Trash2 className="w-5 h-5" />
                 Limpar Histórico
-              </motion.button>
+              </button>
             )}
           </div>
 
@@ -1841,21 +1666,21 @@ export default function App() {
                             <div className="flex items-center justify-end gap-2">
                               <button 
                                 onClick={() => generateWhatsAppMessage(loan)}
-                                className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl transition-all active:scale-95 border border-[#25D366]/20"
+                                className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl border border-[#25D366]/20"
                                 title="Enviar Cobrança WhatsApp"
                               >
                                 <MessageCircle className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => setViewingClientLoans(loan.clientName)}
-                                className="p-2 bg-white/5 text-slate-400 hover:bg-brand-primary/20 hover:text-brand-primary rounded-xl transition-all active:scale-95 border border-white/10 hover:border-brand-primary/30"
+                                className="p-2 bg-white/5 text-slate-400 hover:bg-brand-primary/20 hover:text-brand-primary rounded-xl border border-white/10 hover:border-brand-primary/30"
                                 title="Ver Histórico"
                               >
                                 <History className="w-4 h-4" />
                               </button>
                               <button 
                                 onClick={() => setViewingContract([loan])}
-                                className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
+                                className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl border border-emerald-500/20"
                                 title="Emitir Comprovante"
                               >
                                 <FileText className="w-4 h-4" />
@@ -1863,7 +1688,7 @@ export default function App() {
                               {loan.status !== 'Pago' && (
                                 <button 
                                   onClick={() => { setPayingLoan(loan); setLastAction(null); }}
-                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-brand-accent/20"
+                                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-brand-accent/20"
                                 >
                                   <DollarSign className="w-4 h-4" />
                                   <span>Pagamento</span>
@@ -1883,22 +1708,15 @@ export default function App() {
       </main>
 
       {/* Add Loan Modal */}
-      <AnimatePresence>
-        {isAdding && (
-          <div key="modal-add-loan" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAdding(false)}
-              className="absolute inset-0 bg-surface-950/80 backdrop-blur-md"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-xl glass-card p-8"
-            >
+      {isAdding && (
+        <div key="modal-add-loan" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            onClick={() => setIsAdding(false)}
+            className="absolute inset-0 bg-black/80"
+          />
+          <div 
+            className="relative w-full max-w-xl glass-card p-8"
+          >
               <div className="flex items-center justify-between mb-8">
                 <div>
                   <h2 className="text-2xl font-bold text-white tracking-tight">
@@ -2012,33 +1830,25 @@ export default function App() {
                   </div>
                 </div>
 
-                <motion.button 
-                  whileHover={{ scale: 1.02, y: -2 }}
-                  whileTap={{ scale: 0.98 }}
+                <button 
                   type="submit"
                   className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white py-5 rounded-2xl font-bold shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all text-lg uppercase tracking-widest"
                 >
                   {editingLoanId ? 'Salvar Alterações' : 'Confirmar Cadastro'}
-                </motion.button>
+                </button>
               </form>
-            </motion.div>
+            </div>
           </div>
         )}
 
         {/* Payment Modal */}
         {payingLoan && (
           <div key="modal-payment" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => { setPayingLoan(null); setLastAction(null); }}
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              className="absolute inset-0 bg-black/80"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            <div 
               className="relative w-full max-w-md glass-card p-8"
             >
               <div className="flex items-center justify-between mb-8">
@@ -2054,13 +1864,9 @@ export default function App() {
                 </button>
               </div>
 
-              <AnimatePresence mode="wait">
+              <div>
                 {lastAction ? (
-                  <motion.div 
-                    key="success-view"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
+                  <div 
                     className="py-8 text-center space-y-6"
                   >
                     <div className="w-20 h-20 bg-brand-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -2094,13 +1900,9 @@ export default function App() {
                         Finalizar e Ver Recibo
                       </button>
                     </div>
-                  </motion.div>
+                  </div>
                 ) : (
-                  <motion.div 
-                    key="payment-options"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
+                  <div 
                     className="space-y-8"
                   >
                     {/* Loan Summary Section */}
@@ -2178,27 +1980,21 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
-              </AnimatePresence>
-            </motion.div>
+              </div>
+            </div>
           </div>
         )}
         {confirmModal.isOpen && (
           <div key="modal-confirm" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                className="absolute inset-0 bg-black/80 backdrop-blur-md"
-              />
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                className="relative w-full max-w-sm glass-card p-8 text-center"
-              >
+            <div 
+              onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+              className="absolute inset-0 bg-black/80"
+            />
+            <div 
+              className="relative w-full max-w-sm glass-card p-8 text-center"
+            >
                 <div className="w-16 h-16 bg-brand-danger/10 rounded-full flex items-center justify-center mx-auto mb-6">
                   <AlertCircle className="w-8 h-8 text-brand-danger" />
                 </div>
@@ -2218,22 +2014,16 @@ export default function App() {
                     Confirmar Exclusão
                   </button>
                 </div>
-              </motion.div>
+              </div>
             </div>
           )}
         {viewingClientLoans && (
           <div key="modal-view-client-loans" className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div 
               onClick={() => setViewingClientLoans(null)}
-              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              className="absolute inset-0 bg-black/80"
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            <div 
               className="relative w-full max-w-5xl glass-card p-8 max-h-[90vh] flex flex-col"
             >
               <div className="flex items-center justify-between mb-8 shrink-0">
@@ -2242,9 +2032,7 @@ export default function App() {
                   <p className="text-slate-600 text-sm font-medium mt-1">Histórico completo de empréstimos e pagamentos.</p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <motion.button 
-                    whileHover={{ scale: 1.02, y: -2 }}
-                    whileTap={{ scale: 0.98 }}
+                  <button 
                     onClick={() => {
                       const activeLoans = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago');
                       if (activeLoans.length > 0) {
@@ -2256,10 +2044,8 @@ export default function App() {
                   >
                     <FileText className="w-4 h-4" />
                     Contrato Unificado
-                  </motion.button>
-                  <motion.button 
-                    whileHover={{ scale: 1.02, y: -2 }}
-                    whileTap={{ scale: 0.98 }}
+                  </button>
+                  <button 
                     onClick={() => {
                       const clientName = viewingClientLoans;
                       const clientPhone = loans.find(l => l.clientName === clientName)?.clientPhone || '';
@@ -2279,7 +2065,7 @@ export default function App() {
                   >
                     <Plus className="w-4 h-4" />
                     Novo Empréstimo
-                  </motion.button>
+                  </button>
                   <button 
                     onClick={() => setViewingClientLoans(null)}
                     className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
@@ -2391,22 +2177,10 @@ export default function App() {
             </motion.div>
           </div>
         )}
-        {viewingContract && (
-          <div key="modal-contract" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setViewingContract(null)}
-              className="absolute inset-0 bg-black/90 backdrop-blur-xl no-print"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              id="printable-contract"
-              className="relative w-full max-w-2xl bg-white text-black p-16 rounded-none shadow-2xl overflow-y-auto max-h-[90vh] printable-content"
-            >
+      {viewingContract && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl my-8">
+            <div id="printable-contract" className="p-8 sm:p-12 bg-white text-slate-900">
               {/* Bank-style Header */}
               <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
                 <div className="flex items-center gap-4">
@@ -2530,59 +2304,41 @@ export default function App() {
                 <div className="flex flex-wrap gap-4 justify-center">
                   <button
                     onClick={() => shareAsPDF(false)}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
+                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-black text-white font-bold rounded-xl shadow-xl shadow-black/20 hover:shadow-black/40"
                   >
-                    {isGeneratingPDF ? (
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Share2 className="w-5 h-5" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                    <Share2 className="w-5 h-5" />
+                    Compartilhar
                   </button>
                   <button
                     onClick={() => shareAsPDF(true)}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
+                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300"
                   >
                     <FileText className="w-5 h-5" />
                     Baixar PDF
                   </button>
                   <button
                     onClick={handlePrint}
-                    className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
+                    className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200"
                   >
                     <Printer className="w-5 h-5" />
                     Imprimir
                   </button>
                   <button
                     onClick={() => setViewingContract(null)}
-                    className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
+                    className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200"
                   >
                     Fechar
                   </button>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         )}
 
-        {viewingReceipt && (
-          <div key="modal-receipt" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setViewingReceipt(null)}
-              className="absolute inset-0 bg-black/90 backdrop-blur-xl no-print"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              id="printable-receipt"
-              className="relative w-full max-w-2xl bg-white text-black p-16 rounded-none shadow-2xl overflow-y-auto max-h-[90vh] printable-content"
-            >
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
+            <div id="printable-receipt" className="p-8 sm:p-12 bg-white text-slate-900">
               {/* Bank-style Header */}
               <div className="flex justify-between items-center mb-16 border-b border-slate-200 pb-8">
                 <div className="flex items-center gap-4">
@@ -2638,45 +2394,37 @@ export default function App() {
               </div>
 
               {/* Action Buttons (Hidden in PDF) */}
-              <div className="mt-16 flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print">
-                <button
-                  onClick={() => shareAsPDF(false)}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold rounded-xl shadow-xl shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {isGeneratingPDF ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
+                <div className="flex flex-col sm:flex-row gap-4 justify-center no-print-section no-print">
+                  <span
+                    className="flex items-center gap-2 px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl cursor-pointer"
+                  >
                     <Share2 className="w-5 h-5" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                </button>
-                <button
-                  onClick={() => shareAsPDF(true)}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <FileText className="w-5 h-5 text-emerald-600" />
-                  Baixar Recibo
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
-                >
-                  <Printer className="w-5 h-5" />
-                  Imprimir
-                </button>
-                <button
-                  onClick={() => setViewingReceipt(null)}
-                  className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all active:scale-95"
-                >
-                  Fechar
-                </button>
+                    Compartilhar (Teste sem clique)
+                  </span>
+                  <span
+                    onClick={() => shareAsPDF(true)}
+                    className="flex items-center gap-2 px-8 py-4 bg-white border border-slate-200 text-slate-900 font-bold rounded-xl cursor-pointer"
+                  >
+                    <FileText className="w-5 h-5 text-emerald-600" />
+                    Baixar Recibo
+                  </span>
+                  <span
+                    onClick={handlePrint}
+                    className="flex items-center gap-2 px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl cursor-pointer"
+                  >
+                    <Printer className="w-5 h-5" />
+                    Imprimir
+                  </span>
+                  <span
+                    onClick={() => setViewingReceipt(null)}
+                    className="px-8 py-4 bg-slate-100 text-slate-600 font-bold rounded-xl cursor-pointer"
+                  >
+                    Fechar
+                  </span>
               </div>
-            </motion.div>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+      )}
     </div>
   );
 }
@@ -2692,18 +2440,17 @@ function StatCard({ title, value, icon, color, trend, onClick }: { title: string
   };
 
   return (
-    <motion.div 
-      whileHover={{ y: -5, scale: 1.01 }}
+    <div 
       onClick={onClick}
       className={cn(
         "glass-card p-7 space-y-5 group relative overflow-hidden",
-        onClick && "cursor-pointer active:scale-95 transition-all"
+        onClick && "cursor-pointer transition-all"
       )}
     >
-      <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 blur-[60px] -mr-16 -mt-16 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+      <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 -mr-16 -mt-16 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
       
       <div className="flex items-center justify-between relative z-10">
-        <div className={cn("p-3.5 rounded-[20px] transition-all duration-500 group-hover:shadow-[0_0_20px_rgba(212,175,55,0.15)]", colors[color])}>
+        <div className={cn("p-3.5 rounded-[20px] transition-all duration-500", colors[color])}>
           {icon}
         </div>
         {trend && (
@@ -2716,7 +2463,7 @@ function StatCard({ title, value, icon, color, trend, onClick }: { title: string
         <span className="text-[10px] font-bold text-slate-600 uppercase tracking-[0.3em] block mb-1.5">{title}</span>
         <div className="text-2xl font-bold text-white tracking-tight group-hover:text-brand-primary transition-colors duration-500">{value}</div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -2730,7 +2477,7 @@ function StatusBadge({ status }: { status: Loan['status'] }) {
   return (
     <div 
       className={cn(
-        "px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border transition-all inline-block",
+        "px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border inline-block",
         styles[status]
       )}
     >
