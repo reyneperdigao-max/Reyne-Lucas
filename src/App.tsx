@@ -30,7 +30,10 @@ import {
   Printer,
   Settings,
   X,
-  Download
+  Download,
+  QrCode,
+  Copy,
+  MoreVertical
 } from 'lucide-react';
 import { 
   collection, 
@@ -122,7 +125,7 @@ export default function App() {
   const [actions, setActions] = useState<SystemAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'Empréstimos' | 'Clientes' | 'Transações' | 'Histórico'>('Empréstimos');
+  const [activeTab, setActiveTab] = useState<'Empréstimos' | 'Clientes' | 'Transações' | 'Histórico' | 'Pagamento'>('Empréstimos');
   
   // Form State
   const [isAdding, setIsAdding] = useState(false);
@@ -137,6 +140,7 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string, pixBank?: string } | null>(null);
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newPixKey, setNewPixKey] = useState('');
@@ -209,9 +213,9 @@ NEWFILEUID:NONE
     URL.revokeObjectURL(url);
   };
 
-  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', isWhatsApp = false) => {
+  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', isWhatsApp = false, customElementId?: string) => {
     if (isGeneratingPDF) return;
-    const elementId = viewingContract ? 'printable-contract' : 'printable-receipt';
+    const elementId = customElementId || (viewingContract ? 'printable-contract' : 'printable-receipt');
     const element = document.getElementById(elementId);
     if (!element) return;
 
@@ -233,12 +237,10 @@ NEWFILEUID:NONE
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        // Force a stable window width during capture to prevent responsive distortion
-        windowWidth: isWhatsApp ? 450 : 600,
+        windowWidth: 1200,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
-            // Reset all potential layout-distorting properties
             clonedElement.style.height = 'auto';
             clonedElement.style.maxHeight = 'none';
             clonedElement.style.overflow = 'visible';
@@ -247,18 +249,18 @@ NEWFILEUID:NONE
             clonedElement.style.position = 'relative';
             clonedElement.style.left = '0';
             clonedElement.style.top = '0';
+            clonedElement.style.width = '800px';
+            clonedElement.style.padding = '60px';
+            clonedElement.style.display = 'block';
             
-            // Optimized width for sharing
-            if (isWhatsApp) {
-              clonedElement.style.width = '450px';
-              clonedElement.style.padding = '32px';
-            } else {
-              clonedElement.style.width = '600px';
-              clonedElement.style.padding = '40px';
-            }
+            const allText = clonedElement.querySelectorAll('*');
+            allText.forEach(el => {
+              if (el instanceof HTMLElement) {
+                el.style.wordBreak = 'break-word';
+              }
+            });
           }
           
-          // 2. Ultra-aggressive sanitization of ALL style tags
           const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
           styleTags.forEach(tag => {
             try {
@@ -315,7 +317,6 @@ NEWFILEUID:NONE
             .grid { display: grid !important; }
             .hidden { display: none !important; }
             
-            /* Explicitly hide elements marked as no-print during capture */
             .no-print, .no-print-section {
               display: none !important;
               visibility: hidden !important;
@@ -327,7 +328,6 @@ NEWFILEUID:NONE
               pointer-events: none !important;
             }
             
-            /* Force solid colors to avoid capture issues */
             .bg-white { background-color: #ffffff !important; }
             .bg-slate-900 { background-color: #0f172a !important; }
             .bg-slate-50 { background-color: #f8fafc !important; }
@@ -343,7 +343,6 @@ NEWFILEUID:NONE
           `;
           clonedDoc.head.appendChild(style);
 
-          // Only iterate over elements that likely have styles to improve performance
           const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
           styledElements.forEach(el => {
             const htmlEl = el as HTMLElement;
@@ -430,7 +429,6 @@ NEWFILEUID:NONE
         }
       }
     } catch (error: any) {
-      // Ignore share cancellation errors as they are user-initiated
       const isCancellation = 
         error?.name === 'AbortError' || 
         error?.message?.includes('cancellation') ||
@@ -1510,8 +1508,8 @@ NEWFILEUID:NONE
         <div className="space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex flex-col gap-2">
-              <nav className="flex items-center bg-white/[0.03] p-1.5 rounded-2xl border border-white/[0.05] w-fit">
-                {(['Empréstimos', 'Clientes', 'Transações', 'Histórico'] as const).map((tab) => (
+              <nav className="flex items-center bg-white/[0.03] p-1.5 rounded-2xl border border-white/[0.05] w-fit relative">
+                {(['Empréstimos', 'Clientes'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => {
@@ -1520,6 +1518,7 @@ NEWFILEUID:NONE
                       setShowOnlyCapital(false);
                       setShowOnlyInterest(false);
                       setFilterDate('');
+                      setIsMoreMenuOpen(false);
                     }}
                     className={cn(
                       "px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-300",
@@ -1531,6 +1530,53 @@ NEWFILEUID:NONE
                     {tab}
                   </button>
                 ))}
+
+                {/* More Options Menu */}
+                <div className="relative ml-1">
+                  <button
+                    onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                    className={cn(
+                      "p-2.5 rounded-xl transition-all duration-300",
+                      (['Transações', 'Histórico', 'Pagamento'] as string[]).includes(activeTab)
+                        ? "bg-brand-primary/20 text-brand-primary"
+                        : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+                    )}
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+
+                  {isMoreMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-[60]" 
+                        onClick={() => setIsMoreMenuOpen(false)} 
+                      />
+                      <div className="absolute left-0 top-full mt-2 w-48 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-[70] animate-in fade-in slide-in-from-top-2 duration-200">
+                        {(['Transações', 'Histórico', 'Pagamento'] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => {
+                              setActiveTab(tab);
+                              setShowOnlyOverdue(false);
+                              setShowOnlyCapital(false);
+                              setShowOnlyInterest(false);
+                              setFilterDate('');
+                              setIsMoreMenuOpen(false);
+                            }}
+                            className={cn(
+                              "w-full px-6 py-4 text-left text-[10px] font-bold uppercase tracking-[0.15em] transition-all border-b border-white/5 last:border-0",
+                              activeTab === tab 
+                                ? "bg-brand-primary/10 text-brand-primary" 
+                                : "text-slate-400 hover:text-white hover:bg-white/5"
+                            )}
+                          >
+                            {tab}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               </nav>
               {filterDate && (
                 <div className="flex items-center gap-2 px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-lg w-fit">
@@ -1819,6 +1865,71 @@ NEWFILEUID:NONE
                     )}
                   </tbody>
                 </table>
+              ) : activeTab === 'Pagamento' ? (
+                <div className="p-12 flex flex-col items-center text-center">
+                  <div id="printable-pix" className="bg-white p-12 rounded-[40px] w-full max-w-md shadow-2xl text-slate-900 mb-8 printable-content relative overflow-hidden">
+                    {/* Background Watermark */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -rotate-12">
+                      <span className="text-[80px] font-black tracking-tighter whitespace-nowrap">NEXUS PRIVATE</span>
+                    </div>
+
+                    <div className="flex flex-col items-center mb-8 relative z-10">
+                      <div className="w-20 h-20 bg-black rounded-[24px] flex items-center justify-center mb-4 shadow-xl">
+                        <QrCode className="w-10 h-10 text-brand-primary" />
+                      </div>
+                      <h3 className="text-2xl font-black uppercase tracking-tighter">Dados de Pagamento</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Nexus Private</p>
+                    </div>
+
+                    <div className="space-y-6 text-center relative z-10">
+                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Chave PIX</span>
+                        <p className="text-xl font-black text-slate-900 break-all select-all">{userProfile?.pixKey || "NÃO CONFIGURADA"}</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Titular</span>
+                          <p className="font-bold text-slate-900 text-[10px] uppercase leading-tight">{userProfile?.pixName || "-"}</p>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Banco</span>
+                          <p className="font-bold text-slate-900 text-[10px] uppercase leading-tight">{userProfile?.pixBank || "-"}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 pt-8 border-t border-slate-100 text-center opacity-30 relative z-10">
+                      <p className="text-[8px] font-black uppercase tracking-[0.4em]">Nexus Private - Gestão de Ativos</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 w-full max-w-md no-print">
+                    <button
+                      onClick={() => shareAsPDF(false, 'pdf', false, 'printable-pix')}
+                      disabled={isGeneratingPDF}
+                      className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-brand-primary text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-lg shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                    >
+                      {isGeneratingPDF ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Share2 className="w-4 h-4" />
+                      )}
+                      {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Dados'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (userProfile?.pixKey) {
+                          navigator.clipboard.writeText(userProfile.pixKey);
+                        }
+                      }}
+                      className="flex items-center justify-center gap-3 px-6 py-4 bg-white/5 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl border border-white/10 hover:bg-white/10 transition-all"
+                    >
+                      <Copy className="w-4 h-4" />
+                      Copiar Chave
+                    </button>
+                  </div>
+                </div>
               ) : activeTab === 'Histórico' ? (
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -2501,15 +2612,10 @@ NEWFILEUID:NONE
       {viewingContract && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
           <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
-            <div id="printable-contract" className="p-8 sm:p-16 bg-white text-slate-900 printable-content relative overflow-hidden">
-              {/* Background Watermark */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none rotate-12">
-                <span className="text-[120px] font-black tracking-tighter whitespace-nowrap">NEXUS PRIVATE</span>
-              </div>
-
-              {/* Bank-style Header */}
-              <div className="flex flex-col items-center text-center mb-12 relative z-10">
-                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20 overflow-hidden">
+            <div id="printable-contract" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
+              {/* Elegant Header */}
+              <div className="flex flex-col items-center mb-16 relative z-10">
+                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
                     className="w-full h-full object-cover grayscale brightness-125" 
@@ -2517,195 +2623,59 @@ NEWFILEUID:NONE
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Nexus Private</h1>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Comprovante de Operação de Crédito</p>
+                <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
+                <div className="h-px w-12 bg-brand-primary my-4" />
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Operação</p>
               </div>
 
-              {/* Main Amount */}
-              <div className="text-center mb-12 py-12 border-y-2 border-slate-50 relative z-10">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Valor Total a Receber</p>
-                <h2 className="text-6xl sm:text-7xl font-black tracking-tighter text-slate-900">
-                  R$ {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              {/* Main Amount - Elegant Focus */}
+              <div className="text-center mb-16 relative z-10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Total da Operação</p>
+                <h2 className="text-6xl font-black tracking-tighter text-slate-900">
+                  <span className="text-2xl mr-2 text-slate-300">R$</span>
+                  {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
               </div>
 
-              {/* Details List - Separated Loans */}
-              <div className="space-y-10 mb-12 relative z-10">
-                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Cliente</span>
-                  <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{viewingContract[0].clientName}</span>
+              {/* Essential Details Grid */}
+              <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Emprestado</span>
+                  <p className="font-black text-slate-900 uppercase text-base leading-tight">
+                    R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
                 </div>
+                <div className="text-right">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Valor dos Juros</span>
+                  <p className="font-black text-brand-primary uppercase text-base leading-tight">
+                    R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
+                  <p className="font-black text-slate-900 uppercase text-base leading-tight">{safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy HH:mm')}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Vencimento Principal</span>
+                  <p className="font-black text-neon-red uppercase text-base leading-tight">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</p>
+                </div>
+              </div>
 
-                {viewingContract.map((loan, index) => (
-                  <div key={loan.id} className={`space-y-6 ${index !== viewingContract.length - 1 ? 'border-b border-slate-50 pb-8' : ''}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 bg-slate-900 rounded-lg flex items-center justify-center text-[10px] font-black text-white">
-                        {index + 1}
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Detalhamento do Empréstimo</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-8">
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor do Capital</span>
-                        <p className="font-bold text-slate-900 text-xl">R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                      </div>
-                      <div className="space-y-1 text-right">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Valor dos Juros</span>
-                        <p className="font-bold text-emerald-600 text-xl">+ R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-8">
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Taxa de Juros</span>
-                        <p className="font-bold text-slate-900 text-lg">{((loan.interestRate || 0) * 100).toLocaleString('pt-BR')}% ao mês</p>
-                      </div>
-                      <div className="space-y-1 text-right">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data da Operação</span>
-                        <p className="font-bold text-slate-900 text-lg">{safeFormatDate(loan.date, 'dd/MM/yyyy')}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                      <div className="space-y-0.5">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vencimento</span>
-                        <p className="font-black text-neon-red text-xl">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</p>
-                      </div>
-                      <div className="text-right space-y-0.5">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Bruto</span>
-                        <p className="font-black text-slate-900 text-xl">R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center opacity-30">
-                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">ID do Registro</span>
-                      <span className="font-mono text-[8px] font-bold text-slate-500">{loan.id.toUpperCase()}</span>
-                    </div>
+              {/* Minimalist Authentication */}
+              <div className="pt-10 border-t border-slate-100 relative z-10 flex justify-between items-center">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 p-2">
+                    <QrCode className="w-full h-full text-slate-200" />
                   </div>
-                ))}
-              </div>
-
-              {/* PIX Area */}
-              <div className="bg-slate-900 rounded-[32px] p-10 mb-12 shadow-2xl shadow-black/10 relative z-10">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-5 text-center">Chave PIX para Pagamento</p>
-                <p className="text-2xl font-black text-center text-white break-all select-all mb-2 tracking-tight">{userProfile?.pixKey || "NÃO CONFIGURADA"}</p>
-                {userProfile?.pixName && (
-                  <div className="space-y-1 text-center opacity-80">
-                    <p className="text-xs font-bold text-brand-primary uppercase tracking-[0.2em]">
-                      Titular: {userProfile.pixName}
-                    </p>
-                    {userProfile.pixBank && (
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
-                        BANCO: {userProfile.pixBank}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Auth Footer */}
-              <div className="text-center opacity-20 mb-12 relative z-10">
-                <p className="text-[10px] font-mono break-all uppercase tracking-tighter">
-                  AUTENTICAÇÃO: {viewingContract[0].id.toUpperCase()}-{new Date().getTime()}
-                </p>
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-4">Nexus Private - Gestão de Ativos</p>
-              </div>
-
-              {/* Action Buttons (Hidden in PDF) */}
-              <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareAsPDF(false, 'pdf', false)}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingPDF ? (
-                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <FileText className="w-5 h-5" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Comprovante'}
-                </button>
-                <button
-                  onClick={() => setViewingContract(null)}
-                  className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {viewingReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
-            <div id="printable-receipt" className="p-8 sm:p-16 bg-white text-slate-900 printable-content relative overflow-hidden">
-              {/* Background Watermark */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -rotate-12">
-                <span className="text-[120px] font-black tracking-tighter whitespace-nowrap">NEXUS PRIVATE</span>
-              </div>
-
-              {/* Bank-style Header */}
-              <div className="flex flex-col items-center text-center mb-12 relative z-10">
-                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20 overflow-hidden">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Nexus Private</h1>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Comprovante de Recebimento</p>
-              </div>
-
-              {/* Main Amount */}
-              <div className="text-center mb-12 py-12 border-y-2 border-slate-50 relative z-10">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Valor Recebido</p>
-                <h2 className="text-6xl sm:text-7xl font-black tracking-tighter text-slate-900">
-                  R$ {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </h2>
-              </div>
-
-              {/* Details List */}
-              <div className="space-y-8 mb-12 relative z-10">
-                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Pagador</span>
-                  <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{viewingReceipt.clientName}</span>
-                </div>
-                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Recebedor</span>
-                  <div className="text-right max-w-[300px] space-y-1">
-                    <p className="font-black text-slate-900 uppercase text-lg leading-tight">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</p>
-                    {userProfile?.pixBank && (
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BANCO: {userProfile.pixBank}</p>
-                    )}
+                  <div>
+                    <p className="text-[9px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
+                    <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter">{viewingContract[0].id.toUpperCase()}-{new Date().getTime()}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Data do Recebimento</span>
-                    <p className="font-bold text-slate-900 text-xl">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy')}</p>
-                  </div>
-                  <div className="space-y-1 text-right">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID da Transação</span>
-                    <p className="font-mono text-[10px] font-bold text-slate-500 mt-2">{viewingReceipt.id.toUpperCase()}</p>
-                  </div>
+                <div className="text-right opacity-40">
+                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
+                  <p className="text-[7px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
                 </div>
-                <div className="bg-slate-50 rounded-2xl p-8 border border-slate-100">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-3">Descrição da Operação</span>
-                  <p className="font-bold text-slate-900 text-lg leading-relaxed italic">"{viewingReceipt.description}"</p>
-                </div>
-              </div>
-
-              {/* Auth Footer */}
-              <div className="text-center opacity-20 mb-12 relative z-10">
-                <p className="text-[10px] font-mono break-all uppercase tracking-tighter">
-                  AUTENTICAÇÃO: {viewingReceipt.id.toUpperCase()}-{new Date().getTime()}
-                </p>
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-4">Nexus Private - Gestão de Ativos</p>
               </div>
 
               {/* Action Buttons (Hidden in PDF) */}
@@ -2724,11 +2694,123 @@ NEWFILEUID:NONE
                     {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                   </button>
                   <button
-                    onClick={() => downloadOFX(viewingReceipt)}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0"
+                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" />
-                    Exportar OFX
+                    <Printer className="w-4 h-4" />
+                    Imprimir
+                  </button>
+                </div>
+                <button
+                  onClick={() => setViewingContract(null)}
+                  className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingReceipt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
+            <div id="printable-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
+              {/* Elegant Header */}
+              <div className="flex flex-col items-center mb-16 relative z-10">
+                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                  <img 
+                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
+                    className="w-full h-full object-cover grayscale brightness-125" 
+                    alt="Nexus Logo"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
+                <div className="h-px w-12 bg-brand-primary my-4" />
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Recebimento</p>
+              </div>
+
+              {/* Main Amount - Elegant Focus */}
+              <div className="text-center mb-16 relative z-10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Recebido</p>
+                <h2 className="text-6xl font-black tracking-tighter text-slate-900">
+                  <span className="text-2xl mr-2 text-slate-300">R$</span>
+                  {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </h2>
+              </div>
+
+              {/* Essential Details Grid */}
+              <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Recebido</span>
+                  <p className="font-black text-slate-900 uppercase text-base leading-tight">
+                    R$ {(viewingReceipt.amount / (1 + (viewingReceipt.description.includes('%') ? parseFloat(viewingReceipt.description.split('%')[0].split(' ').pop() || '0') / 100 : 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Valor dos Juros</span>
+                  <p className="font-black text-brand-primary uppercase text-base leading-tight">
+                    R$ {(viewingReceipt.amount - (viewingReceipt.amount / (1 + (viewingReceipt.description.includes('%') ? parseFloat(viewingReceipt.description.split('%')[0].split(' ').pop() || '0') / 100 : 0)))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
+                  <p className="font-black text-slate-900 uppercase text-base leading-tight">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">ID Transação</span>
+                  <p className="font-mono text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.slice(0, 12)}</p>
+                </div>
+              </div>
+
+              {/* Description Box - Minimalist */}
+              <div className="mb-16 relative z-10 bg-slate-50 p-8 rounded-3xl border border-slate-100">
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-4">Descrição da Operação</span>
+                <p className="font-bold text-slate-900 text-base leading-relaxed italic">"{viewingReceipt.description}"</p>
+              </div>
+
+              {/* Minimalist Authentication */}
+              <div className="pt-10 border-t border-slate-100 relative z-10 flex justify-between items-center">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 p-2">
+                    <QrCode className="w-full h-full text-slate-200" />
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
+                    <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.toUpperCase()}-{new Date().getTime()}</p>
+                  </div>
+                </div>
+                <div className="text-right opacity-40">
+                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
+                  <p className="text-[7px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
+                </div>
+              </div>
+
+              {/* Action Buttons (Hidden in PDF) */}
+              <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                  </button>
+                  <button
+                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Imprimir
                   </button>
                 </div>
                 <button
