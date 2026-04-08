@@ -29,7 +29,8 @@ import {
   MessageCircle,
   Printer,
   Settings,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { 
   collection, 
@@ -142,7 +143,73 @@ export default function App() {
   const [newPixName, setNewPixName] = useState('');
   const [newPixBank, setNewPixBank] = useState('');
 
-  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf') => {
+  const generateOFX = (action: SystemAction) => {
+    const now = new Date();
+    const timestamp = format(now, "yyyyMMddHHmmss");
+    const datePosted = format(parseISO(action.date), "yyyyMMdd");
+    
+    return `OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<SIGNONMSGSRSV1>
+<SONRS>
+<STATUS>
+<CODE>0</CODE>
+<SEVERITY>INFO</SEVERITY>
+</STATUS>
+<DTSERVER>${timestamp}</DTSERVER>
+<LANGUAGE>POR</LANGUAGE>
+</SONRS>
+</SIGNONMSGSRSV1>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<TRNUID>${action.id}</TRNUID>
+<STATUS>
+<CODE>0</CODE>
+<SEVERITY>INFO</SEVERITY>
+</STATUS>
+<STMTRS>
+<CURDEF>BRL</CURDEF>
+<BANKTRANLIST>
+<DTSTART>${datePosted}</DTSTART>
+<DTEND>${datePosted}</DTEND>
+<STMTTRN>
+<TRNTYPE>CREDIT</TRNTYPE>
+<DTPOSTED>${datePosted}</DTPOSTED>
+<TRNAMT>${action.amount || 0}</TRNAMT>
+<FITID>${action.id}</FITID>
+<NAME>${action.clientName.substring(0, 32)}</NAME>
+<MEMO>${action.description.substring(0, 255)}</MEMO>
+</STMTTRN>
+</BANKTRANLIST>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>`;
+  };
+
+  const downloadOFX = (action: SystemAction) => {
+    const ofxContent = generateOFX(action);
+    const blob = new Blob([ofxContent], { type: 'application/x-ofx' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `comprovante_${action.id}.ofx`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', isWhatsApp = false) => {
     if (isGeneratingPDF) return;
     const elementId = viewingContract ? 'printable-contract' : 'printable-receipt';
     const element = document.getElementById(elementId);
@@ -166,17 +233,29 @@ export default function App() {
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
+        // Force a stable window width during capture to prevent responsive distortion
+        windowWidth: isWhatsApp ? 450 : 600,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
+            // Reset all potential layout-distorting properties
             clonedElement.style.height = 'auto';
             clonedElement.style.maxHeight = 'none';
             clonedElement.style.overflow = 'visible';
             clonedElement.style.margin = '0';
-            // Use actual width but ensure a minimum density for professional look
-            clonedElement.style.width = Math.max(element.offsetWidth, 700) + 'px';
+            clonedElement.style.transform = 'none';
+            clonedElement.style.position = 'relative';
+            clonedElement.style.left = '0';
+            clonedElement.style.top = '0';
+            
+            // Optimized width for sharing
+            if (isWhatsApp) {
+              clonedElement.style.width = '450px';
+              clonedElement.style.padding = '32px';
+            } else {
+              clonedElement.style.width = '600px';
+              clonedElement.style.padding = '40px';
+            }
           }
           
           // 2. Ultra-aggressive sanitization of ALL style tags
@@ -235,6 +314,18 @@ export default function App() {
             .flex { display: flex !important; }
             .grid { display: grid !important; }
             .hidden { display: none !important; }
+            
+            /* Explicitly hide elements marked as no-print during capture */
+            .no-print, .no-print-section {
+              display: none !important;
+              visibility: hidden !important;
+              height: 0 !important;
+              width: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              opacity: 0 !important;
+              pointer-events: none !important;
+            }
             
             /* Force solid colors to avoid capture issues */
             .bg-white { background-color: #ffffff !important; }
@@ -2524,7 +2615,7 @@ export default function App() {
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
                 <button
-                  onClick={() => shareAsPDF(false, 'pdf')}
+                  onClick={() => shareAsPDF(false, 'pdf', false)}
                   disabled={isGeneratingPDF}
                   className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -2533,7 +2624,7 @@ export default function App() {
                   ) : (
                     <FileText className="w-5 h-5" />
                   )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Comprovante'}
                 </button>
                 <button
                   onClick={() => setViewingContract(null)}
@@ -2619,18 +2710,27 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareAsPDF(false, 'pdf')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingPDF ? (
-                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <FileText className="w-5 h-5" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
-                </button>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                  </button>
+                  <button
+                    onClick={() => downloadOFX(viewingReceipt)}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0"
+                  >
+                    <Download className="w-4 h-4" />
+                    Exportar OFX
+                  </button>
+                </div>
                 <button
                   onClick={() => setViewingReceipt(null)}
                   className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
