@@ -2777,24 +2777,45 @@ NEWFILEUID:NONE
               {/* Essential Details Grid */}
               <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
                 <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Recebido</span>
-                  <p className="font-black text-slate-900 uppercase text-base leading-tight">
-                    R$ {(viewingReceipt.amount / (1 + (viewingReceipt.description.includes('%') ? parseFloat(viewingReceipt.description.split('%')[0].split(' ').pop() || '0') / 100 : 0))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Pagador</span>
+                  <p className="font-black text-slate-900 uppercase text-base leading-tight">{viewingReceipt.clientName}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Valor dos Juros</span>
-                  <p className="font-black text-brand-primary uppercase text-base leading-tight">
-                    R$ {(viewingReceipt.amount - (viewingReceipt.amount / (1 + (viewingReceipt.description.includes('%') ? parseFloat(viewingReceipt.description.split('%')[0].split(' ').pop() || '0') / 100 : 0)))).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                </div>
-                <div>
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
                   <p className="font-black text-slate-900 uppercase text-base leading-tight">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Tipo de Recebimento</span>
+                  <p className="font-black text-slate-900 uppercase text-base leading-tight">
+                    {viewingReceipt.description.toLowerCase().includes('juros') ? 'Pagamento de Juros' : 
+                     viewingReceipt.description.toLowerCase().includes('capital') ? 'Amortização de Capital' : 
+                     'Recebimento Geral'}
+                  </p>
                 </div>
                 <div className="text-right">
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">ID Transação</span>
                   <p className="font-mono text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.slice(0, 12)}</p>
+                </div>
+                <div className="col-span-2 pt-6 border-t border-slate-50">
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                        {viewingReceipt.description.toLowerCase().includes('juros') ? 'Valor dos Juros' : 'Capital Recebido'}
+                      </span>
+                      <p className={cn(
+                        "font-black uppercase text-2xl leading-tight",
+                        viewingReceipt.description.toLowerCase().includes('juros') ? "text-brand-primary" : "text-slate-900"
+                      )}>
+                        R$ {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="inline-block px-4 py-2 bg-slate-900 text-white rounded-xl">
+                        <p className="text-[8px] font-black uppercase tracking-widest">Status</p>
+                        <p className="text-[10px] font-bold uppercase">Confirmado</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
