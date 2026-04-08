@@ -136,10 +136,11 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string, pixBank?: string } | null>(null);
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newPixKey, setNewPixKey] = useState('');
   const [newPixName, setNewPixName] = useState('');
+  const [newPixBank, setNewPixBank] = useState('');
 
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf') => {
     if (isGeneratingPDF) return;
@@ -161,7 +162,7 @@ export default function App() {
       });
 
       const canvas = await html2canvas(element, {
-        scale: 3, // Higher scale for better quality
+        scale: 3, 
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -173,33 +174,24 @@ export default function App() {
             clonedElement.style.height = 'auto';
             clonedElement.style.maxHeight = 'none';
             clonedElement.style.overflow = 'visible';
-            // Force a fixed width during capture to prevent responsive shifts
-            clonedElement.style.width = '800px'; 
+            clonedElement.style.margin = '0';
+            // Use actual width but ensure a minimum density for professional look
+            clonedElement.style.width = Math.max(element.offsetWidth, 700) + 'px';
           }
           
-          // ... (rest of the sanitization logic)
-          // 1. DO NOT remove link tags anymore, as it strips layout styles.
-          // Instead, we will override problematic colors via CSS variables.
-
           // 2. Ultra-aggressive sanitization of ALL style tags
           const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
           styleTags.forEach(tag => {
             try {
               let css = tag.innerHTML;
-              // Replace oklch/oklab functions with a safe fallback color
-              // This regex is more aggressive to catch various formats
-              css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
-              
-              // Also catch cases where they might be used in variables
-              css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
-                const parts = match.split(':');
-                if (parts.length >= 2) {
-                  return `${parts[0]}: #777777`;
-                }
-                return match;
-              });
-              
-              tag.innerHTML = css;
+              if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
+                css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
+                css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
+                  const parts = match.split(':');
+                  return parts.length >= 2 ? `${parts[0]}: #777777` : match;
+                });
+                tag.innerHTML = css;
+              }
             } catch (e) {
               console.warn('Could not sanitize style tag', e);
             }
@@ -207,6 +199,8 @@ export default function App() {
 
           const style = clonedDoc.createElement('style');
           style.innerHTML = `
+            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
             :root {
               --color-slate-50: #f8fafc !important;
               --color-slate-100: #f1f5f9 !important;
@@ -225,67 +219,65 @@ export default function App() {
             * {
               box-shadow: none !important;
               text-shadow: none !important;
-              filter: none !important;
-              backdrop-filter: none !important;
-              -webkit-filter: none !important;
               transition: none !important;
               animation: none !important;
-              outline-color: #000000 !important;
-              /* Force standard font rendering */
               -webkit-font-smoothing: antialiased !important;
-              -moz-osx-font-smoothing: grayscale !important;
             }
-            .printable-content, .printable-content * {
+            body, .printable-content, .printable-content * {
+              font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif !important;
               color-scheme: light !important;
               background-image: none !important;
-              border-color: #e2e8f0 !important;
               visibility: visible !important;
             }
-            /* Explicitly fix layout properties that might be affected by cloning */
+            .font-mono, .font-mono * {
+              font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace !important;
+            }
             .flex { display: flex !important; }
             .grid { display: grid !important; }
             .hidden { display: none !important; }
             
-            /* Force standard colors for common classes to bypass oklch */
+            /* Force solid colors to avoid capture issues */
+            .bg-white { background-color: #ffffff !important; }
             .bg-slate-900 { background-color: #0f172a !important; }
             .bg-slate-50 { background-color: #f8fafc !important; }
+            .bg-black { background-color: #000000 !important; }
+            
             .text-slate-900 { color: #0f172a !important; }
             .text-slate-600 { color: #475569 !important; }
             .text-slate-500 { color: #64748b !important; }
             .text-slate-400 { color: #94a3b8 !important; }
-            .bg-emerald-600 { background-color: #059669 !important; }
-            .text-emerald-600 { color: #059669 !important; }
-            .text-brand-danger { color: #ff4d4d !important; }
+            .text-white { color: #ffffff !important; }
+            .text-brand-primary { color: #d4af37 !important; }
+            .text-neon-red { color: #ff3131 !important; text-shadow: none !important; }
           `;
           clonedDoc.head.appendChild(style);
 
-          const elements = clonedDoc.getElementsByTagName('*');
-          for (let i = 0; i < elements.length; i++) {
-            const el = elements[i] as HTMLElement;
-            const styleAttr = el.getAttribute('style');
+          // Only iterate over elements that likely have styles to improve performance
+          const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
+          styledElements.forEach(el => {
+            const htmlEl = el as HTMLElement;
+            const styleAttr = htmlEl.getAttribute('style');
             if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
-              const sanitizedStyle = styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
-              el.setAttribute('style', sanitizedStyle);
+              htmlEl.setAttribute('style', styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777'));
             }
-            if (el.style) {
-              el.style.boxShadow = 'none';
-              el.style.textShadow = 'none';
-              el.style.filter = 'none';
-              el.style.transition = 'none';
-              el.style.animation = 'none';
+            if (htmlEl.style) {
+              htmlEl.style.boxShadow = 'none';
+              htmlEl.style.textShadow = 'none';
+              htmlEl.style.filter = 'none';
+              htmlEl.style.transition = 'none';
+              htmlEl.style.animation = 'none';
               
-              // Explicitly check for background images that might contain gradients with oklch/oklab
-              if (el.style.backgroundImage && (el.style.backgroundImage.includes('oklch') || el.style.backgroundImage.includes('oklab'))) {
-                el.style.backgroundImage = 'none';
-                el.style.backgroundColor = '#000000';
+              if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
+                htmlEl.style.backgroundImage = 'none';
+                htmlEl.style.backgroundColor = '#000000';
               }
 
-              if (el.classList.contains('bg-gradient-to-r') || el.classList.contains('bg-gradient-to-br')) {
-                el.style.backgroundImage = 'none';
-                el.style.backgroundColor = '#000000';
+              if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
+                htmlEl.style.backgroundImage = 'none';
+                htmlEl.style.backgroundColor = '#000000';
               }
             }
-          }
+          });
         }
       });
 
@@ -462,7 +454,8 @@ export default function App() {
               uid: u.uid,
               displayName: u.displayName || '',
               pixKey: '',
-              pixName: ''
+              pixName: '',
+              pixBank: ''
             }, { merge: true });
           }
         });
@@ -482,7 +475,8 @@ export default function App() {
       await updateDoc(userRef, {
         displayName: newDisplayName,
         pixKey: newPixKey,
-        pixName: newPixName
+        pixName: newPixName,
+        pixBank: newPixBank
       });
       setIsSettingsOpen(false);
     } catch (err) {
@@ -1283,6 +1277,7 @@ export default function App() {
                 setNewDisplayName(userProfile?.displayName || user?.displayName || '');
                 setNewPixKey(userProfile?.pixKey || '');
                 setNewPixName(userProfile?.pixName || '');
+                setNewPixBank(userProfile?.pixBank || '');
               }}
               className="p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
               title="Configurações"
@@ -1877,18 +1872,17 @@ export default function App() {
                             R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-8 py-4 text-slate-400 text-xs font-medium">
-                            <div className={cn(
-                              "flex flex-col gap-1",
-                              isOverdue(loan) && "text-brand-danger"
-                            )}>
+                            <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5" />
-                                {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                <span className="text-neon-red font-bold">
+                                  {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                </span>
                               </div>
                               {loan.status === 'Pendente' && (
                                 <span className={cn(
                                   "text-[9px] font-bold uppercase tracking-wider",
-                                  isOverdue(loan) ? "text-brand-danger" : "text-brand-accent"
+                                  isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
                                 )}>
                                   {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
                                    getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
@@ -2160,7 +2154,7 @@ export default function App() {
                         </div>
                         <div className="space-y-1">
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Vencimento</span>
-                          <div className="text-sm font-bold text-white">{safeFormatDate(payingLoan.dueDate, 'dd/MM/yyyy')}</div>
+                          <div className="text-sm font-black text-neon-red">{safeFormatDate(payingLoan.dueDate, 'dd/MM/yyyy')}</div>
                         </div>
                         <div className="space-y-1 text-right">
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Total Bruto</span>
@@ -2333,18 +2327,17 @@ export default function App() {
                             R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                            <td className="px-6 py-4 text-slate-400 text-xs font-medium">
-                            <div className={cn(
-                              "flex flex-col gap-1",
-                              isOverdue(loan) && "text-brand-danger"
-                            )}>
+                            <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5" />
-                                {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                <span className="text-neon-red font-bold">
+                                  {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                </span>
                               </div>
                               {loan.status === 'Pendente' && (
                                 <span className={cn(
                                   "text-[9px] font-bold uppercase tracking-wider",
-                                  isOverdue(loan) ? "text-brand-danger" : "text-brand-accent"
+                                  isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
                                 )}>
                                   {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
                                    getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
@@ -2425,8 +2418,13 @@ export default function App() {
 
               {/* Bank-style Header */}
               <div className="flex flex-col items-center text-center mb-12 relative z-10">
-                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20">
-                  <span className="text-white font-black text-4xl tracking-tighter">NP</span>
+                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20 overflow-hidden">
+                  <img 
+                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
+                    className="w-full h-full object-cover grayscale brightness-125" 
+                    alt="Nexus Logo"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Nexus Private</h1>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Comprovante de Operação de Crédito</p>
@@ -2481,7 +2479,7 @@ export default function App() {
                     <div className="flex justify-between items-center bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                       <div className="space-y-0.5">
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vencimento</span>
-                        <p className="font-black text-brand-danger text-xl">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</p>
+                        <p className="font-black text-neon-red text-xl">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</p>
                       </div>
                       <div className="text-right space-y-0.5">
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Bruto</span>
@@ -2502,9 +2500,16 @@ export default function App() {
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-5 text-center">Chave PIX para Pagamento</p>
                 <p className="text-2xl font-black text-center text-white break-all select-all mb-2 tracking-tight">{userProfile?.pixKey || "NÃO CONFIGURADA"}</p>
                 {userProfile?.pixName && (
-                  <p className="text-xs font-bold text-center text-brand-primary uppercase tracking-[0.2em] opacity-80">
-                    Titular: {userProfile.pixName}
-                  </p>
+                  <div className="space-y-1 text-center opacity-80">
+                    <p className="text-xs font-bold text-brand-primary uppercase tracking-[0.2em]">
+                      Titular: {userProfile.pixName}
+                    </p>
+                    {userProfile.pixBank && (
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">
+                        BANCO: {userProfile.pixBank}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -2553,8 +2558,13 @@ export default function App() {
 
               {/* Bank-style Header */}
               <div className="flex flex-col items-center text-center mb-12 relative z-10">
-                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20">
-                  <span className="text-white font-black text-4xl tracking-tighter">NP</span>
+                <div className="w-24 h-24 bg-black flex items-center justify-center rounded-[32px] mb-6 shadow-2xl shadow-black/20 overflow-hidden">
+                  <img 
+                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
+                    className="w-full h-full object-cover grayscale brightness-125" 
+                    alt="Nexus Logo"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Nexus Private</h1>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mt-2">Comprovante de Recebimento</p>
@@ -2576,7 +2586,12 @@ export default function App() {
                 </div>
                 <div className="flex justify-between items-start border-b border-slate-100 pb-4">
                   <span className="text-xs font-black uppercase tracking-widest text-slate-400 pt-1">Recebedor</span>
-                  <span className="font-black text-slate-900 uppercase text-right max-w-[300px] text-lg leading-tight">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</span>
+                  <div className="text-right max-w-[300px] space-y-1">
+                    <p className="font-black text-slate-900 uppercase text-lg leading-tight">{userProfile?.displayName || user?.displayName || 'Nexus Private'}</p>
+                    {userProfile?.pixBank && (
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">BANCO: {userProfile.pixBank}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-8">
                   <div className="space-y-1">
@@ -2604,32 +2619,18 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <button
-                    onClick={() => shareAsPDF(false, 'image')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-4 px-6 py-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-emerald-600/20 hover:shadow-emerald-600/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Share2 className="w-5 h-5" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar Imagem'}
-                  </button>
-                  <button
-                    onClick={() => shareAsPDF(false, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <FileText className="w-5 h-5" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
-                  </button>
-                </div>
+                <button
+                  onClick={() => shareAsPDF(false, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-4 px-6 py-6 bg-slate-900 text-white font-black uppercase tracking-widest text-xs rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingPDF ? (
+                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <FileText className="w-5 h-5" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar PDF'}
+                </button>
                 <button
                   onClick={() => setViewingReceipt(null)}
                   className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
@@ -2704,8 +2705,21 @@ export default function App() {
                   placeholder="Nome completo do titular"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-brand-primary/50 transition-all"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                  Nome do Banco
+                </label>
+                <input 
+                  type="text"
+                  value={newPixBank}
+                  onChange={(e) => setNewPixBank(e.target.value)}
+                  placeholder="Ex: Nubank, Itaú, Bradesco"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-brand-primary/50 transition-all"
+                />
                 <p className="text-[10px] text-slate-500 italic">
-                  O nome do titular aparecerá logo abaixo da chave PIX no comprovante.
+                  O nome do banco aparecerá junto ao nome do titular nos comprovantes e contratos.
                 </p>
               </div>
 

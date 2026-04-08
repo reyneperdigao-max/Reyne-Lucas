@@ -95,6 +95,16 @@
   @apply bg-white/[0.05] hover:bg-white/[0.1] text-white px-6 py-3 rounded-2xl text-sm font-bold transition-all border border-white/[0.05] active:scale-95;
 }
 
+.text-neon-red {
+  color: #ff3131 !important;
+  text-shadow: 0 0 5px rgba(255, 49, 49, 0.8), 0 0 10px rgba(255, 49, 49, 0.5);
+}
+
+.printable-content .text-neon-red {
+  color: #ff3131 !important;
+  text-shadow: none !important;
+}
+
 @media print {
   body * {
     visibility: hidden;
