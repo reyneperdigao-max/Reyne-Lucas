@@ -2661,6 +2661,38 @@ NEWFILEUID:NONE
                 </div>
               </div>
 
+              {/* Individual Contracts Breakdown */}
+              {viewingContract.length > 1 && (
+                <div className="mb-16 relative z-10">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-6 pb-2 border-b border-slate-50">Detalhamento Individual</p>
+                  <div className="space-y-6">
+                    {viewingContract.map((loan, index) => (
+                      <div key={loan.id} className="flex justify-between items-start py-2 group">
+                        <div className="flex gap-4">
+                          <span className="text-[10px] font-black text-slate-300 mt-1">0{index + 1}</span>
+                          <div>
+                            <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">Contrato {loan.id.slice(0, 8)}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Venc. {safeFormatDate(loan.dueDate, 'dd/MM/y')}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="flex flex-col gap-1">
+                            <p className="text-[10px] font-bold text-slate-900">
+                              <span className="text-slate-300 mr-2">CAPITAL</span>
+                              R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-[10px] font-bold text-brand-primary">
+                              <span className="text-slate-300 mr-2">JUROS</span>
+                              R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Minimalist Authentication */}
               <div className="pt-10 border-t border-slate-100 relative z-10 flex justify-between items-center">
                 <div className="flex items-center gap-6">
