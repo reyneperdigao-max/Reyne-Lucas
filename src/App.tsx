@@ -1445,7 +1445,7 @@ NEWFILEUID:NONE
           />
           <StatCard 
             title="Atrasados" 
-            value={`${stats.atrasadosCount} ${stats.atrasadosCount === 1 ? 'Empréstimo' : 'Empréstimos'}`} 
+            value={stats.atrasadosCount} 
             icon={<AlertCircle className="w-5 h-5" />}
             color="danger"
             trend="Risco"
