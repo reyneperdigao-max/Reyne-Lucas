@@ -2675,6 +2675,12 @@ NEWFILEUID:NONE
 
               {/* Essential Details Grid */}
               <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
+                <div className="col-span-2 pb-6 border-b border-slate-50">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Cliente Beneficiário</span>
+                  <p className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                    {viewingContract[0].clientName}
+                  </p>
+                </div>
                 <div>
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Emprestado</span>
                   <p className="font-black text-slate-900 uppercase text-sm leading-tight">
