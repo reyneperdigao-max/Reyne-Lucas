@@ -1102,17 +1102,18 @@ NEWFILEUID:NONE
 
   // --- Financial Calculations ---
   const filteredLoans = useMemo(() => {
+    let result = loans;
+
     if (filterDate) {
-      return loans.filter(l => {
+      result = result.filter(l => {
         const day = parseISO(l.dueDate).getDate();
         return day === parseInt(filterDate);
       });
     }
 
-    let result = loans;
     if (activeTab === 'Empréstimos') {
-      result = loans.filter(l => l.status !== 'Pago');
-      if (!command.trim() && !showOnlyOverdue) {
+      result = result.filter(l => l.status !== 'Pago');
+      if (!command.trim() && !showOnlyOverdue && !filterDate) {
         result = [...result]
           .sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime())
           .slice(0, 5);
@@ -1485,6 +1486,7 @@ NEWFILEUID:NONE
                       setShowOnlyCapital(false);
                       setShowOnlyInterest(false);
                       setFilterDate('');
+                      setCommand('');
                       setIsMoreMenuOpen(false);
                     }}
                     className={cn(
@@ -1528,6 +1530,7 @@ NEWFILEUID:NONE
                               setShowOnlyCapital(false);
                               setShowOnlyInterest(false);
                               setFilterDate('');
+                              setCommand('');
                               setIsMoreMenuOpen(false);
                             }}
                             className={cn(
@@ -1636,7 +1639,7 @@ NEWFILEUID:NONE
           </div>
 
           <div className="glass-card overflow-hidden">
-            {activeTab === 'Clientes' && !filterDate && (
+            {activeTab === 'Clientes' && (
               <div className="p-4 border-b border-white/[0.03] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="relative group flex-1">
                   <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
@@ -1646,19 +1649,22 @@ NEWFILEUID:NONE
                   <input 
                     type="text"
                     placeholder="Buscar cliente"
-                    className="w-full bg-white/[0.02] rounded-2xl py-4 pl-16 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:bg-white/[0.04] transition-all text-base font-bold tracking-tight border border-white/[0.05] focus:border-brand-primary/30"
+                    className="w-full bg-white/[0.02] rounded-2xl py-4 pl-16 pr-12 text-white placeholder:text-slate-600 focus:outline-none focus:bg-white/[0.04] transition-all text-base font-bold tracking-tight border border-white/[0.05] focus:border-brand-primary/30"
                     value={command}
                     onChange={(e) => {
                       const val = e.target.value;
                       setCommand(val);
-                      if (val.trim()) {
-                        setFilterDate('');
-                        setShowOnlyOverdue(false);
-                        setShowOnlyCapital(false);
-                        setShowOnlyInterest(false);
-                      }
                     }}
                   />
+                  {command && (
+                    <button 
+                      onClick={() => setCommand('')}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-white transition-colors"
+                      title="Limpar pesquisa"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 
                 <div className="flex items-center gap-4 shrink-0">
@@ -1674,13 +1680,6 @@ NEWFILEUID:NONE
                       value={filterDate}
                       onChange={(e) => {
                         setFilterDate(e.target.value);
-                        if (e.target.value) {
-                          setActiveTab('Clientes');
-                          setCommand('');
-                          setShowOnlyOverdue(false);
-                          setShowOnlyCapital(false);
-                          setShowOnlyInterest(false);
-                        }
                       }}
                     >
                       <option value="" className="bg-slate-900">Dia</option>
