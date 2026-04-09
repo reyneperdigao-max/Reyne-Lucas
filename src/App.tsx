@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -33,7 +33,8 @@ import {
   Download,
   QrCode,
   Copy,
-  MoreVertical
+  MoreVertical,
+  User as UserIcon
 } from 'lucide-react';
 import { 
   collection, 
@@ -71,6 +72,7 @@ interface Loan {
   id: string;
   clientName: string;
   clientPhone?: string;
+  clientAddress?: string;
   date: string;
   dueDate: string;
   capital: number;
@@ -141,6 +143,8 @@ export default function App() {
   const [filterDate, setFilterDate] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
+  const hasShownWelcome = useRef(false);
   const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string, pixBank?: string } | null>(null);
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newPixKey, setNewPixKey] = useState('');
@@ -250,9 +254,17 @@ NEWFILEUID:NONE
             clonedElement.style.left = '0';
             clonedElement.style.top = '0';
             clonedElement.style.width = '800px';
-            clonedElement.style.padding = '60px';
+            clonedElement.style.padding = '80px'; 
             clonedElement.style.display = 'block';
             
+            // Force bold weights for html2canvas to ensure they are captured
+            const boldElements = clonedElement.querySelectorAll('.font-bold, .font-extrabold, .font-black, b, strong');
+            boldElements.forEach(el => {
+              if (el instanceof HTMLElement) {
+                el.style.fontWeight = '700';
+              }
+            });
+
             const allText = clonedElement.querySelectorAll('*');
             allText.forEach(el => {
               if (el instanceof HTMLElement) {
@@ -472,6 +484,7 @@ NEWFILEUID:NONE
   const [newLoan, setNewLoan] = useState({
     clientName: '',
     clientPhone: '',
+    clientAddress: '',
     capital: '',
     interestRate: '', // No default
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -526,15 +539,30 @@ NEWFILEUID:NONE
 
   // --- Firebase Auth ---
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setIsAuthReady(true);
+
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (u) {
         // Fetch user profile
         const userRef = doc(db, 'users', u.uid);
-        const unsubProfile = onSnapshot(userRef, (docSnap) => {
+        unsubProfile = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
-            setUserProfile(docSnap.data() as any);
+            const profile = docSnap.data() as any;
+            setUserProfile(profile);
+            // Show welcome message when profile is loaded for the first time after login
+            if (!hasShownWelcome.current) {
+              setWelcomeMessage(`BEM VINDO ${profile.displayName || u.displayName || 'USUÁRIO'}`);
+              hasShownWelcome.current = true;
+              setTimeout(() => setWelcomeMessage(null), 5000);
+            }
           } else {
             // Create profile if doesn't exist
             setDoc(userRef, {
@@ -548,12 +576,17 @@ NEWFILEUID:NONE
             }, { merge: true });
           }
         });
-        return () => unsubProfile();
       } else {
         setUserProfile(null);
+        setWelcomeMessage(null);
+        hasShownWelcome.current = false;
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   const handleSaveProfile = async () => {
@@ -752,6 +785,7 @@ NEWFILEUID:NONE
     const loanData: any = {
       clientName: newLoan.clientName,
       clientPhone: newLoan.clientPhone,
+      clientAddress: newLoan.clientAddress,
       date: newLoan.date,
       dueDate: newLoan.dueDate,
       capital: capitalNum,
@@ -766,13 +800,18 @@ NEWFILEUID:NONE
         await updateDoc(doc(db, 'loans', editingLoanId), loanData);
         await logAction('loan_updated', `Empréstimo atualizado para ${loanData.clientName}`, loanData.clientName, editingLoanId, loanData.capital);
         
-        // If name or phone changed, bulk update all other loans for this client
-        if (oldLoan && (oldLoan.clientName !== newLoan.clientName || oldLoan.clientPhone !== newLoan.clientPhone)) {
+        // If name, phone or address changed, bulk update all other loans for this client
+        if (oldLoan && (
+          oldLoan.clientName !== newLoan.clientName || 
+          oldLoan.clientPhone !== newLoan.clientPhone ||
+          oldLoan.clientAddress !== newLoan.clientAddress
+        )) {
           const otherLoans = loans.filter(l => l.clientName === oldLoan.clientName && l.id !== editingLoanId);
           const batch = otherLoans.map(l => 
             updateDoc(doc(db, 'loans', l.id), {
               clientName: newLoan.clientName,
               clientPhone: newLoan.clientPhone,
+              clientAddress: newLoan.clientAddress,
             })
           );
           await Promise.all(batch);
@@ -791,6 +830,7 @@ NEWFILEUID:NONE
       setNewLoan({
         clientName: '',
         clientPhone: '',
+        clientAddress: '',
         capital: '',
         interestRate: '',
         date: format(new Date(), 'yyyy-MM-dd'),
@@ -806,6 +846,7 @@ NEWFILEUID:NONE
     setNewLoan({
       clientName: loan.clientName,
       clientPhone: loan.clientPhone || '',
+      clientAddress: loan.clientAddress || '',
       capital: loan.capital.toString(),
       interestRate: (loan.interestRate * 100).toString(),
       date: loan.date,
@@ -1094,7 +1135,7 @@ NEWFILEUID:NONE
   }, [loans, activeTab, command, showOnlyOverdue, filterDate]);
 
   const clients = useMemo(() => {
-    const clientMap = new Map<string, { name: string, phone: string, totalCapital: number, loanCount: number, activeDebt: number }>();
+    const clientMap = new Map<string, { name: string, phone: string, address: string, totalCapital: number, loanCount: number, activeDebt: number }>();
     
     const relevantLoans = filterDate 
       ? loans.filter(l => {
@@ -1104,7 +1145,14 @@ NEWFILEUID:NONE
       : loans;
 
     relevantLoans.forEach(loan => {
-      const existing = clientMap.get(loan.clientName) || { name: loan.clientName, phone: loan.clientPhone || '', totalCapital: 0, loanCount: 0, activeDebt: 0 };
+      const existing = clientMap.get(loan.clientName) || { 
+        name: loan.clientName, 
+        phone: loan.clientPhone || '', 
+        address: loan.clientAddress || '',
+        totalCapital: 0, 
+        loanCount: 0, 
+        activeDebt: 0 
+      };
       existing.totalCapital += loan.capital + (loan.capitalPago || 0);
       existing.loanCount += 1;
       if (loan.status !== 'Pago') {
@@ -1112,6 +1160,9 @@ NEWFILEUID:NONE
       }
       if (loan.clientPhone && !existing.phone) {
         existing.phone = loan.clientPhone;
+      }
+      if (loan.clientAddress && !existing.address) {
+        existing.address = loan.clientAddress;
       }
       clientMap.set(loan.clientName, existing);
     });
@@ -1172,12 +1223,16 @@ NEWFILEUID:NONE
     const atrasado = overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0);
     const atrasadosCount = overdueLoans.length;
     
+    // Calculate total unique clients
+    const totalClients = new Set(loans.map(l => l.clientName)).size;
+    
     return {
       capitalLiberado,
       capitalRecebido,
       jurosRealizados,
       atrasado,
-      atrasadosCount
+      atrasadosCount,
+      totalClients
     };
   }, [loans]);
 
@@ -1266,56 +1321,6 @@ NEWFILEUID:NONE
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : 'Entrar'}
                 </button>
-                <div className="flex items-center justify-center px-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode('forgot');
-                      setError(null);
-                    }}
-                    className="text-[10px] text-slate-500 hover:text-white transition-colors uppercase tracking-wider"
-                  >
-                    Esqueceu a senha?
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {authMode === 'forgot' && (
-              <form
-                onSubmit={handleForgotPassword}
-                className="space-y-4"
-              >
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    type="email"
-                    placeholder="E-mail de recuperação"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-4 pl-12 pr-4 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-brand-primary/50 transition-colors"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : 'Recuperar Senha'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('login');
-                    setError(null);
-                  }}
-                  className="w-full text-[10px] text-slate-500 hover:text-white transition-colors uppercase tracking-wider text-center"
-                >
-                  Voltar para o Login
-                </button>
               </form>
             )}
           </div>
@@ -1384,6 +1389,21 @@ NEWFILEUID:NONE
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10 relative z-10">
+        {/* Welcome Message */}
+        {welcomeMessage && (
+          <div 
+            className="bg-brand-primary/10 border border-brand-primary/20 rounded-2xl p-6 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500"
+          >
+            <div className="w-10 h-10 rounded-xl bg-brand-primary/20 flex items-center justify-center text-brand-primary">
+              <UserIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-white font-bold tracking-wider uppercase text-sm">{welcomeMessage}</h2>
+              <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-1">Acesso autorizado ao Nexus Private Dashboard</p>
+            </div>
+          </div>
+        )}
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard 
@@ -1436,59 +1456,6 @@ NEWFILEUID:NONE
               setCommand('');
             }}
           />
-        </div>
-
-        {/* Command Bar */}
-        <div className="glass-card p-2 shadow-2xl">
-          <div className="relative group">
-            <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
-              <Search className="w-5 h-5 text-slate-500 group-focus-within:text-brand-primary transition-colors" />
-              <div className="h-4 w-px bg-white/10" />
-            </div>
-            <input 
-              type="text"
-              placeholder="Buscar cliente"
-              className="w-full bg-transparent rounded-2xl py-5 pl-16 pr-4 text-white placeholder:text-slate-600 focus:outline-none transition-all text-base font-bold tracking-tight"
-              value={command}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCommand(val);
-                if (val.trim()) {
-                  setFilterDate('');
-                  setShowOnlyOverdue(false);
-                  setShowOnlyCapital(false);
-                  setShowOnlyInterest(false);
-                }
-              }}
-            />
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors">
-                <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                <select 
-                  className="bg-transparent text-[10px] font-bold text-white uppercase tracking-widest focus:outline-none [color-scheme:dark] cursor-pointer"
-                  value={filterDate}
-                  onChange={(e) => {
-                    setFilterDate(e.target.value);
-                    if (e.target.value) {
-                      setActiveTab('Clientes');
-                      setCommand('');
-                      setShowOnlyOverdue(false);
-                      setShowOnlyCapital(false);
-                      setShowOnlyInterest(false);
-                    }
-                  }}
-                >
-                  <option value="" className="bg-slate-900">Dia</option>
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                    <option key={day} value={day.toString()} className="bg-slate-900">
-                      Dia {day}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <kbd className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-[10px] text-slate-500 font-black tracking-widest">ENTER</kbd>
-            </div>
-          </div>
         </div>
 
         {/* Error Alert */}
@@ -1669,6 +1636,64 @@ NEWFILEUID:NONE
           </div>
 
           <div className="glass-card overflow-hidden">
+            {activeTab === 'Clientes' && !filterDate && (
+              <div className="p-4 border-b border-white/[0.03] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="relative group flex-1">
+                  <div className="absolute left-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                    <Search className="w-5 h-5 text-slate-500 group-focus-within:text-brand-primary transition-colors" />
+                    <div className="h-4 w-px bg-white/10" />
+                  </div>
+                  <input 
+                    type="text"
+                    placeholder="Buscar cliente"
+                    className="w-full bg-white/[0.02] rounded-2xl py-4 pl-16 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:bg-white/[0.04] transition-all text-base font-bold tracking-tight border border-white/[0.05] focus:border-brand-primary/30"
+                    value={command}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCommand(val);
+                      if (val.trim()) {
+                        setFilterDate('');
+                        setShowOnlyOverdue(false);
+                        setShowOnlyCapital(false);
+                        setShowOnlyInterest(false);
+                      }
+                    }}
+                  />
+                </div>
+                
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex flex-col items-end px-4 border-r border-white/10">
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total de Clientes</span>
+                    <span className="text-lg font-bold text-brand-primary">{stats.totalClients}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <select 
+                      className="bg-transparent text-[10px] font-bold text-white uppercase tracking-widest focus:outline-none [color-scheme:dark] cursor-pointer"
+                      value={filterDate}
+                      onChange={(e) => {
+                        setFilterDate(e.target.value);
+                        if (e.target.value) {
+                          setActiveTab('Clientes');
+                          setCommand('');
+                          setShowOnlyOverdue(false);
+                          setShowOnlyCapital(false);
+                          setShowOnlyInterest(false);
+                        }
+                      }}
+                    >
+                      <option value="" className="bg-slate-900">Dia</option>
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                        <option key={day} value={day.toString()} className="bg-slate-900">
+                          Dia {day}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="overflow-x-auto">
               {activeTab === 'Clientes' && !filterDate ? (
                 <table className="w-full text-left border-collapse">
@@ -2193,7 +2218,8 @@ NEWFILEUID:NONE
                           setNewLoan({
                             ...newLoan, 
                             clientName: name,
-                            clientPhone: existingClient.phone || newLoan.clientPhone
+                            clientPhone: existingClient.phone || newLoan.clientPhone,
+                            clientAddress: existingClient.address || newLoan.clientAddress
                           });
                         } else {
                           setNewLoan({...newLoan, clientName: name});
@@ -2215,6 +2241,17 @@ NEWFILEUID:NONE
                       className="w-full glass-input"
                       value={newLoan.clientPhone}
                       onChange={(e) => setNewLoan({...newLoan, clientPhone: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Endereço Completo</label>
+                    <input 
+                      type="text"
+                      placeholder="Rua, Número, Bairro, Cidade..."
+                      className="w-full glass-input"
+                      value={newLoan.clientAddress}
+                      onChange={(e) => setNewLoan({...newLoan, clientAddress: e.target.value})}
                     />
                   </div>
 
@@ -2623,16 +2660,16 @@ NEWFILEUID:NONE
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
+                <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Operação</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Operação</p>
               </div>
 
               {/* Main Amount - Elegant Focus */}
               <div className="text-center mb-16 relative z-10">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Total da Operação</p>
-                <h2 className="text-6xl font-black tracking-tighter text-slate-900">
-                  <span className="text-2xl mr-2 text-slate-300">R$</span>
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Total da Operação</p>
+                <h2 className="text-5xl font-black tracking-tighter text-slate-900">
+                  <span className="text-xl mr-2 text-slate-300">R$</span>
                   {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
               </div>
@@ -2640,48 +2677,48 @@ NEWFILEUID:NONE
               {/* Essential Details Grid */}
               <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
                 <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Emprestado</span>
-                  <p className="font-black text-slate-900 uppercase text-base leading-tight">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Emprestado</span>
+                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">
                     R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Valor dos Juros</span>
-                  <p className="font-black text-brand-primary uppercase text-base leading-tight">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Valor dos Juros</span>
+                  <p className="font-black text-brand-primary uppercase text-sm leading-tight">
                     R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
-                  <p className="font-black text-slate-900 uppercase text-base leading-tight">{safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy HH:mm')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
+                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy HH:mm')}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Vencimento Principal</span>
-                  <p className="font-black text-neon-red uppercase text-base leading-tight">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Vencimento Principal</span>
+                  <p className="font-black text-neon-red uppercase text-sm leading-tight">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</p>
                 </div>
               </div>
 
               {/* Individual Contracts Breakdown */}
               {viewingContract.length > 1 && (
                 <div className="mb-16 relative z-10">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-6 pb-2 border-b border-slate-50">Detalhamento Individual</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-6 pb-2 border-b border-slate-50">Detalhamento Individual</p>
                   <div className="space-y-6">
                     {viewingContract.map((loan, index) => (
                       <div key={loan.id} className="flex justify-between items-start py-2 group">
                         <div className="flex gap-4">
-                          <span className="text-[10px] font-black text-slate-300 mt-1">0{index + 1}</span>
+                          <span className="text-[9px] font-black text-slate-300 mt-1">0{index + 1}</span>
                           <div>
-                            <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">Contrato {loan.id.slice(0, 8)}</p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Venc. {safeFormatDate(loan.dueDate, 'dd/MM/y')}</p>
+                            <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider">Contrato {loan.id.slice(0, 8)}</p>
+                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">Venc. {safeFormatDate(loan.dueDate, 'dd/MM/y')}</p>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="flex flex-col gap-1">
-                            <p className="text-[10px] font-bold text-slate-900">
+                            <p className="text-[9px] font-bold text-slate-900">
                               <span className="text-slate-300 mr-2">CAPITAL</span>
                               R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
-                            <p className="text-[10px] font-bold text-brand-primary">
+                            <p className="text-[9px] font-bold text-brand-primary">
                               <span className="text-slate-300 mr-2">JUROS</span>
                               R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
@@ -2700,13 +2737,13 @@ NEWFILEUID:NONE
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
-                    <p className="text-[9px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
-                    <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter">{viewingContract[0].id.toUpperCase()}-{new Date().getTime()}</p>
+                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
+                    <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">{viewingContract[0].id.toUpperCase()}-{new Date().getTime()}</p>
                   </div>
                 </div>
                 <div className="text-right opacity-40">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
-                  <p className="text-[7px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
+                  <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
+                  <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
                 </div>
               </div>
 
@@ -2760,16 +2797,16 @@ NEWFILEUID:NONE
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="text-2xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
+                <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Recebimento</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Recebimento</p>
               </div>
 
               {/* Main Amount - Elegant Focus */}
               <div className="text-center mb-16 relative z-10">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Recebido</p>
-                <h2 className="text-6xl font-black tracking-tighter text-slate-900">
-                  <span className="text-2xl mr-2 text-slate-300">R$</span>
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Recebido</p>
+                <h2 className="text-5xl font-black tracking-tighter text-slate-900">
+                  <span className="text-xl mr-2 text-slate-300">R$</span>
                   {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
               </div>
@@ -2777,33 +2814,42 @@ NEWFILEUID:NONE
               {/* Essential Details Grid */}
               <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
                 <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Pagador</span>
-                  <p className="font-black text-slate-900 uppercase text-base leading-tight">{viewingReceipt.clientName}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Pagador</span>
+                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{viewingReceipt.clientName}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
-                  <p className="font-black text-slate-900 uppercase text-base leading-tight">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
+                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Tipo de Recebimento</span>
-                  <p className="font-black text-slate-900 uppercase text-base leading-tight">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Tipo de Recebimento</span>
+                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">
                     {viewingReceipt.description.toLowerCase().includes('juros') ? 'Pagamento de Juros' : 
                      viewingReceipt.description.toLowerCase().includes('capital') ? 'Amortização de Capital' : 
                      'Recebimento Geral'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">ID Transação</span>
-                  <p className="font-mono text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.slice(0, 12)}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Recebedor</span>
+                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">
+                    {userProfile?.displayName || user?.displayName || 'Nexus Private'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">ID Transação</span>
+                  <p className="font-mono text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.slice(0, 12)}</p>
+                </div>
+                <div className="text-right">
+                  {/* Empty space to maintain grid alignment or add another field if needed */}
                 </div>
                 <div className="col-span-2 pt-6 border-t border-slate-50">
                   <div className="flex justify-between items-end">
                     <div>
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">
                         {viewingReceipt.description.toLowerCase().includes('juros') ? 'Valor dos Juros' : 'Capital Recebido'}
                       </span>
                       <p className={cn(
-                        "font-black uppercase text-2xl leading-tight",
+                        "font-black uppercase text-xl leading-tight",
                         viewingReceipt.description.toLowerCase().includes('juros') ? "text-brand-primary" : "text-slate-900"
                       )}>
                         R$ {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -2811,8 +2857,8 @@ NEWFILEUID:NONE
                     </div>
                     <div className="text-right">
                       <div className="inline-block px-4 py-2 bg-slate-900 text-white rounded-xl">
-                        <p className="text-[8px] font-black uppercase tracking-widest">Status</p>
-                        <p className="text-[10px] font-bold uppercase">Confirmado</p>
+                        <p className="text-[7px] font-black uppercase tracking-widest">Status</p>
+                        <p className="text-[9px] font-bold uppercase">Confirmado</p>
                       </div>
                     </div>
                   </div>
@@ -2821,8 +2867,8 @@ NEWFILEUID:NONE
 
               {/* Description Box - Minimalist */}
               <div className="mb-16 relative z-10 bg-slate-50 p-8 rounded-3xl border border-slate-100">
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-4">Descrição da Operação</span>
-                <p className="font-bold text-slate-900 text-base leading-relaxed italic">"{viewingReceipt.description}"</p>
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-4">Descrição da Operação</span>
+                <p className="font-bold text-slate-900 text-sm leading-relaxed italic">"{viewingReceipt.description}"</p>
               </div>
 
               {/* Minimalist Authentication */}
@@ -2832,13 +2878,13 @@ NEWFILEUID:NONE
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
-                    <p className="text-[9px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
-                    <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.toUpperCase()}-{new Date().getTime()}</p>
+                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
+                    <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">{viewingReceipt.id.toUpperCase()}-{new Date().getTime()}</p>
                   </div>
                 </div>
                 <div className="text-right opacity-40">
-                  <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
-                  <p className="text-[7px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
+                  <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
+                  <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
                 </div>
               </div>
 

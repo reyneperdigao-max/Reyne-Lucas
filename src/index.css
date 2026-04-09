@@ -105,23 +105,38 @@
   text-shadow: none !important;
 }
 
+@page {
+  margin: 0;
+  size: auto;
+}
+
 @media print {
   body * {
     visibility: hidden;
   }
-  #printable-contract, #printable-contract * {
+  .printable-content, .printable-content * {
     visibility: visible;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
-  #printable-contract {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+  .printable-content {
+    position: relative !important;
+    margin: 0 auto !important;
+    width: 800px !important;
+    min-height: 100% !important;
     background: white !important;
     color: black !important;
-    padding: 40px !important;
     border: none !important;
     box-shadow: none !important;
+    padding: 80px !important; /* Force the sm:p-20 equivalent for consistency */
+  }
+  /* Ensure bold fonts are preserved in print */
+  .printable-content .font-bold,
+  .printable-content .font-extrabold,
+  .printable-content .font-black,
+  .printable-content b,
+  .printable-content strong {
+    font-weight: 700 !important;
   }
   .no-print {
     display: none !important;
