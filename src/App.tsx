@@ -1344,7 +1344,7 @@ NEWFILEUID:NONE
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-black border-b border-white/[0.03]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-24 flex items-center justify-between">
+        <div className="w-full px-6 h-24 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-1 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl">
               <img 
@@ -1389,7 +1389,7 @@ NEWFILEUID:NONE
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10 relative z-10">
+      <main className="w-full px-6 py-10 space-y-10 relative z-10">
         {/* Welcome Message */}
         {welcomeMessage && (
           <div 
