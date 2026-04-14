@@ -148,7 +148,10 @@ export default function App() {
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const hasShownWelcome = useRef(false);
   const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string, pixBank?: string } | null>(null);
-  const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+  const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
+    const saved = localStorage.getItem('nexus_privacy_mode');
+    return saved === 'true';
+  });
   const [newDisplayName, setNewDisplayName] = useState('');
 
   const maskValue = (value: string | number) => {
@@ -1375,7 +1378,11 @@ NEWFILEUID:NONE
             </div>
             <div className="h-8 w-px bg-white/10 hidden md:block" />
             <button 
-              onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+              onClick={() => {
+                const newValue = !isPrivacyMode;
+                setIsPrivacyMode(newValue);
+                localStorage.setItem('nexus_privacy_mode', String(newValue));
+              }}
               className="p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
               title={isPrivacyMode ? "Mostrar Números" : "Ocultar Números"}
             >
