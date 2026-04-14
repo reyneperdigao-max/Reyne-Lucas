@@ -34,6 +34,8 @@ import {
   QrCode,
   Copy,
   MoreVertical,
+  Eye,
+  EyeOff,
   User as UserIcon
 } from 'lucide-react';
 import { 
@@ -146,7 +148,13 @@ export default function App() {
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const hasShownWelcome = useRef(false);
   const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string, pixBank?: string } | null>(null);
+  const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState('');
+
+  const maskValue = (value: string | number) => {
+    if (!isPrivacyMode) return value.toString();
+    return '••••';
+  };
   const [newPixKey, setNewPixKey] = useState('');
   const [newPixName, setNewPixName] = useState('');
   const [newPixBank, setNewPixBank] = useState('');
@@ -1367,6 +1375,13 @@ NEWFILEUID:NONE
             </div>
             <div className="h-8 w-px bg-white/10 hidden md:block" />
             <button 
+              onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+              className="p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
+              title={isPrivacyMode ? "Mostrar Números" : "Ocultar Números"}
+            >
+              {isPrivacyMode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+            <button 
               onClick={() => {
                 setIsSettingsOpen(true);
                 setNewDisplayName(userProfile?.displayName || user?.displayName || '');
@@ -1409,14 +1424,14 @@ NEWFILEUID:NONE
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard 
             title="Capital Liberado" 
-            value={`R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
+            value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
             icon={<DollarSign className="w-5 h-5" />}
             color="primary"
             trend="Ativo"
           />
           <StatCard 
             title="Capital Recebido" 
-            value={`R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
+            value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
             icon={<Wallet className="w-5 h-5" />}
             color="accent"
             trend="Liquidado"
@@ -1431,7 +1446,7 @@ NEWFILEUID:NONE
           />
           <StatCard 
             title="Juros Realizados" 
-            value={`R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
+            value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
             icon={<TrendingUp className="w-5 h-5" />}
             color="secondary"
             trend="Lucro"
@@ -1446,7 +1461,7 @@ NEWFILEUID:NONE
           />
           <StatCard 
             title="Atrasados" 
-            value={stats.atrasadosCount} 
+            value={maskValue(stats.atrasadosCount)} 
             icon={<AlertCircle className="w-5 h-5" />}
             color="danger"
             trend="Risco"
