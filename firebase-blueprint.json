@@ -28,7 +28,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["Pendente", "Pago", "Atrasado"],
+          "enum": ["Pendente", "Pago", "Atrasado", "Agendado"],
           "description": "The current status of the loan."
         },
         "uid": {
@@ -66,7 +66,8 @@
         "clientName": { "type": "string" },
         "loanId": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
-        "uid": { "type": "string" }
+        "uid": { "type": "string" },
+        "confirmed": { "type": "boolean", "description": "Whether the transaction has been verified." }
       },
       "required": ["type", "description", "clientName", "loanId", "date", "uid"]
     }

@@ -59,7 +59,8 @@ service cloud.firestore {
              data.loanId is string &&
              data.date is string &&
              data.uid == request.auth.uid &&
-             (!('amount' in data) || data.amount is number);
+             (!('amount' in data) || data.amount is number) &&
+             (!('confirmed' in data) || data.confirmed is bool);
     }
 
     function isValidLoan(data) {
@@ -72,7 +73,7 @@ service cloud.firestore {
              data.interestRate is number && data.interestRate >= 0 &&
              // Use a small epsilon for float comparison if needed, but here we expect exact match from JS
              math.abs(data.totalBruto - (data.capital * (1 + data.interestRate))) < 0.01 &&
-             data.status in ['Pendente', 'Pago', 'Atrasado'] &&
+             data.status in ['Pendente', 'Pago', 'Atrasado', 'Agendado'] &&
              data.uid == request.auth.uid &&
              data.createdAt is string &&
              data.capitalPago is number &&
@@ -82,10 +83,15 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role', 'uid']) &&
-             data.email is string && isValidEmail(data.email) &&
+             data.email is string &&
              data.role in ['admin', 'user'] &&
              data.uid == request.auth.uid &&
-             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100));
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('pixKey' in data) || (data.pixKey is string && data.pixKey.size() < 200)) &&
+             (!('pixName' in data) || (data.pixName is string && data.pixName.size() < 100)) &&
+             (!('pixBank' in data) || (data.pixBank is string && data.pixBank.size() < 100)) &&
+             (!('profilePicture' in data) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() < 1500000))) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     match /users/{userId} {
@@ -106,6 +112,7 @@ service cloud.firestore {
     match /actions/{actionId} {
       allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
       allow create: if isAuthenticated() && isValidAction(request.resource.data);
+      allow update: if isDocOwner() && isValidAction(request.resource.data);
       allow delete: if isDocOwner();
     }
   }

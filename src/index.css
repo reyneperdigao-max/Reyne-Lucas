@@ -1,19 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-primary: #d4af37; /* Gold */
-  --color-brand-secondary: #ffffff; /* White */
-  --color-brand-accent: #f8f9fa; /* Silver/Off-white */
-  --color-brand-danger: #ff4d4d;
-  --color-brand-warning: #ffcc00;
+  --color-brand-primary: #FFD700; /* More vibrant Gold (Higher contrast) */
+  --color-brand-secondary: #ffffff;
+  --color-brand-accent: #E5E7EB; /* Refined Platinum/Silver instead of neon blue */
+  --color-brand-danger: #FF1A1A; /* Sharper Red */
+  --color-brand-warning: #FFBB00;
   
-  --color-surface-950: #000000; /* Pure Black */
-  --color-surface-900: #0a0a0a;
-  --color-surface-800: #121212;
+  --color-surface-950: #000000;
+  --color-surface-900: #050505; /* Deeper black */
+  --color-surface-800: #0f0f0f;
   --color-surface-700: #1a1a1a;
 
   /* Slate Palette in HEX (To avoid oklch/oklab in html2canvas) */
@@ -73,6 +73,13 @@
   body {
     @apply bg-surface-950 text-slate-200 antialiased;
   }
+  
+  /* Prevent iOS/mobile automatic zoom on focal inputs */
+  @media (max-width: 768px) {
+    input, select, textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 .glass {
@@ -84,7 +91,7 @@
 }
 
 .glass-input {
-  @apply bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 text-white focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary/40 transition-all placeholder:text-slate-700;
+  @apply bg-white/[0.02] border border-white/[0.05] rounded-2xl px-5 py-4 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-primary/30 focus:border-brand-primary/40 transition-all placeholder:text-slate-700;
 }
 
 .btn-primary {
@@ -122,13 +129,24 @@
   .printable-content {
     position: relative !important;
     margin: 0 auto !important;
-    width: 800px !important;
-    min-height: 100% !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
     background: white !important;
     color: black !important;
     border: none !important;
     box-shadow: none !important;
-    padding: 80px !important; /* Force the sm:p-20 equivalent for consistency */
+    padding: 0 !important;
+    font-family: var(--font-sans) !important;
+  }
+  
+  .printable-content .report-page {
+    padding: 20mm !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    box-sizing: border-box !important;
+    display: flex;
+    flex-direction: column;
+    background: white !important;
   }
   /* Ensure bold fonts are preserved in print */
   .printable-content .font-bold,
@@ -200,3 +218,98 @@
 .printable-content .bg-brand-primary\/5 { background-color: #fdf9eb !important; }
 .printable-content .border-brand-primary\/10 { border-color: #f9f1d7 !important; }
 .printable-content .border-brand-primary\/20 { border-color: #f2e3af !important; }
+
+.printable-content .glass-card {
+  background: white !important;
+  color: black !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.printable-content .font-serif {
+  font-family: var(--font-sans) !important;
+}
+
+.printable-content h1, 
+.printable-content h2, 
+.printable-content h3 {
+  font-family: var(--font-sans) !important;
+}
+
+.printable-content .text-xs,
+.printable-content .text-[10px],
+.printable-content .text-[9px] {
+  font-family: inherit !important;
+  letter-spacing: 0.1em !important;
+}
+
+.printable-content .stats-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  border-top: 1px solid #000 !important;
+  border-bottom: 1px solid #000 !important;
+  margin: 40px 0 !important;
+}
+
+.printable-content .stats-grid > div {
+  padding: 24px !important;
+  border-right: 1px solid #e2e8f0 !important;
+  border-left: none !important;
+}
+
+.printable-content .stats-grid > div:last-child {
+  border-right: none !important;
+}
+
+.printable-content .section-title {
+  font-family: "Cormorant Garamond", serif !important;
+  font-size: 14px !important;
+  font-style: italic !important;
+  color: #64748b !important;
+  border-bottom: 1px solid #000 !important;
+  padding-bottom: 8px !important;
+  margin-bottom: 24px !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.printable-content .text-white {
+  color: black !important;
+}
+
+.printable-content .bg-white\/5,
+.printable-content .bg-white\/10 {
+  background-color: #f1f5f9 !important;
+}
+
+.printable-content .recharts-cartesian-grid-horizontal line,
+.printable-content .recharts-cartesian-grid-vertical line {
+  stroke: #e2e8f0 !important;
+}
+
+.printable-content .recharts-text {
+  fill: #64748b !important;
+}
+
+.printable-only {
+  display: none !important;
+}
+
+.printable-content .printable-only {
+  display: block !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #d4af37;
+}
