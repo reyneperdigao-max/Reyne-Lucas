@@ -580,13 +580,28 @@ NEWFILEUID:NONE
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
         
         let fileName = 'documento.pdf';
+        let shareTitle = 'Documento Nexus Private';
+        let shareText = 'Segue o documento Nexus Private.';
+
         if (customElementId === 'printable-report') {
           fileName = `relatorio-${ptBrMonths[reportMonth].toLowerCase()}-${reportYear}.pdf`;
+          shareTitle = 'Relatório Mensal Nexus Private';
+          shareText = `Segue o relatório mensal de ${ptBrMonths[reportMonth]}/${reportYear}.`;
+        } else if (customElementId === 'printable-schedule-receipt') {
+          fileName = 'comprovante_agendamento.pdf';
+          shareTitle = 'Comprovante de Agendamento';
+          shareText = 'Segue o comprovante de agendamento Nexus Private.';
         } else if (viewingContract) {
           fileName = 'contrato.pdf';
+          shareTitle = 'Contrato Nexus Private';
+          shareText = 'Segue o contrato da operação Nexus Private.';
         } else {
           fileName = 'comprovante.pdf';
+          shareTitle = 'Comprovante Nexus Private';
+          shareText = 'Segue o comprovante de recebimento Nexus Private.';
         }
+
+        if (customShareText) shareText = customShareText;
 
         if (forceDownload) {
           pdf.save(fileName);
@@ -596,8 +611,9 @@ NEWFILEUID:NONE
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
             await navigator.share({
               files: [file],
-              title: viewingContract ? 'Contrato Nexus Private' : 'Comprovante Nexus Private',
-              text: viewingContract ? 'Segue o contrato da operação Nexus Private.' : 'Segue o comprovante de recebimento Nexus Private.',
+              title: shareTitle,
+              text: shareText,
+              url: customShareUrl
             });
           } catch (shareError: any) {
              console.error('Erro ao compartilhar PDF:', shareError);
@@ -4629,24 +4645,24 @@ NEWFILEUID:NONE
             <div className="p-6 bg-slate-50 border-t border-white no-print-section no-print flex flex-col gap-3">
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => shareAsPDF(false, 'image', false)}
+                  onClick={() => shareAsPDF(false, 'pdf', false, 'printable-receipt')}
                   disabled={isGeneratingPDF}
                   className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                 >
                   {isGeneratingPDF ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <Share2 className="w-4 h-4" />
+                    <FileText className="w-4 h-4" />
                   )}
-                  {isGeneratingPDF ? 'Gerando...' : 'WhatsApp / Share'}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                 </button>
                 <button
-                  onClick={() => shareAsPDF(true, 'pdf', false)}
+                  onClick={() => shareAsPDF(true, 'pdf', false, 'printable-receipt')}
                   disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-white text-slate-900 border border-slate-200 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-50 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 hover:bg-slate-200"
                 >
-                  <Download className="w-4 h-4" />
-                  PDF / Salvar
+                  <Printer className="w-4 h-4" />
+                  Imprimir
                 </button>
               </div>
               <button
