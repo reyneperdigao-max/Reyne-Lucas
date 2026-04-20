@@ -206,7 +206,14 @@ export default function App() {
   const [filterDate, setFilterDate] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ displayName?: string, pixKey?: string, pixName?: string, pixBank?: string, profilePicture?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ 
+    displayName?: string, 
+    pixKey?: string, 
+    pixName?: string, 
+    pixBank?: string, 
+    profilePicture?: string,
+    lastClosureDate?: string | null 
+  } | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('nexus_theme');
     return (saved as 'light' | 'dark') || 'dark';
@@ -1571,13 +1578,21 @@ NEWFILEUID:NONE
     const capitalLiberado = activeLoans
       .reduce((acc, curr) => acc + curr.capital, 0);
     
-    const capitalRecebido = loans
-      .filter(l => l.status !== 'Agendado')
-      .reduce((acc, curr) => acc + (curr.capitalPago || 0), 0);
+    // Calculate received values based on actions since last closure
+    const closureDate = userProfile?.lastClosureDate ? parseISO(userProfile.lastClosureDate) : null;
+    const periodActions = actions.filter(a => {
+      if (a.type !== 'payment_received') return false;
+      if (!closureDate) return true;
+      return parseISO(a.date) > closureDate;
+    });
+
+    const capitalRecebido = periodActions
+      .filter(a => a.description.toLowerCase().includes('capital') || a.description.toLowerCase().includes('amortização') || a.description.toLowerCase().includes('quitação'))
+      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
     
-    const jurosRealizados = loans
-      .filter(l => l.status !== 'Agendado')
-      .reduce((acc, curr) => acc + (curr.jurosPagos || 0), 0);
+    const jurosRealizados = periodActions
+      .filter(a => a.description.toLowerCase().includes('juros'))
+      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
     
     const overdueLoans = activeLoans.filter(l => l.status === 'Atrasado' || isOverdue(l));
     const atrasado = overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0);
@@ -1594,7 +1609,7 @@ NEWFILEUID:NONE
       atrasadosCount,
       totalClients
     };
-  }, [loans]);
+  }, [loans, actions, userProfile]);
 
   const monthlyReportStats = useMemo(() => {
     const periodActions = actions.filter(a => {
@@ -1760,6 +1775,50 @@ NEWFILEUID:NONE
       }
     }
   }, [notifications, isNativeNotificationsEnabled, sentNativeNotificationIds]);
+
+  const handleCloseMonth = async () => {
+    if (!user) return;
+    
+    setConfirmPassword('');
+    setConfirmError(null);
+    setConfirmModal({
+      isOpen: true,
+      requiresPassword: true,
+      title: 'Fechar Caixa Mensal',
+      message: 'Ao fechar o caixa, os valores de "Capital Recebido" e "Juros Realizados" do dashboard serão zerados para o início de um novo ciclo. Esta ação não apaga o histórico de transações. Confirme sua senha para prosseguir.',
+      onConfirm: async (password?: string) => {
+        if (!user || !user.email || !password) {
+          setConfirmError("A senha é obrigatória.");
+          return;
+        }
+
+        setIsVerifyingPassword(true);
+        setConfirmError(null);
+
+        try {
+          // Verify password
+          const credential = EmailAuthProvider.credential(user.email, password);
+          await reauthenticateWithCredential(user, credential);
+
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            lastClosureDate: new Date().toISOString()
+          });
+
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          console.error("Close Month Error:", err);
+          if (err.code === 'auth/wrong-password') {
+            setConfirmError("Senha incorreta.");
+          } else {
+            setConfirmError("Erro ao processar fechamento.");
+          }
+        } finally {
+          setIsVerifyingPassword(false);
+        }
+      }
+    });
+  };
 
   // --- Render Helpers ---
   if (!isAuthReady) return (
@@ -2345,11 +2404,11 @@ NEWFILEUID:NONE
                     setIsAdding(true);
                   }}
                   className={cn(
-                    "px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 text-xs uppercase tracking-widest",
-                    isDark ? "bg-white/5 text-white border border-white/10 hover:bg-white/10" : "bg-white text-slate-900 border border-slate-200 hover:bg-slate-50"
+                    "px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] hover:-translate-y-0.5 active:translate-y-0",
+                    isDark ? "bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
                   )}
                 >
-                  <Clock className="w-5 h-5 text-brand-primary" />
+                  <Clock className="w-4 h-4 text-brand-primary" />
                   Agendar
                 </button>
                 <button 
@@ -2367,7 +2426,7 @@ NEWFILEUID:NONE
                     });
                     setIsAdding(true);
                   }}
-                  className="bg-gradient-to-r from-brand-primary to-indigo-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+                  className="bg-brand-primary text-slate-950 px-6 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
                 >
                   <Plus className="w-5 h-5" />
                   Novo Empréstimo
@@ -2952,8 +3011,16 @@ NEWFILEUID:NONE
                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Visão geral do desempenho financeiro</p>
                     </div>
                     
-                    <div className="flex items-center gap-3">
-                      <div className={cn("flex items-center gap-2 border rounded-xl px-4 py-2 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={handleCloseMonth}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-0.5 active:translate-y-0"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        Fechar Caixa
+                      </button>
+
+                      <div className={cn("flex items-center gap-2 border rounded-xl px-4 py-2 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200 shadow-sm")}>
                         <Calendar className="w-4 h-4 text-slate-500" />
                         <select 
                           className={cn(
@@ -2969,7 +3036,7 @@ NEWFILEUID:NONE
                         </select>
                       </div>
                       
-                      <div className={cn("flex items-center gap-2 border rounded-xl px-4 py-2 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                      <div className={cn("flex items-center gap-2 border rounded-xl px-4 py-2 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200 shadow-sm")}>
                         <select 
                           className={cn(
                             "bg-transparent text-xs font-bold uppercase tracking-widest focus:outline-none cursor-pointer transition-colors",
@@ -2983,67 +3050,22 @@ NEWFILEUID:NONE
                           ))}
                         </select>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-3">
-                        <button 
-                          onClick={() => shareAsPDF(false, 'image', false, 'printable-report')}
-                          disabled={isGeneratingPDF}
-                          className={cn(
-                            "flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50",
-                            isDark 
-                              ? "bg-slate-800 text-white border border-white/10" 
-                              : "bg-slate-900 text-white shadow-lg shadow-black/10"
-                          )}
-                        >
-                          {isGeneratingPDF ? (
-                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          ) : (
-                            <Share2 className="w-4 h-4" />
-                          )}
-                          <span>{isGeneratingPDF ? 'Gerando...' : 'WhatsApp / Share'}</span>
-                        </button>
-                        <button 
-                          onClick={() => shareAsPDF(true, 'pdf', false, 'printable-report')}
-                          disabled={isGeneratingPDF}
-                          className={cn(
-                            "flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50",
-                            isDark 
-                              ? "bg-brand-primary text-black" 
-                              : "bg-brand-primary text-white shadow-lg shadow-brand-primary/20"
-                          )}
-                        >
-                          <Download className="w-4 h-4" />
-                          <span>Baixar PDF</span>
-                        </button>
-                      </div>
                     </div>
                   </div>
 
                   <div id="printable-report" className="space-y-8 printable-content">
                     <div className="report-page bg-white text-black font-sans shadow-none border-none">
-                      {/* Premium Header */}
-                      <div className="flex justify-between items-end border-b-[6px] border-slate-900 pb-12 mb-12">
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-4">
-                            <div className="w-16 h-16 bg-slate-900 flex items-center justify-center rounded-2xl shadow-lg border border-white/10 shrink-0 overflow-hidden">
-                              <img 
-                                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                                className="w-full h-full object-cover grayscale brightness-125" 
-                                alt="Nexus Logo"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                            <div>
-                              <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase leading-none">{userProfile?.displayName || 'Nexus Private'}</h1>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-2">Relatório de Performance Financeira</p>
-                            </div>
-                          </div>
+                      {/* Clean Professional Header */}
+                      <div className="flex justify-between items-start border-b border-slate-200 pb-10 mb-12">
+                        <div className="space-y-1">
+                          <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-none">{userProfile?.displayName || 'Nexus Private'}</h1>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-2">Relatório Mensal de Performance</p>
                         </div>
                         <div className="text-right flex flex-col items-end">
-                           <div className="text-sm font-black text-slate-900 bg-slate-100 px-4 py-2 rounded-xl mb-4 uppercase tracking-widest border border-slate-200">
-                             Período: {ptBrMonths[reportMonth]} / {reportYear}
+                           <div className="text-[10px] font-black text-slate-900 bg-slate-50 px-4 py-2 rounded-xl mb-3 uppercase tracking-widest border border-slate-100">
+                             Ref: {ptBrMonths[reportMonth]} / {reportYear}
                            </div>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Emissão: {safeFormatDate(new Date().toISOString(), 'dd/mm/yyyy - HH:mm')}</p>
+                           <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Emissão: {safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy')}</p>
                         </div>
                       </div>
 
@@ -3061,49 +3083,49 @@ NEWFILEUID:NONE
                         </div>
                       </div>
 
-                      {/* High-Fidelity Stats Grid */}
-                      <div className="grid grid-cols-4 gap-6 mb-14">
+                      {/* Clean Stats Grid */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-14">
                         {[
-                          { label: 'Capital Liberado', value: monthlyReportStats.totalLent, sub: `${monthlyReportStats.loanCount} Novos Contratos`, color: 'slate-900' },
+                          { label: 'Capital Liberado', value: monthlyReportStats.totalLent, sub: `${monthlyReportStats.loanCount} Contratos`, color: 'slate-900' },
                           { label: 'Total Recebido', value: monthlyReportStats.totalPayments, sub: `${monthlyReportStats.paymentCount} Transações`, color: 'emerald-600' },
-                          { label: 'Rendimentos Realizados', value: monthlyReportStats.interestPayments, sub: 'Lucro de Juros Reais', color: 'emerald-600' },
-                          { label: 'Dívida Ativa Atual', value: monthlyReportStats.currentOutstanding, sub: 'Saldo em Aberto', color: 'slate-900' }
+                          { label: 'Lucro (Juros)', value: monthlyReportStats.interestPayments, sub: 'Rendimentos Reais', color: 'emerald-600' },
+                          { label: 'Saldo Ativo', value: monthlyReportStats.currentOutstanding, sub: 'Em Aberto', color: 'slate-900' }
                         ].map((stat, i) => (
-                          <div key={i} className="bg-slate-50 border border-slate-100 p-6 rounded-2xl flex flex-col justify-between h-32">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-tight">{stat.label}</span>
+                          <div key={i} className="bg-white border border-slate-100 p-6 rounded-xl flex flex-col justify-between items-center text-center">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">{stat.label}</span>
                             <div>
                               <div className={cn(
                                 "text-xl font-black tracking-tight", 
-                                stat.color === 'emerald-600' ? "text-emerald-600" :
-                                "text-slate-900"
+                                stat.color === 'emerald-600' ? "text-emerald-600" : "text-slate-900"
                               )}>
                                 R$ {stat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </div>
-                              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1">{stat.sub}</span>
+                              <span className="text-[8px] text-slate-300 font-bold uppercase tracking-wider mt-1">{stat.sub}</span>
                             </div>
                           </div>
                         ))}
                       </div>
 
+                      {/* Simplified Progress Section */}
                       <div className="mb-14 flex-grow">
-                        <div>
-                           <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-900 mb-8 border-b border-slate-100 pb-4">Composição de Entrada</h3>
-                           <div className="space-y-8 max-w-2xl">
+                        <div className="max-w-xl mx-auto lg:mx-0">
+                           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8 pb-4 border-b border-slate-100">Distribuição de Receita</h3>
+                           <div className="space-y-10">
                              <div className="space-y-4">
                                <div className="flex justify-between items-end">
-                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Amortização de Capital</span>
-                                 <span className="text-xs font-black text-slate-900 font-mono">{(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
+                                 <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.1em]">Amortização de Capital</span>
+                                 <span className="text-xs font-black text-slate-900">{(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
                                </div>
-                               <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                               <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
                                  <div className="h-full bg-slate-900 rounded-full" style={{ width: `${(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
                                </div>
                              </div>
                              <div className="space-y-4">
                                <div className="flex justify-between items-end">
-                                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Rendimento Líquido (Juros)</span>
-                                 <span className="text-xs font-black text-brand-primary font-mono">{(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
+                                 <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.1em]">Rendimento de Juros</span>
+                                 <span className="text-xs font-black text-brand-primary">{(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
                                </div>
-                               <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                               <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
                                  <div className="h-full bg-brand-primary rounded-full" style={{ width: `${(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
                                </div>
                              </div>
@@ -3135,7 +3157,32 @@ NEWFILEUID:NONE
                       </div>
                     </div>
                   </div>
-              </div>
+
+                  <div className="mt-12 pt-12 border-t border-white/5 no-print-section no-print flex flex-col gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        onClick={() => shareAsPDF(false, 'pdf', false, 'printable-report')}
+                        disabled={isGeneratingPDF}
+                        className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                      >
+                        {isGeneratingPDF ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <FileText className="w-4 h-4" />
+                        )}
+                        {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                      </button>
+                      <button
+                        onClick={() => shareAsPDF(true, 'pdf', false, 'printable-report')}
+                        disabled={isGeneratingPDF}
+                        className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Imprimir
+                      </button>
+                    </div>
+                  </div>
+                </div>
             ) : activeTab === 'Histórico' ? (
                 <div className="space-y-4">
                   {/* Desktop Table */}
@@ -4696,24 +4743,24 @@ NEWFILEUID:NONE
             <div className="p-6 bg-slate-50 border-t border-white no-print-section no-print flex flex-col gap-3">
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => shareAsPDF(false, 'image', false, 'printable-schedule-receipt')}
+                  onClick={() => shareAsPDF(false, 'pdf', false, 'printable-schedule-receipt')}
                   disabled={isGeneratingPDF}
                   className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                 >
                   {isGeneratingPDF ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <Share2 className="w-4 h-4" />
+                    <FileText className="w-4 h-4" />
                   )}
-                  {isGeneratingPDF ? 'Gerando...' : 'WhatsApp / Share'}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                 </button>
                 <button
                   onClick={() => shareAsPDF(true, 'pdf', false, 'printable-schedule-receipt')}
                   disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-white text-slate-900 border border-slate-200 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-50 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 hover:bg-slate-200"
                 >
-                  <Download className="w-4 h-4" />
-                  PDF / Salvar
+                  <Printer className="w-4 h-4" />
+                  Imprimir
                 </button>
               </div>
               <button
