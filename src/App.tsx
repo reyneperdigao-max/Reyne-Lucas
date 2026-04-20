@@ -371,7 +371,17 @@ NEWFILEUID:NONE
 
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', isWhatsApp = false, customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
-    const elementId = customElementId || (viewingContract ? 'printable-contract' : 'printable-receipt');
+    
+    // Determine the element ID more robustly
+    let elementId = customElementId;
+    if (!elementId) {
+      if (viewingContract) elementId = 'printable-contract';
+      else if (viewingScheduleReceipt) elementId = 'printable-schedule-receipt';
+      else if (viewingReceipt) elementId = 'printable-receipt';
+      else if (activeTab === 'Relatórios') elementId = 'printable-report';
+      else elementId = 'printable-receipt'; // Final fallback
+    }
+
     const element = document.getElementById(elementId);
     if (!element) return;
 
@@ -3171,31 +3181,32 @@ NEWFILEUID:NONE
                            <div className="h-1 w-20 bg-brand-primary" />
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="mt-12 pt-12 border-t border-white/5 no-print-section no-print flex flex-col gap-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <button
-                        onClick={() => shareAsPDF(false, 'pdf', false, 'printable-report')}
-                        disabled={isGeneratingPDF}
-                        className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                      >
-                        {isGeneratingPDF ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <FileText className="w-4 h-4" />
-                        )}
-                        {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                      </button>
-                      <button
-                        onClick={() => shareAsPDF(true, 'pdf', false, 'printable-report')}
-                        disabled={isGeneratingPDF}
-                        className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                      >
-                        <Printer className="w-4 h-4" />
-                        Imprimir
-                      </button>
+                      {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
+                      <div className="mt-16 pt-12 border-t border-slate-100 flex flex-col gap-4 no-print-section no-print relative z-20">
+                        <div className="grid grid-cols-2 gap-4">
+                          <button
+                            onClick={() => shareAsPDF(false, 'pdf', false)}
+                            disabled={isGeneratingPDF}
+                            className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                          >
+                            {isGeneratingPDF ? (
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            ) : (
+                              <FileText className="w-4 h-4" />
+                            )}
+                            {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                          </button>
+                          <button
+                            onClick={() => shareAsPDF(true, 'pdf', false)}
+                            disabled={isGeneratingPDF}
+                            className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                          >
+                            <Printer className="w-4 h-4" />
+                            Imprimir
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4640,37 +4651,38 @@ NEWFILEUID:NONE
                   <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Digital Auth</p>
                 </div>
               </div>
-            </div>
 
-            <div className="p-6 bg-slate-50 border-t border-white no-print-section no-print flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
+              {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
+              <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                  </button>
+                  <button
+                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Imprimir
+                  </button>
+                </div>
                 <button
-                  onClick={() => shareAsPDF(false, 'pdf', false, 'printable-receipt')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  onClick={() => setViewingReceipt(null)}
+                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 transition-colors pt-6"
                 >
-                  {isGeneratingPDF ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <FileText className="w-4 h-4" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                </button>
-                <button
-                  onClick={() => shareAsPDF(true, 'pdf', false, 'printable-receipt')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 hover:bg-slate-200"
-                >
-                  <Printer className="w-4 h-4" />
-                  Imprimir
+                  Voltar
                 </button>
               </div>
-              <button
-                onClick={() => setViewingReceipt(null)}
-                className="py-4 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 transition-colors"
-              >
-                Voltar
-              </button>
             </div>
           </div>
         </div>
@@ -4678,8 +4690,8 @@ NEWFILEUID:NONE
 
       {viewingScheduleReceipt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative flex flex-col">
-            <div id="printable-schedule-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative flex-1">
+          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
+            <div id="printable-schedule-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
                 <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
@@ -4754,37 +4766,38 @@ NEWFILEUID:NONE
                   <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Reserve System</p>
                 </div>
               </div>
-            </div>
 
-            <div className="p-6 bg-slate-50 border-t border-white no-print-section no-print flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-3">
+              {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
+              <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  >
+                    {isGeneratingPDF ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <FileText className="w-4 h-4" />
+                    )}
+                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                  </button>
+                  <button
+                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    disabled={isGeneratingPDF}
+                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Imprimir
+                  </button>
+                </div>
                 <button
-                  onClick={() => shareAsPDF(false, 'pdf', false, 'printable-schedule-receipt')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                  onClick={() => setViewingScheduleReceipt(null)}
+                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 transition-colors pt-6"
                 >
-                  {isGeneratingPDF ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <FileText className="w-4 h-4" />
-                  )}
-                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                </button>
-                <button
-                  onClick={() => shareAsPDF(true, 'pdf', false, 'printable-schedule-receipt')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 hover:bg-slate-200"
-                >
-                  <Printer className="w-4 h-4" />
-                  Imprimir
+                  Voltar
                 </button>
               </div>
-              <button
-                onClick={() => setViewingScheduleReceipt(null)}
-                className="py-4 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 transition-colors"
-              >
-                Voltar
-              </button>
             </div>
           </div>
         </div>
