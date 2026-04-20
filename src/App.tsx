@@ -2984,23 +2984,38 @@ NEWFILEUID:NONE
                         </select>
                       </div>
 
-                      <button 
-                        onClick={() => shareAsPDF(true, 'pdf', false, 'printable-report')}
-                        disabled={isGeneratingPDF}
-                        className={cn(
-                          "flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50",
-                          isDark 
-                            ? "bg-brand-primary text-black" 
-                            : "bg-brand-primary text-white shadow-lg shadow-brand-primary/20"
-                        )}
-                      >
-                        {isGeneratingPDF ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button 
+                          onClick={() => shareAsPDF(false, 'image', false, 'printable-report')}
+                          disabled={isGeneratingPDF}
+                          className={cn(
+                            "flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50",
+                            isDark 
+                              ? "bg-slate-800 text-white border border-white/10" 
+                              : "bg-slate-900 text-white shadow-lg shadow-black/10"
+                          )}
+                        >
+                          {isGeneratingPDF ? (
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <Share2 className="w-4 h-4" />
+                          )}
+                          <span>{isGeneratingPDF ? 'Gerando...' : 'WhatsApp / Share'}</span>
+                        </button>
+                        <button 
+                          onClick={() => shareAsPDF(true, 'pdf', false, 'printable-report')}
+                          disabled={isGeneratingPDF}
+                          className={cn(
+                            "flex items-center gap-2 px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 active:scale-95 disabled:opacity-50",
+                            isDark 
+                              ? "bg-brand-primary text-black" 
+                              : "bg-brand-primary text-white shadow-lg shadow-brand-primary/20"
+                          )}
+                        >
                           <Download className="w-4 h-4" />
-                        )}
-                        <span>{isGeneratingPDF ? 'Gerando...' : 'Baixar PDF'}</span>
-                      </button>
+                          <span>Baixar PDF</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -5099,10 +5114,10 @@ function StatCard({ title, value, icon, color, trend, onClick, isDark }: { title
 
 function StatusBadge({ status }: { status: Loan['status'] }) {
   const styles = {
-    'Pendente': 'bg-brand-accent/5 text-brand-accent border-brand-accent/10',
-    'Pago': 'bg-emerald-500/5 text-emerald-500 border-emerald-500/10',
-    'Atrasado': 'bg-brand-danger/5 text-brand-danger border-brand-danger/10',
-    'Agendado': 'bg-amber-500/5 text-amber-500 border-amber-500/10',
+    'Pendente': 'bg-slate-500/10 text-slate-500 border-slate-500/20',
+    'Pago': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+    'Atrasado': 'bg-brand-danger/10 text-brand-danger border-brand-danger/20',
+    'Agendado': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
   };
 
   return (
