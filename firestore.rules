@@ -1,119 +1,133 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: loans
-    // Fields:
-    //   - clientName: string (required)
-    //   - date: string (required, format: YYYY-MM-DD)
-    //   - capital: number (required, positive)
-    //   - interestRate: number (required, fixed 0.10)
-    //   - totalBruto: number (required, capital * 1.1)
-    //   - status: string (required, enum: Pendente, Pago, Atrasado)
-    //   - uid: string (required, owner UID)
-    //   - createdAt: string (required, ISO 8601)
-    //
-    // Collection: users
-    // Fields:
-    //   - email: string (required)
-    //   - role: string (required, enum: admin, user)
-    //   - uid: string (required)
-    //
-    // Collection: actions
-    // Fields:
-    //   - type: string (required)
-    //   - description: string (required)
-    //   - amount: number (optional)
-    //   - clientName: string (required)
-    //   - loanId: string (required)
-    //   - date: string (required, ISO 8601)
-    //   - uid: string (required, owner UID)
-    // ===============================================================
+    // ==========================================
+    // 0. Global Safety Net
+    // ==========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
-    // Helper Functions
-    function isAuthenticated() {
+    // ==========================================
+    // Phase 3: Primitive Definition
+    // ==========================================
+    function isSignedIn() {
       return request.auth != null;
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.uid;
+      return isSignedIn() && request.auth.uid == resource.data.uid;
     }
 
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isValidAction(data) {
-      let requiredFields = ['type', 'description', 'clientName', 'loanId', 'date', 'uid'];
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      // Explicitly checking for the bootstrap admin email
+      return isVerifiedUser() && request.auth.token.email == 'reyneperdigao@gmail.com';
+    }
+
+    // ==========================================
+    // Phase 4: Validation Blueprints
+    // ==========================================
+
+    function isValidUser(data) {
+      let requiredFields = ['email', 'role', 'uid'];
       return data.keys().hasAll(requiredFields) &&
-             data.type is string &&
-             data.description is string &&
-             data.clientName is string &&
-             data.loanId is string &&
-             data.date is string &&
+             data.email is string && data.email.size() < 256 &&
+             data.role in ['admin', 'user'] &&
              data.uid == request.auth.uid &&
-             (!('amount' in data) || data.amount is number) &&
-             (!('confirmed' in data) || data.confirmed is bool);
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
+             (!('pixKey' in data) || (data.pixKey is string && data.pixKey.size() <= 200)) &&
+             (!('pixName' in data) || (data.pixName is string && data.pixName.size() <= 100)) &&
+             (!('pixBank' in data) || (data.pixBank is string && data.pixBank.size() <= 100)) &&
+             (!('profilePicture' in data) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() <= 2000000)));
     }
 
     function isValidLoan(data) {
       let requiredFields = ['clientName', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'uid', 'createdAt', 'capitalPago', 'jurosPagos'];
       return data.keys().hasAll(requiredFields) &&
-             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() < 100 &&
-             data.date is string &&
-             data.dueDate is string &&
+             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 100 &&
+             data.date is string && data.date.size() <= 20 &&
+             data.dueDate is string && data.dueDate.size() <= 20 &&
              data.capital is number && (data.status == 'Pago' ? data.capital >= 0 : data.capital > 0) &&
              data.interestRate is number && data.interestRate >= 0 &&
-             // Use a small epsilon for float comparison if needed, but here we expect exact match from JS
-             math.abs(data.totalBruto - (data.capital * (1 + data.interestRate))) < 0.01 &&
+             data.totalBruto is number &&
              data.status in ['Pendente', 'Pago', 'Atrasado', 'Agendado'] &&
              data.uid == request.auth.uid &&
-             data.createdAt is string &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
              data.capitalPago is number &&
              data.jurosPagos is number &&
-             (!('clientPhone' in data) || data.clientPhone is string);
+             (!('clientPhone' in data) || (data.clientPhone is string && data.clientPhone.size() <= 50)) &&
+             (!('clientAddress' in data) || (data.clientAddress is string && data.clientAddress.size() <= 255));
     }
 
-    function isValidUser(data) {
-      return data.keys().hasAll(['email', 'role', 'uid']) &&
-             data.email is string &&
-             data.role in ['admin', 'user'] &&
+    function isValidAction(data) {
+      let requiredFields = ['type', 'description', 'clientName', 'loanId', 'date', 'uid'];
+      return data.keys().hasAll(requiredFields) &&
+             data.type in ['loan_created', 'payment_received', 'loan_deleted', 'loan_updated'] &&
+             data.description is string && data.description.size() <= 500 &&
+             data.clientName is string && data.clientName.size() <= 100 &&
+             data.loanId is string && data.loanId.size() <= 128 &&
+             data.date is string && data.date.size() <= 50 &&
              data.uid == request.auth.uid &&
-             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
-             (!('pixKey' in data) || (data.pixKey is string && data.pixKey.size() < 200)) &&
-             (!('pixName' in data) || (data.pixName is string && data.pixName.size() < 100)) &&
-             (!('pixBank' in data) || (data.pixBank is string && data.pixBank.size() < 100)) &&
-             (!('profilePicture' in data) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() < 1500000))) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp);
+             (!('amount' in data) || data.amount is number) &&
+             (!('confirmed' in data) || data.confirmed is bool);
     }
+
+    // ==========================================
+    // Collections
+    // ==========================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
-                    request.resource.data.role == resource.data.role &&
-                    request.resource.data.uid == resource.data.uid;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().role == existing().role;
     }
 
     match /loans/{loanId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
-      allow create: if isAuthenticated() && isValidLoan(request.resource.data);
-      allow update: if isDocOwner() && isValidLoan(request.resource.data);
-      allow delete: if isDocOwner();
+      allow get: if isVerifiedUser() && isDocOwner();
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidLoan(incoming()) && isValidId(loanId);
+      allow update: if isVerifiedUser() && isDocOwner() && isValidLoan(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().createdAt == existing().createdAt && (
+                      // Action: Status Change
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capitalPago', 'jurosPagos'])) ||
+                      // Action: General Update
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'dueDate', 'capital', 'interestRate', 'totalBruto']))
+                    );
+      allow delete: if isVerifiedUser() && isDocOwner();
     }
 
     match /actions/{actionId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
-      allow create: if isAuthenticated() && isValidAction(request.resource.data);
-      allow update: if isDocOwner() && isValidAction(request.resource.data);
-      allow delete: if isDocOwner();
+      allow get: if isVerifiedUser() && isDocOwner();
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidAction(incoming()) && isValidId(actionId);
+      allow update: if isVerifiedUser() && isDocOwner() && isValidAction(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().loanId == existing().loanId;
+      allow delete: if isVerifiedUser() && isDocOwner();
     }
   }
 }

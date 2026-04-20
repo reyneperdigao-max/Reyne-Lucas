@@ -9,10 +9,23 @@
           "type": "string",
           "description": "The name of the client."
         },
+        "clientPhone": {
+          "type": "string",
+          "description": "The phone number of the client."
+        },
+        "clientAddress": {
+          "type": "string",
+          "description": "The address of the client."
+        },
         "date": {
           "type": "string",
           "format": "date",
           "description": "The date the loan was issued."
+        },
+        "dueDate": {
+          "type": "string",
+          "format": "date",
+          "description": "The date the loan is due."
         },
         "capital": {
           "type": "number",
@@ -20,11 +33,19 @@
         },
         "interestRate": {
           "type": "number",
-          "description": "The monthly interest rate (fixed at 0.10)."
+          "description": "The monthly interest rate."
         },
         "totalBruto": {
           "type": "number",
           "description": "The total amount to be received (Capital + Interest)."
+        },
+        "capitalPago": {
+          "type": "number",
+          "description": "Total principal paid back."
+        },
+        "jurosPagos": {
+          "type": "number",
+          "description": "Total interest paid."
         },
         "status": {
           "type": "string",
@@ -41,7 +62,7 @@
           "description": "The timestamp when the record was created."
         }
       },
-      "required": ["clientName", "date", "capital", "interestRate", "totalBruto", "status", "uid", "createdAt"]
+      "required": ["clientName", "date", "dueDate", "capital", "interestRate", "totalBruto", "status", "uid", "createdAt", "capitalPago", "jurosPagos"]
     },
     "user": {
       "title": "User",

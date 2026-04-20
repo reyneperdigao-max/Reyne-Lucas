@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -21,16 +21,12 @@ import {
   Edit2,
   Mail,
   Lock,
-  ArrowLeft,
-  UserPlus,
-  KeyRound,
   FileText,
   Share2,
   MessageCircle,
   Printer,
   Settings,
   X,
-  Download,
   QrCode,
   Copy,
   Check,
@@ -42,9 +38,7 @@ import {
   Moon,
   Bell,
   User as UserIcon,
-  ExternalLink
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   collection, 
   query, 
@@ -54,20 +48,16 @@ import {
   updateDoc, 
   doc, 
   orderBy,
-  getDocFromServer,
   deleteDoc,
   getDocs,
   setDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { 
-  signInWithPopup, 
-  GoogleAuthProvider, 
   onAuthStateChanged, 
   signOut,
   User,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   EmailAuthProvider,
   reauthenticateWithCredential
@@ -166,7 +156,13 @@ interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
   path: string | null;
-  authInfo: any;
+  authInfo: {
+    userId: string;
+    email: string | null;
+    emailVerified: boolean;
+    isAnonymous: boolean;
+    providerInfo: { providerId: string; displayName: string | null; email: string | null; }[];
+  };
 }
 
 // --- Constants ---
@@ -303,73 +299,7 @@ export default function App() {
     }
   };
 
-  const generateOFX = (action: SystemAction) => {
-    const now = new Date();
-    const timestamp = format(now, "yyyyMMddHHmmss");
-    const datePosted = format(parseISO(action.date), "yyyyMMdd");
-    
-    return `OFXHEADER:100
-DATA:OFXSGML
-VERSION:102
-SECURITY:NONE
-ENCODING:USASCII
-CHARSET:1252
-COMPRESSION:NONE
-OLDFILEUID:NONE
-NEWFILEUID:NONE
-
-<OFX>
-<SIGNONMSGSRSV1>
-<SONRS>
-<STATUS>
-<CODE>0</CODE>
-<SEVERITY>INFO</SEVERITY>
-</STATUS>
-<DTSERVER>${timestamp}</DTSERVER>
-<LANGUAGE>POR</LANGUAGE>
-</SONRS>
-</SIGNONMSGSRSV1>
-<BANKMSGSRSV1>
-<STMTTRNRS>
-<TRNUID>${action.id}</TRNUID>
-<STATUS>
-<CODE>0</CODE>
-<SEVERITY>INFO</SEVERITY>
-</STATUS>
-<STMTRS>
-<CURDEF>BRL</CURDEF>
-<BANKTRANLIST>
-<DTSTART>${datePosted}</DTSTART>
-<DTEND>${datePosted}</DTEND>
-<STMTTRN>
-<TRNTYPE>CREDIT</TRNTYPE>
-<DTPOSTED>${datePosted}</DTPOSTED>
-<TRNAMT>${action.amount || 0}</TRNAMT>
-<FITID>${action.id}</FITID>
-<NAME>${action.clientName.substring(0, 32)}</NAME>
-<MEMO>${action.description.substring(0, 255)}</MEMO>
-</STMTTRN>
-</BANKTRANLIST>
-</STMTRS>
-</STMTTRNRS>
-</BANKMSGSRSV1>
-</OFX>`;
-  };
-
-  const downloadOFX = (action: SystemAction) => {
-    const ofxContent = generateOFX(action);
-    const blob = new Blob([ofxContent], { type: 'application/x-ofx' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `comprovante_${action.id}.ofx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', isWhatsApp = false, customElementId?: string, customShareText?: string, customShareUrl?: string) => {
+  const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
     
     // Determine the element ID more robustly
@@ -569,8 +499,17 @@ NEWFILEUID:NONE
               text: customShareText !== undefined ? customShareText : (viewingContract ? 'Segue o contrato da operação Nexus Private.' : 'Segue o comprovante de recebimento Nexus Private.'),
               url: customShareUrl
             });
-          } catch (shareError: any) {
-            console.error('Erro ao compartilhar imagem:', shareError);
+          } catch (shareError: unknown) {
+            const error = shareError as { name?: string; message?: string };
+            const isCancellation = 
+              error?.name === 'AbortError' || 
+              error?.message?.includes('cancellation') ||
+              error?.message?.includes('share was cancelled') ||
+              error?.message?.includes('Abort due to cancellation');
+            
+            if (!isCancellation) {
+              console.error('Erro ao compartilhar imagem:', shareError);
+            }
           }
         } else {
           alert('O compartilhamento direto não é suportado por este navegador. Por favor, utilize a opção "Salvar/Download".');
@@ -625,19 +564,29 @@ NEWFILEUID:NONE
               text: shareText,
               url: customShareUrl
             });
-          } catch (shareError: any) {
-             console.error('Erro ao compartilhar PDF:', shareError);
+          } catch (shareError: unknown) {
+            const error = shareError as { name?: string; message?: string };
+            const isCancellation = 
+              error?.name === 'AbortError' || 
+              error?.message?.includes('cancellation') ||
+              error?.message?.includes('share was cancelled') ||
+              error?.message?.includes('Abort due to cancellation');
+            
+            if (!isCancellation) {
+              console.error('Erro ao compartilhar PDF:', shareError);
+            }
           }
         } else {
           alert('O compartilhamento direto não é suportado por este navegador. Por favor, utilize a opção "Salvar/Download".');
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { name?: string; message?: string };
       const isCancellation = 
-        error?.name === 'AbortError' || 
-        error?.message?.includes('cancellation') ||
-        error?.message?.includes('share was cancelled') ||
-        error?.message?.includes('Abort due to cancellation');
+        err?.name === 'AbortError' || 
+        err?.message?.includes('cancellation') ||
+        err?.message?.includes('share was cancelled') ||
+        err?.message?.includes('Abort due to cancellation');
       
       if (!isCancellation) {
         console.error('Erro ao gerar PDF:', error);
@@ -647,20 +596,6 @@ NEWFILEUID:NONE
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const triggerDownload = (blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -706,7 +641,7 @@ NEWFILEUID:NONE
       const date = parseISO(dateStr);
       if (isNaN(date.getTime())) return fallback;
       return format(date, formatStr, { locale: ptBR });
-    } catch (e) {
+    } catch {
       return fallback;
     }
   };
@@ -717,7 +652,7 @@ NEWFILEUID:NONE
       const dueDate = startOfDay(parseISO(loan.dueDate));
       const today = startOfDay(new Date());
       return dueDate < today;
-    } catch (e) {
+    } catch {
       return false;
     }
   };
@@ -729,7 +664,7 @@ NEWFILEUID:NONE
       const diffTime = dueDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       return diffDays;
-    } catch (e) {
+    } catch {
       return 0;
     }
   };
@@ -854,9 +789,10 @@ NEWFILEUID:NONE
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Email Login Error:", err);
-      switch (err.code) {
+      const error = err as { code?: string };
+      switch (error.code) {
         case 'auth/user-not-found':
         case 'auth/wrong-password':
         case 'auth/invalid-credential':
@@ -898,11 +834,12 @@ NEWFILEUID:NONE
       await sendPasswordResetEmail(auth, email.trim());
       setError("E-mail de recuperação enviado com sucesso!");
       setAuthMode('login');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Forgot Password Error:", err);
-      if (err.code === 'auth/user-not-found') {
+      const error = err as { code?: string };
+      if (error.code === 'auth/user-not-found') {
         setError("E-mail não encontrado.");
-      } else if (err.code === 'auth/invalid-email') {
+      } else if (error.code === 'auth/invalid-email') {
         setError("E-mail inválido.");
       } else {
         setError("Falha ao enviar e-mail de recuperação.");
@@ -991,20 +928,27 @@ NEWFILEUID:NONE
       };
       const docRef = await addDoc(collection(db, 'actions'), actionData);
       return { id: docRef.id, ...actionData } as SystemAction;
-    } catch (err) {
+    } catch (err: unknown) {
       handleFirestoreError(err, OperationType.CREATE, 'actions');
       return null;
     }
   };
 
-  const handleFirestoreError = (err: any, type: OperationType, path: string) => {
+  const handleFirestoreError = (err: unknown, type: OperationType, path: string) => {
     const errInfo: FirestoreErrorInfo = {
       error: err instanceof Error ? err.message : String(err),
       operationType: type,
       path,
       authInfo: {
-        userId: auth.currentUser?.uid,
-        email: auth.currentUser?.email,
+        userId: auth.currentUser?.uid || 'anonymous',
+        email: auth.currentUser?.email || null,
+        emailVerified: auth.currentUser?.emailVerified || false,
+        isAnonymous: auth.currentUser?.isAnonymous || false,
+        providerInfo: auth.currentUser?.providerData.map(p => ({
+          providerId: p.providerId,
+          displayName: p.displayName || null,
+          email: p.email || null
+        })) || []
       }
     };
     console.error('Firestore Error:', JSON.stringify(errInfo));
@@ -1018,7 +962,7 @@ NEWFILEUID:NONE
     const capitalNum = parseLocaleNumber(newLoan.capital);
     const interestRateNum = parseLocaleNumber(newLoan.interestRate) / 100;
     
-    const loanData: any = {
+    const loanData = {
       clientName: newLoan.clientName,
       clientPhone: newLoan.clientPhone,
       clientAddress: newLoan.clientAddress,
@@ -1053,14 +997,17 @@ NEWFILEUID:NONE
           await Promise.all(batch);
         }
       } else {
-        loanData.status = newLoan.status || 'Pendente';
-        loanData.createdAt = new Date().toISOString();
-        loanData.capitalPago = 0;
-        loanData.jurosPagos = 0;
-        const docRef = await addDoc(collection(db, 'loans'), loanData);
+        const newDocData = {
+          ...loanData,
+          status: newLoan.status || 'Pendente',
+          createdAt: serverTimestamp(),
+          capitalPago: 0,
+          jurosPagos: 0
+        };
+        const docRef = await addDoc(collection(db, 'loans'), newDocData);
         await logAction('loan_created', `Novo empréstimo para ${loanData.clientName}`, loanData.clientName, docRef.id, loanData.capital);
-        if (loanData.status === 'Agendado') {
-          setViewingScheduleReceipt({ id: docRef.id, ...loanData } as Loan);
+        if (newDocData.status === 'Agendado') {
+          setViewingScheduleReceipt({ id: docRef.id, ...newDocData } as unknown as Loan);
         }
       }
       
@@ -1231,7 +1178,7 @@ NEWFILEUID:NONE
     let currentDueDate: Date;
     try {
       currentDueDate = parseISO(payingLoan.dueDate);
-    } catch (e) {
+    } catch {
       currentDueDate = today;
     }
     
@@ -1390,9 +1337,10 @@ NEWFILEUID:NONE
           const deletions = snapshot.docs.map(d => deleteDoc(d.ref));
           await Promise.all(deletions);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("Clear History Error:", err);
-          if (err.code === 'auth/wrong-password') {
+          const error = err as { code?: string };
+          if (error.code === 'auth/wrong-password') {
             setConfirmError("Senha incorreta.");
           } else {
             setConfirmError("Erro ao processar solicitação.");
@@ -1699,7 +1647,7 @@ NEWFILEUID:NONE
     }[] = [];
     
     // Dependencies on lastCheckDate ensures this is recalculated when day changes
-    const _dummy = lastCheckDate;
+    // Removed unused _dummy variable
 
     // Overdue Loans
     loans.forEach(l => {
@@ -2996,11 +2944,11 @@ NEWFILEUID:NONE
                             if (!pendingPayment) {
                               setPendingPayment({ amount: 0, type: 'interest', label: 'Dados de Pagamento' });
                               setTimeout(() => {
-                                shareAsPDF(false, 'image', false, 'pix-payment-share-template', userProfile.pixKey);
+                                shareAsPDF(false, 'image', 'pix-payment-share-template', userProfile.pixKey);
                                 setPendingPayment(null);
                               }, 100);
                             } else {
-                              shareAsPDF(false, 'image', false, 'pix-payment-share-template', userProfile.pixKey);
+                              shareAsPDF(false, 'image', 'pix-payment-share-template', userProfile.pixKey);
                             }
                           }
                         }}
@@ -3186,7 +3134,7 @@ NEWFILEUID:NONE
                       <div className="mt-16 pt-12 border-t border-slate-100 flex flex-col gap-4 no-print-section no-print relative z-20">
                         <div className="grid grid-cols-2 gap-4">
                           <button
-                            onClick={() => shareAsPDF(false, 'pdf', false)}
+                            onClick={() => shareAsPDF(false, 'pdf')}
                             disabled={isGeneratingPDF}
                             className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                           >
@@ -3198,7 +3146,7 @@ NEWFILEUID:NONE
                             {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                           </button>
                           <button
-                            onClick={() => shareAsPDF(true, 'pdf', false)}
+                            onClick={() => shareAsPDF(true, 'pdf')}
                             disabled={isGeneratingPDF}
                             className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
                           >
@@ -3991,7 +3939,7 @@ NEWFILEUID:NONE
                               disabled={!userProfile?.pixKey}
                               onClick={() => {
                                 if (pixPayload) {
-                                  shareAsPDF(false, 'image', false, 'pix-payment-share-template', pixPayload);
+                                  shareAsPDF(false, 'image', 'pix-payment-share-template', pixPayload);
                                 }
                               }}
                               className="w-full flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-brand-accent/20 to-emerald-600/20 hover:from-brand-accent/30 hover:to-emerald-600/30 text-emerald-400 rounded-2xl font-bold transition-all border border-emerald-500/30 active:scale-95 text-sm"
@@ -4537,7 +4485,7 @@ NEWFILEUID:NONE
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    onClick={() => shareAsPDF(false, 'pdf')}
                     disabled={isGeneratingPDF}
                     className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -4549,7 +4497,7 @@ NEWFILEUID:NONE
                     {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                   </button>
                   <button
-                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    onClick={() => shareAsPDF(true, 'pdf')}
                     disabled={isGeneratingPDF}
                     className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                   >
@@ -4656,7 +4604,7 @@ NEWFILEUID:NONE
               <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    onClick={() => shareAsPDF(false, 'pdf')}
                     disabled={isGeneratingPDF}
                     className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                   >
@@ -4668,7 +4616,7 @@ NEWFILEUID:NONE
                     {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                   </button>
                   <button
-                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    onClick={() => shareAsPDF(true, 'pdf')}
                     disabled={isGeneratingPDF}
                     className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
                   >
@@ -4771,7 +4719,7 @@ NEWFILEUID:NONE
               <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => shareAsPDF(false, 'pdf', false)}
+                    onClick={() => shareAsPDF(false, 'pdf')}
                     disabled={isGeneratingPDF}
                     className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                   >
@@ -4783,7 +4731,7 @@ NEWFILEUID:NONE
                     {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
                   </button>
                   <button
-                    onClick={() => shareAsPDF(true, 'pdf', false)}
+                    onClick={() => shareAsPDF(true, 'pdf')}
                     disabled={isGeneratingPDF}
                     className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
                   >
