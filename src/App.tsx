@@ -38,6 +38,7 @@ import {
   Moon,
   Bell,
   User as UserIcon,
+  UserPlus,
 } from 'lucide-react';
 import { 
   collection, 
@@ -135,6 +136,8 @@ interface SystemAction {
   type: 'loan_created' | 'payment_received' | 'loan_deleted' | 'loan_updated';
   description: string;
   amount?: number;
+  capitalAmount?: number;
+  interestAmount?: number;
   clientName: string;
   loanId: string;
   date: string;
@@ -964,7 +967,15 @@ export default function App() {
     };
   }, [user, isAuthReady]);
 
-  const logAction = async (type: SystemAction['type'], description: string, clientName: string, loanId: string, amount?: number) => {
+  const logAction = async (
+    type: SystemAction['type'], 
+    description: string, 
+    clientName: string, 
+    loanId: string, 
+    amount?: number,
+    capitalAmount?: number,
+    interestAmount?: number
+  ) => {
     if (!user) return null;
     try {
       const actionData = {
@@ -973,6 +984,8 @@ export default function App() {
         clientName,
         loanId,
         amount: amount || 0,
+        capitalAmount: capitalAmount || 0,
+        interestAmount: interestAmount || 0,
         date: new Date().toISOString(),
         uid: user.uid,
         confirmed: type === 'payment_received' ? false : true
@@ -1004,6 +1017,40 @@ export default function App() {
     };
     console.error('Firestore Error:', JSON.stringify(errInfo));
     setError("Erro de permissão ou conexão com o banco de dados.");
+  };
+
+  const handleImportContact = async () => {
+    if (!('contacts' in navigator) || !('select' in (navigator as any).contacts)) {
+      alert('Seu dispositivo não suporta a importação direta de contatos via navegador.');
+      return;
+    }
+
+    try {
+      const props = ['name', 'tel', 'address'];
+      const opts = { multiple: false };
+      const contacts = await (navigator as any).contacts.select(props, opts);
+
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0];
+        const name = contact.name && contact.name.length > 0 ? contact.name[0] : '';
+        const phone = contact.tel && contact.tel.length > 0 ? contact.tel[0] : '';
+        
+        let address = '';
+        if (contact.address && contact.address.length > 0) {
+          const addr = contact.address[0];
+          address = [addr.addressLine, addr.city, addr.region].filter(Boolean).join(', ');
+        }
+
+        setNewLoan(prev => ({
+          ...prev,
+          clientName: name,
+          clientPhone: phone,
+          clientAddress: address || prev.clientAddress
+        }));
+      }
+    } catch (err) {
+      console.error('Erro ao importar contato:', err);
+    }
   };
 
   const addLoan = async (e: React.FormEvent) => {
@@ -1152,15 +1199,17 @@ export default function App() {
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
         const newAmount = (lastAction.amount || 0) + amount;
+        const newCapitalAmount = (lastAction.capitalAmount || 0) + amount;
         const newDescription = `${lastAction.description} + ${description}`;
         await updateDoc(doc(db, 'actions', lastAction.id), {
           amount: newAmount,
+          capitalAmount: newCapitalAmount,
           description: newDescription,
           date: new Date().toISOString()
         });
-        action = { ...lastAction, amount: newAmount, description: newDescription };
+        action = { ...lastAction, amount: newAmount, capitalAmount: newCapitalAmount, description: newDescription };
       } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount);
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0);
       }
 
       setAmortizationAmount('');
@@ -1206,15 +1255,17 @@ export default function App() {
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
         const newAmount = (lastAction.amount || 0) + interestAmount;
+        const newInterestAmount = (lastAction.interestAmount || 0) + interestAmount;
         const newDescription = `${lastAction.description} + ${description}`;
         await updateDoc(doc(db, 'actions', lastAction.id), {
           amount: newAmount,
+          interestAmount: newInterestAmount,
           description: newDescription,
           date: new Date().toISOString()
         });
-        action = { ...lastAction, amount: newAmount, description: newDescription };
+        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription };
       } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount);
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount);
       }
 
       if (action) setLastAction(action);
@@ -1263,15 +1314,17 @@ export default function App() {
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
         const newAmount = (lastAction.amount || 0) + interestAmount;
+        const newInterestAmount = (lastAction.interestAmount || 0) + interestAmount;
         const newDescription = `${lastAction.description} + ${description}`;
         await updateDoc(doc(db, 'actions', lastAction.id), {
           amount: newAmount,
+          interestAmount: newInterestAmount,
           description: newDescription,
           date: new Date().toISOString()
         });
-        action = { ...lastAction, amount: newAmount, description: newDescription };
+        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription };
       } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount);
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount);
       }
 
       if (action) setLastAction(action);
@@ -1296,9 +1349,9 @@ export default function App() {
         jurosPagos: (payingLoan.jurosPagos || 0) + interestAmount
       });
 
-      const description = `Quitação Total: R$ ${payoffAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Cap: R$ ${capitalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Jur: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`;
+      const description = `Quitação Total: R$ ${payoffAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Capital: R$ ${capitalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`;
       
-      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount, capitalAmount, interestAmount);
 
       if (action) setLastAction(action);
     } catch (err) {
@@ -1593,10 +1646,10 @@ export default function App() {
   const filteredTransactions = useMemo(() => {
     let result = filteredActions.filter(a => a.type === 'payment_received');
     if (showOnlyCapital) {
-      result = result.filter(a => a.description.toLowerCase().includes('capital'));
+      result = result.filter(a => (a.capitalAmount !== undefined && a.capitalAmount > 0) || a.description.toLowerCase().includes('capital') || a.description.toLowerCase().includes('amortização') || a.description.toLowerCase().includes('quitação'));
     }
     if (showOnlyInterest) {
-      result = result.filter(a => a.description.toLowerCase().includes('juros'));
+      result = result.filter(a => (a.interestAmount !== undefined && a.interestAmount > 0) || a.description.toLowerCase().includes('juros'));
     }
     return result;
   }, [filteredActions, showOnlyCapital, showOnlyInterest]);
@@ -1617,12 +1670,10 @@ export default function App() {
     });
 
     const capitalRecebido = periodActions
-      .filter(a => a.description.toLowerCase().includes('capital') || a.description.toLowerCase().includes('amortização') || a.description.toLowerCase().includes('quitação'))
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0);
     
     const jurosRealizados = periodActions
-      .filter(a => a.description.toLowerCase().includes('juros'))
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0);
     
     const overdueLoans = activeLoans.filter(l => l.status === 'Atrasado' || isOverdue(l));
     const atrasado = overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0);
@@ -1659,12 +1710,12 @@ export default function App() {
       .reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
     const capitalPayments = periodActions
-      .filter(a => a.type === 'payment_received' && a.description.toLowerCase().includes('capital'))
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      .filter(a => a.type === 'payment_received')
+      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0);
 
     const interestPayments = periodActions
-      .filter(a => a.type === 'payment_received' && a.description.toLowerCase().includes('juros'))
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      .filter(a => a.type === 'payment_received')
+      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0);
 
     // Outstanding balance is everything not paid yet as of now
     const currentOutstanding = loans
@@ -3696,7 +3747,17 @@ export default function App() {
               <form onSubmit={addLoan} className="space-y-6 sm:space-y-8 pb-10 sm:pb-0">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Nome do Cliente</label>
+                    <div className="flex items-center justify-between ml-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nome do Cliente</label>
+                      <button
+                        type="button"
+                        onClick={handleImportContact}
+                        className="sm:hidden flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-primary/10 text-brand-primary rounded-xl border border-brand-primary/20 text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Importar
+                      </button>
+                    </div>
                     <input 
                       required
                       type="text"

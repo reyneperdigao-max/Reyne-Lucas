@@ -97,6 +97,8 @@ service cloud.firestore {
              data.date is string && data.date.size() <= 50 &&
              data.uid == request.auth.uid &&
              (!('amount' in data) || data.amount is number) &&
+             (!('capitalAmount' in data) || data.capitalAmount is number) &&
+             (!('interestAmount' in data) || data.interestAmount is number) &&
              (!('confirmed' in data) || data.confirmed is bool);
     }
 
@@ -105,37 +107,37 @@ service cloud.firestore {
     // ==========================================
 
     match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidUser(incoming()) &&
+      allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
+      allow list: if (isOwner(userId) || isAdmin());
+      allow create: if isOwner(userId) && isValidUser(incoming()) && isValidId(userId);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) && isValidId(userId) &&
                     incoming().uid == existing().uid &&
                     incoming().role == existing().role;
     }
 
     match /loans/{loanId} {
-      allow get: if isVerifiedUser() && isDocOwner();
+      allow get: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
       allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
       allow create: if isVerifiedUser() && isValidLoan(incoming()) && isActiveTimestamp() && isValidId(loanId);
-      allow update: if isVerifiedUser() && isDocOwner() && isValidLoan(incoming()) &&
+      allow update: if isVerifiedUser() && isValidId(loanId) && (isAdmin() || (isDocOwner() && isValidLoan(incoming()) &&
                     incoming().uid == existing().uid &&
                     isCreatedAtImmutable() && (
-                      // Action: Status Change
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capitalPago', 'jurosPagos'])) ||
-                      // Action: General Update
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'dueDate', 'capital', 'interestRate', 'totalBruto']))
-                    );
-      allow delete: if isVerifiedUser() && isDocOwner();
+                      // Action: Financial/Status (Amortization, Payment, Renewal, Payoff)
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capital', 'totalBruto', 'capitalPago', 'jurosPagos', 'date', 'dueDate'])) ||
+                      // Action: General Info Edit
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto']))
+                    )));
+      allow delete: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
     }
 
     match /actions/{actionId} {
-      allow get: if isVerifiedUser() && isDocOwner();
+      allow get: if isVerifiedUser() && isDocOwner() && isValidId(actionId);
       allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
       allow create: if isVerifiedUser() && isValidAction(incoming()) && isValidId(actionId);
-      allow update: if isVerifiedUser() && isDocOwner() && isValidAction(incoming()) &&
+      allow update: if isVerifiedUser() && (isAdmin() || (isDocOwner() && isValidAction(incoming()) &&
                     incoming().uid == existing().uid &&
-                    incoming().loanId == existing().loanId;
-      allow delete: if isVerifiedUser() && isDocOwner();
+                    incoming().loanId == existing().loanId));
+      allow delete: if isVerifiedUser() && isDocOwner() && isValidId(actionId);
     }
   }
 }
