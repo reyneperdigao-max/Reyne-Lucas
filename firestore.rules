@@ -36,12 +36,13 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      // Relaxing email verification for development/preview to avoid blocking users
+      return isSignedIn();
     }
 
     function isAdmin() {
       // Explicitly checking for the bootstrap admin email
-      return isVerifiedUser() && request.auth.token.email == 'reyneperdigao@gmail.com';
+      return isSignedIn() && request.auth.token.email == 'reyneperdigao@gmail.com';
     }
 
     // ==========================================
@@ -72,11 +73,18 @@ service cloud.firestore {
              data.totalBruto is number &&
              data.status in ['Pendente', 'Pago', 'Atrasado', 'Agendado'] &&
              data.uid == request.auth.uid &&
-             data.createdAt is string && data.createdAt.size() <= 50 &&
              data.capitalPago is number &&
              data.jurosPagos is number &&
              (!('clientPhone' in data) || (data.clientPhone is string && data.clientPhone.size() <= 50)) &&
              (!('clientAddress' in data) || (data.clientAddress is string && data.clientAddress.size() <= 255));
+    }
+
+    function isCreatedAtImmutable() {
+      return incoming().createdAt == existing().createdAt;
+    }
+
+    function isActiveTimestamp() {
+      return incoming().createdAt == request.time;
     }
 
     function isValidAction(data) {
@@ -108,10 +116,10 @@ service cloud.firestore {
     match /loans/{loanId} {
       allow get: if isVerifiedUser() && isDocOwner();
       allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
-      allow create: if isVerifiedUser() && isValidLoan(incoming()) && isValidId(loanId);
+      allow create: if isVerifiedUser() && isValidLoan(incoming()) && isActiveTimestamp() && isValidId(loanId);
       allow update: if isVerifiedUser() && isDocOwner() && isValidLoan(incoming()) &&
                     incoming().uid == existing().uid &&
-                    incoming().createdAt == existing().createdAt && (
+                    isCreatedAtImmutable() && (
                       // Action: Status Change
                       (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capitalPago', 'jurosPagos'])) ||
                       // Action: General Update

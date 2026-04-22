@@ -58,7 +58,6 @@ import {
   signOut,
   User,
   signInWithEmailAndPassword,
-  sendPasswordResetEmail,
   EmailAuthProvider,
   reauthenticateWithCredential
 } from 'firebase/auth';
@@ -175,7 +174,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'forgot'>('login');
+  const [authMode] = useState<'login' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -482,7 +481,19 @@ export default function App() {
 
       if (format === 'image') {
         const imgData = canvas.toDataURL('image/png', 1.0);
-        const fileName = viewingContract ? 'contrato.png' : 'comprovante.png';
+        let fileName = 'comprovante.png';
+        let shareTitle = 'Comprovante Nexus Private';
+        let shareText = customShareText !== undefined ? customShareText : 'Segue o comprovante de recebimento Nexus Private.';
+
+        if (elementId === 'printable-contract') {
+          fileName = 'contrato.png';
+          shareTitle = 'Contrato Nexus Private';
+          shareText = customShareText !== undefined ? customShareText : 'Segue o contrato da operação Nexus Private.';
+        } else if (elementId === 'printable-schedule-receipt') {
+          fileName = 'comprovante_agendamento.png';
+          shareTitle = 'Comprovante de Agendamento';
+          shareText = customShareText !== undefined ? customShareText : 'Segue o comprovante de agendamento Nexus Private.';
+        }
         
         if (forceDownload) {
           const link = document.createElement('a');
@@ -495,8 +506,8 @@ export default function App() {
             const file = new File([blob], fileName, { type: 'image/png' });
             await navigator.share({
               files: [file],
-              title: viewingContract ? 'Contrato Nexus Private' : 'Comprovante Nexus Private',
-              text: customShareText !== undefined ? customShareText : (viewingContract ? 'Segue o contrato da operação Nexus Private.' : 'Segue o comprovante de recebimento Nexus Private.'),
+              title: shareTitle,
+              text: shareText,
               url: customShareUrl
             });
           } catch (shareError: unknown) {
@@ -508,11 +519,18 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.error('Erro ao compartilhar imagem:', shareError);
+              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
+              const link = document.createElement('a');
+              link.download = fileName;
+              link.href = imgData;
+              link.click();
             }
           }
         } else {
-          alert('O compartilhamento direto não é suportado por este navegador. Por favor, utilize a opção "Salvar/Download".');
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = imgData;
+          link.click();
         }
       } else {
         const imgData = canvas.toDataURL('image/png');
@@ -532,15 +550,15 @@ export default function App() {
         let shareTitle = 'Documento Nexus Private';
         let shareText = 'Segue o documento Nexus Private.';
 
-        if (customElementId === 'printable-report') {
+        if (elementId === 'printable-report') {
           fileName = `relatorio-${ptBrMonths[reportMonth].toLowerCase()}-${reportYear}.pdf`;
           shareTitle = 'Relatório Mensal Nexus Private';
           shareText = `Segue o relatório mensal de ${ptBrMonths[reportMonth]}/${reportYear}.`;
-        } else if (customElementId === 'printable-schedule-receipt') {
+        } else if (elementId === 'printable-schedule-receipt') {
           fileName = 'comprovante_agendamento.pdf';
           shareTitle = 'Comprovante de Agendamento';
           shareText = 'Segue o comprovante de agendamento Nexus Private.';
-        } else if (viewingContract) {
+        } else if (elementId === 'printable-contract') {
           fileName = 'contrato.pdf';
           shareTitle = 'Contrato Nexus Private';
           shareText = 'Segue o contrato da operação Nexus Private.';
@@ -573,11 +591,12 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.error('Erro ao compartilhar PDF:', shareError);
+              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
+              pdf.save(fileName);
             }
           }
         } else {
-          alert('O compartilhamento direto não é suportado por este navegador. Por favor, utilize a opção "Salvar/Download".');
+          pdf.save(fileName);
         }
       }
     } catch (error: unknown) {
@@ -594,6 +613,47 @@ export default function App() {
     } finally {
       setIsGeneratingPDF(false);
     }
+  };
+
+  const shareViaWhatsApp = (elementId: string) => {
+    let clientName = '';
+    let clientPhone = '';
+    let message = '';
+    let amount = 0;
+
+    if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
+      clientName = viewingScheduleReceipt.clientName;
+      clientPhone = viewingScheduleReceipt.clientPhone || '';
+      amount = viewingScheduleReceipt.capital;
+      message = `Olá ${clientName.split(' ')[0]}, segue o comprovante de *Agendamento Nexus Private* no valor de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*. \n\nO crédito está programado para ser liberado em ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}.`;
+    } else if (elementId === 'printable-contract' && viewingContract) {
+      const loan = viewingContract[0];
+      clientName = loan.clientName;
+      clientPhone = loan.clientPhone || '';
+      amount = viewingContract.reduce((acc, l) => acc + l.totalBruto, 0);
+      message = `Olá ${clientName.split(' ')[0]}, segue o comprovante da operação *Nexus Private* no valor total de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*.`;
+    } else if (elementId === 'printable-receipt' && viewingReceipt) {
+      clientName = viewingReceipt.clientName;
+      // We don't have phone in action, so we try to find it from loans if needed, or ask user later
+      const loan = loans.find(l => l.clientName === viewingReceipt.clientName);
+      clientPhone = loan?.clientPhone || '';
+      amount = viewingReceipt.amount || 0;
+      message = `Olá ${clientName.split(' ')[0]}, segue o *Recibo Nexus Private* referente ao pagamento de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}* recebido em ${safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy')}.`;
+    }
+
+    if (clientPhone) {
+      const cleanPhone = clientPhone.replace(/\D/g, '');
+      const phone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    } else {
+      // Fallback: share without phone
+      const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    }
+
+    // After opening WA, trigger the PDF download/share for the user to pick up
+    shareAsPDF(false, 'pdf', elementId);
   };
 
   const [confirmModal, setConfirmModal] = useState<{
@@ -727,7 +787,14 @@ export default function App() {
         const userRef = doc(db, 'users', u.uid);
         unsubProfile = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
-            const profile = docSnap.data() as any;
+            const profile = docSnap.data() as { 
+              displayName?: string, 
+              pixKey?: string, 
+              pixName?: string, 
+              pixBank?: string, 
+              profilePicture?: string,
+              lastClosureDate?: string | null 
+            };
             setUserProfile(profile);
           } else {
             // Create profile if doesn't exist
@@ -816,33 +883,6 @@ export default function App() {
           break;
         default:
           setError("Falha ao entrar. Tente novamente.");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      setError("Por favor, insira seu e-mail.");
-      return;
-    }
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await sendPasswordResetEmail(auth, email.trim());
-      setError("E-mail de recuperação enviado com sucesso!");
-      setAuthMode('login');
-    } catch (err: unknown) {
-      console.error("Forgot Password Error:", err);
-      const error = err as { code?: string };
-      if (error.code === 'auth/user-not-found') {
-        setError("E-mail não encontrado.");
-      } else if (error.code === 'auth/invalid-email') {
-        setError("E-mail inválido.");
-      } else {
-        setError("Falha ao enviar e-mail de recuperação.");
       }
     } finally {
       setIsSubmitting(false);
@@ -1007,7 +1047,7 @@ export default function App() {
         const docRef = await addDoc(collection(db, 'loans'), newDocData);
         await logAction('loan_created', `Novo empréstimo para ${loanData.clientName}`, loanData.clientName, docRef.id, loanData.capital);
         if (newDocData.status === 'Agendado') {
-          setViewingScheduleReceipt({ id: docRef.id, ...newDocData } as unknown as Loan);
+          setViewingScheduleReceipt({ id: docRef.id, ...newDocData, createdAt: new Date().toISOString() } as unknown as Loan);
         }
       }
       
@@ -1125,7 +1165,7 @@ export default function App() {
     let currentDueDate: Date;
     try {
       currentDueDate = parseISO(payingLoan.dueDate);
-    } catch (e) {
+    } catch {
       currentDueDate = today;
     }
     
@@ -1247,7 +1287,7 @@ export default function App() {
 
       const description = `Quitação Total: R$ ${payoffAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Cap: R$ ${capitalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Jur: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`;
       
-      let action: SystemAction | null = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount);
 
       if (action) setLastAction(action);
     } catch (err) {
@@ -1294,9 +1334,10 @@ export default function App() {
             await logAction('loan_deleted', `Empréstimo excluído - ${loanToDelete.clientName}`, loanToDelete.clientName, id, loanToDelete.capital);
           }
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          console.error("Re-auth Error:", err);
-          if (err.code === 'auth/wrong-password') {
+        } catch (err: unknown) {
+          const error = err as { code?: string };
+          console.error("Re-auth Error:", error);
+          if (error.code === 'auth/wrong-password') {
             setConfirmError("Senha incorreta.");
           } else {
             setConfirmError("Erro ao verificar senha.");
@@ -1376,9 +1417,10 @@ export default function App() {
           // Verify password
           const credential = EmailAuthProvider.credential(user.email, password);
           await reauthenticateWithCredential(user, credential);
-        } catch (authErr: any) {
-          console.error("Re-auth Error:", authErr);
-          if (authErr.code === 'auth/wrong-password') {
+        } catch (authErr: unknown) {
+          const error = authErr as { code?: string };
+          console.error("Re-auth Error:", error);
+          if (error.code === 'auth/wrong-password') {
             setConfirmError("Senha incorreta.");
           } else {
             setConfirmError("Erro ao verificar acesso.");
@@ -1395,7 +1437,7 @@ export default function App() {
               const isCapital = action.description.toLowerCase().includes('amortização');
               const isInterest = action.description.toLowerCase().includes('juros');
 
-              const updates: any = {};
+              const updates: Partial<Loan> = {};
               if (isCapital) {
                 updates.capital = loan.capital + amount;
                 updates.capitalPago = Math.max(0, (loan.capitalPago || 0) - amount);
@@ -1414,9 +1456,10 @@ export default function App() {
           }
           await deleteDoc(doc(db, 'actions', id));
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          console.error("Re-auth Error:", err);
-          if (err.code === 'auth/wrong-password') {
+        } catch (err: unknown) {
+          const error = err as { code?: string };
+          console.error("Re-auth Error:", error);
+          if (error.code === 'auth/wrong-password') {
             setConfirmError("Senha incorreta.");
           } else {
             setConfirmError("Erro ao verificar senha.");
@@ -1643,7 +1686,7 @@ export default function App() {
       title: string;
       message: string;
       date: string;
-      item: any;
+      item: Loan | SystemAction;
     }[] = [];
     
     // Dependencies on lastCheckDate ensures this is recalculated when day changes
@@ -1677,7 +1720,7 @@ export default function App() {
         if (days >= 0 && days <= 3) {
           list.push({
             id: `scheduled-${l.id}`,
-            type: 'upcoming' as any,
+            type: 'upcoming',
             title: days === 0 ? 'Nexus: Liberação de Crédito' : 'Nexus: Agendamento Próximo',
             message: `A liberação de crédito para ${l.clientName} deve ser efetivada ${days === 0 ? 'hoje' : `em ${days} dias`}.`,
             date: l.date,
@@ -1780,9 +1823,10 @@ export default function App() {
           });
 
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        } catch (err: any) {
-          console.error("Close Month Error:", err);
-          if (err.code === 'auth/wrong-password') {
+        } catch (err: unknown) {
+          const error = err as { code?: string };
+          console.error("Close Month Error:", error);
+          if (error.code === 'auth/wrong-password') {
             setConfirmError("Senha incorreta.");
           } else {
             setConfirmError("Erro ao processar fechamento.");
@@ -3369,7 +3413,11 @@ export default function App() {
                           </tr>
                         ) : (
                           filteredLoans.map((loan) => (
-                            <tr key={loan.id} className={cn("group transition-colors", isDark ? "hover:bg-white/[0.01]" : "hover:bg-slate-50")}>
+                            <tr key={loan.id} className={cn(
+                              "group transition-colors relative", 
+                              isDark ? "hover:bg-white/[0.01]" : "hover:bg-slate-50",
+                              isOverdue(loan) && (isDark ? "bg-brand-danger/[0.03]" : "bg-brand-danger/[0.01]")
+                            )}>
                               <td className="px-8 py-4">
                                 <button 
                                   onClick={() => setViewingClientLoans(loan.clientName)}
@@ -3499,7 +3547,11 @@ export default function App() {
                       </div>
                     ) : (
                       filteredLoans.map((loan) => (
-                        <div key={`loan-mobile-${loan.id}`} className={cn("glass-card p-5 space-y-4 border transition-colors", isDark ? "border-white/5" : "bg-white border-slate-200 shadow-lg")}>
+                        <div key={`loan-mobile-${loan.id}`} className={cn(
+                          "glass-card p-5 space-y-4 border transition-all duration-300", 
+                          isDark ? "border-white/5" : "bg-white border-slate-200 shadow-lg",
+                          isOverdue(loan) && (isDark ? "border-brand-danger/30 bg-brand-danger/[0.03] shadow-lg shadow-brand-danger/5" : "border-brand-danger/20 bg-brand-danger/[0.01] shadow-lg shadow-brand-danger/5")
+                        )}>
                           <div className="flex justify-between items-start">
                              <div>
                               <button 
@@ -4483,6 +4535,14 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
+                <button
+                  onClick={() => shareViaWhatsApp('printable-contract')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-[#25D366] text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-[#25D366]/20 hover:shadow-[#25D366]/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                >
+                  <MessageCircle className="w-4 h-4 text-white fill-white" />
+                  Enviar via WhatsApp
+                </button>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => shareAsPDF(false, 'pdf')}
@@ -4602,6 +4662,14 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
               <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
+                <button
+                  onClick={() => shareViaWhatsApp('printable-receipt')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-[#25D366] text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-[#25D366]/20 hover:shadow-[#25D366]/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                >
+                  <MessageCircle className="w-4 h-4 text-white fill-white" />
+                  Enviar via WhatsApp
+                </button>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => shareAsPDF(false, 'pdf')}
@@ -4717,6 +4785,14 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
               <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
+                <button
+                  onClick={() => shareViaWhatsApp('printable-schedule-receipt')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-[#25D366] text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-[#25D366]/20 hover:shadow-[#25D366]/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
+                >
+                  <MessageCircle className="w-4 h-4 text-white fill-white" />
+                  Enviar via WhatsApp
+                </button>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => shareAsPDF(false, 'pdf')}
@@ -4887,7 +4963,7 @@ export default function App() {
                     <button
                       key={t.id}
                       onClick={() => {
-                        setTheme(t.id as any);
+                        setTheme(t.id as 'light' | 'dark');
                         localStorage.setItem('nexus_theme', t.id);
                       }}
                       className={cn(
@@ -5137,20 +5213,35 @@ function StatCard({ title, value, icon, color, trend, onClick, isDark }: { title
 }
 
 function StatusBadge({ status }: { status: Loan['status'] }) {
-  const styles = {
-    'Pendente': 'bg-slate-500/10 text-slate-500 border-slate-500/20',
-    'Pago': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-    'Atrasado': 'bg-brand-danger/10 text-brand-danger border-brand-danger/20',
-    'Agendado': 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  const config = {
+    'Pendente': {
+      classes: 'bg-slate-500/10 text-slate-500 border-slate-500/20 shadow-slate-500/5',
+      icon: Clock
+    },
+    'Pago': {
+      classes: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shadow-emerald-500/5',
+      icon: Check
+    },
+    'Atrasado': {
+      classes: 'bg-brand-danger/10 text-brand-danger border-brand-danger/20 shadow-brand-danger/5 animate-pulse',
+      icon: AlertCircle
+    },
+    'Agendado': {
+      classes: 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-amber-500/5',
+      icon: Calendar
+    },
   };
+
+  const { classes, icon: Icon } = config[status];
 
   return (
     <div 
       className={cn(
-        "px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border inline-block",
-        styles[status]
+        "px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.15em] border inline-flex items-center gap-2 shadow-sm backdrop-blur-[2px]",
+        classes
       )}
     >
+      <Icon className="w-3 h-3" />
       {status}
     </div>
   );
