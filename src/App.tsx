@@ -622,18 +622,18 @@ export default function App() {
     let amount = 0;
 
     if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
-      clientName = viewingScheduleReceipt.clientName;
+      clientName = viewingScheduleReceipt.clientName || 'Cliente';
       clientPhone = viewingScheduleReceipt.clientPhone || '';
       amount = viewingScheduleReceipt.capital;
       message = `Olá ${clientName.split(' ')[0]}, segue o comprovante de *Agendamento Nexus Private* no valor de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*. \n\nO crédito está programado para ser liberado em ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}.`;
     } else if (elementId === 'printable-contract' && viewingContract) {
       const loan = viewingContract[0];
-      clientName = loan.clientName;
+      clientName = loan.clientName || 'Cliente';
       clientPhone = loan.clientPhone || '';
       amount = viewingContract.reduce((acc, l) => acc + l.totalBruto, 0);
       message = `Olá ${clientName.split(' ')[0]}, segue o comprovante da operação *Nexus Private* no valor total de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*.`;
     } else if (elementId === 'printable-receipt' && viewingReceipt) {
-      clientName = viewingReceipt.clientName;
+      clientName = viewingReceipt.clientName || 'Cliente';
       // We don't have phone in action, so we try to find it from loans if needed, or ask user later
       const loan = loans.find(l => l.clientName === viewingReceipt.clientName);
       clientPhone = loan?.clientPhone || '';
@@ -695,21 +695,32 @@ export default function App() {
     return isNaN(parsed) ? 0 : parsed;
   };
 
-  const safeFormatDate = (dateStr: string | undefined, formatStr: string, fallback: string = '---') => {
-    if (!dateStr) return fallback;
-    try {
-      const date = parseISO(dateStr);
-      if (isNaN(date.getTime())) return fallback;
-      return format(date, formatStr, { locale: ptBR });
-    } catch {
-      return fallback;
+  const toDate = (val: any): Date | null => {
+    if (!val) return null;
+    if (val instanceof Date) return val;
+    // Firestore Timestamp check
+    if (typeof val.toDate === 'function') return val.toDate();
+    if (typeof val === 'string') {
+      try {
+        const d = parseISO(val);
+        return isNaN(d.getTime()) ? new Date(val) : d;
+      } catch {
+        return new Date(val);
+      }
     }
+    return new Date(val);
+  };
+
+  const safeFormatDate = (dateVal: any, formatStr: string, fallback: string = '---') => {
+    const date = toDate(dateVal);
+    if (!date || isNaN(date.getTime())) return fallback;
+    return format(date, formatStr, { locale: ptBR });
   };
 
   const isOverdue = (loan: Loan) => {
     if (!loan.dueDate || loan.status !== 'Pendente') return false;
     try {
-      const dueDate = startOfDay(parseISO(loan.dueDate));
+      const dueDate = startOfDay(toDate(loan.dueDate) || new Date());
       const today = startOfDay(new Date());
       return dueDate < today;
     } catch {
@@ -719,7 +730,7 @@ export default function App() {
 
   const getDaysDiff = (dueDateStr: string) => {
     try {
-      const dueDate = startOfDay(parseISO(dueDateStr));
+      const dueDate = startOfDay(toDate(dueDateStr) || new Date());
       const today = startOfDay(new Date());
       const diffTime = dueDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -1092,7 +1103,7 @@ export default function App() {
     const phone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
     
     // Use only first name
-    const firstName = loan.clientName.trim().split(' ')[0];
+    const firstName = (loan.clientName || 'Cliente').trim().split(' ')[0];
     
     // Calculate interest for renewal option
     const interestAmount = loan.capital * loan.interestRate;
@@ -1164,7 +1175,7 @@ export default function App() {
     const today = startOfDay(new Date());
     let currentDueDate: Date;
     try {
-      currentDueDate = parseISO(payingLoan.dueDate);
+      currentDueDate = toDate(payingLoan.dueDate) || today;
     } catch {
       currentDueDate = today;
     }
@@ -1217,7 +1228,7 @@ export default function App() {
     const today = startOfDay(new Date());
     let currentDueDate: Date;
     try {
-      currentDueDate = parseISO(payingLoan.dueDate);
+      currentDueDate = toDate(payingLoan.dueDate) || today;
     } catch {
       currentDueDate = today;
     }
@@ -1477,7 +1488,8 @@ export default function App() {
 
     if (filterDate) {
       result = result.filter(l => {
-        const day = parseISO(l.dueDate).getDate();
+        const d = toDate(l.dueDate);
+        const day = d ? d.getDate() : 0;
         return day === parseInt(filterDate);
       });
     }
@@ -1486,7 +1498,7 @@ export default function App() {
       result = result.filter(l => l.status !== 'Pago' && l.status !== 'Agendado');
       if (!command.trim() && !showOnlyOverdue && !filterDate) {
         result = [...result]
-          .sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime())
+          .sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0))
           .slice(0, 5);
       }
     } else if (activeTab === 'Agendados') {
@@ -1546,7 +1558,7 @@ export default function App() {
     if (filterDate) {
       const dateInt = parseInt(filterDate);
       result = result.filter(c => 
-        loans.some(l => l.clientName === c.name && parseISO(l.dueDate).getDate() === dateInt)
+        loans.some(l => l.clientName === c.name && (toDate(l.dueDate)?.getDate() || 0) === dateInt)
       );
     }
     
@@ -1596,11 +1608,12 @@ export default function App() {
       .reduce((acc, curr) => acc + curr.capital, 0);
     
     // Calculate received values based on actions since last closure
-    const closureDate = userProfile?.lastClosureDate ? parseISO(userProfile.lastClosureDate) : null;
+    const closureDate = userProfile?.lastClosureDate ? toDate(userProfile.lastClosureDate) : null;
     const periodActions = actions.filter(a => {
       if (a.type !== 'payment_received') return false;
-      if (!closureDate) return true;
-      return parseISO(a.date) > closureDate;
+      const d = toDate(a.date);
+      if (!closureDate || !d) return true;
+      return d > closureDate;
     });
 
     const capitalRecebido = periodActions
@@ -1630,13 +1643,13 @@ export default function App() {
 
   const monthlyReportStats = useMemo(() => {
     const periodActions = actions.filter(a => {
-      const d = parseISO(a.date);
-      return d.getMonth() === reportMonth && d.getFullYear() === reportYear;
+      const d = toDate(a.date);
+      return d && d.getMonth() === reportMonth && d.getFullYear() === reportYear;
     });
 
     const loansCreatedInPeriod = loans.filter(l => {
-      const d = parseISO(l.createdAt || l.date);
-      return d.getMonth() === reportMonth && d.getFullYear() === reportYear && l.status !== 'Agendado';
+      const d = toDate(l.createdAt || l.date);
+      return d && d.getMonth() === reportMonth && d.getFullYear() === reportYear && l.status !== 'Agendado';
     });
 
     const totalLent = loansCreatedInPeriod.reduce((acc, curr) => acc + curr.capital, 0);
@@ -1699,7 +1712,7 @@ export default function App() {
           id: `overdue-${l.id}`,
           type: 'overdue',
           title: 'Nexus: Pagamento em Atraso',
-          message: `Identificamos inadimplência no contrato para ${l.clientName} (Vencido em ${format(parseISO(l.dueDate), 'dd/MM/yyyy')}).`,
+          message: `Identificamos inadimplência no contrato para ${l.clientName} (Vencido em ${safeFormatDate(l.dueDate, 'dd/MM/yyyy')}).`,
           date: l.dueDate,
           item: l
         });
@@ -2105,7 +2118,7 @@ export default function App() {
                                 <div className="flex-1 min-w-0">
                                   <div className="flex justify-between items-start mb-0.5">
                                     <h4 className={cn("text-[10px] font-black underline decoration-2 decoration-current/10 underline-offset-4 uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{n.title}</h4>
-                                    <span className="text-[8px] text-slate-500 font-bold uppercase">{format(parseISO(n.date), 'dd/MM')}</span>
+                                    <span className="text-[8px] text-slate-500 font-bold uppercase">{safeFormatDate(n.date, 'dd/MM')}</span>
                                   </div>
                                   <p className="text-[11px] leading-relaxed text-slate-500 mt-1 mb-3">{n.message}</p>
                                   
@@ -2577,7 +2590,7 @@ export default function App() {
                                     onClick={() => {
                                       const latestLoan = loans
                                         .filter(l => l.clientName === client.name)
-                                        .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())[0];
+                                        .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
                                       if (latestLoan) sendWhatsAppCollection(latestLoan);
                                     }}
                                     className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl border border-[#25D366]/20 transition-all active:scale-95"
@@ -2622,7 +2635,7 @@ export default function App() {
                                     onClick={() => {
                                       const latestLoan = loans
                                         .filter(l => l.clientName === client.name)
-                                        .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())[0];
+                                        .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
                                       if (latestLoan) openEditModal(latestLoan);
                                     }}
                                     className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-amber-500/20"
@@ -2746,7 +2759,7 @@ export default function App() {
                                 onClick={() => {
                                   const latestLoan = loans
                                     .filter(l => l.clientName === client.name)
-                                    .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())[0];
+                                    .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
                                   if (latestLoan) openEditModal(latestLoan);
                                 }}
                                 className="p-3.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 active:scale-95 transition-all"
@@ -3806,7 +3819,7 @@ export default function App() {
                           setNewLoan({
                             ...newLoan, 
                             date: newDate,
-                            dueDate: format(addMonths(parseISO(newDate), 1), 'yyyy-MM-dd')
+                            dueDate: format(addMonths(toDate(newDate) || new Date(), 1), 'yyyy-MM-dd')
                           });
                         }}
                       />
@@ -4332,7 +4345,7 @@ export default function App() {
                   <tbody className="divide-y divide-white/[0.05]">
                     {loans
                       .filter(l => l.clientName === viewingClientLoans)
-                      .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime())
+                      .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))
                       .map((loan) => (
                         <tr key={loan.id} className="group hover:bg-white/[0.01] transition-colors">
                           <td className="px-6 py-4 text-white text-xs">
