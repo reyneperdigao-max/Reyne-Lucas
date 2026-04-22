@@ -2588,18 +2588,6 @@ export default function App() {
                                 <div className="flex items-center justify-end gap-2">
                                   <button 
                                     onClick={() => {
-                                      const latestLoan = loans
-                                        .filter(l => l.clientName === client.name)
-                                        .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
-                                      if (latestLoan) sendWhatsAppCollection(latestLoan);
-                                    }}
-                                    className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl border border-[#25D366]/20 transition-all active:scale-95"
-                                    title="Enviar Cobrança WhatsApp"
-                                  >
-                                    <MessageCircle className="w-4 h-4" />
-                                  </button>
-                                  <button 
-                                    onClick={() => {
                                       setEditingLoanId(null);
                                       setNewLoan({
                                         clientName: client.name,
@@ -3500,13 +3488,6 @@ export default function App() {
                                       >
                                         <FileText className="w-4 h-4" />
                                       </button>
-                                      <button 
-                                        onClick={() => sendWhatsAppCollection(loan)}
-                                        className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl border border-[#25D366]/20 transition-all active:scale-95"
-                                        title="Enviar Cobrança WhatsApp"
-                                      >
-                                        <MessageCircle className="w-4 h-4" />
-                                      </button>
                                     </>
                                   )}
                                   {loan.status !== 'Pago' && (
@@ -3632,13 +3613,6 @@ export default function App() {
                                     className="p-3.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 active:scale-95 transition-all"
                                   >
                                     <FileText className="w-5 h-5" />
-                                  </button>
-                                  <button 
-                                    onClick={() => sendWhatsAppCollection(loan)}
-                                    className="p-3.5 bg-[#25D366]/10 text-[#25D366] rounded-xl border border-[#25D366]/20 active:scale-95 transition-all"
-                                    title="Enviar Cobrança WhatsApp"
-                                  >
-                                    <MessageCircle className="w-5 h-5" />
                                   </button>
                                 </>
                               )}
@@ -4403,13 +4377,6 @@ export default function App() {
                                 <FileText className="w-4 h-4" />
                               </button>
                               <button 
-                                onClick={() => sendWhatsAppCollection(loan)}
-                                className="p-2 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-white rounded-xl transition-all active:scale-95 border border-[#25D366]/20"
-                                title="Enviar Cobrança WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                              <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
                                   openEditModal(loan);
@@ -4548,14 +4515,6 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) */}
               <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareViaWhatsApp('printable-contract')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-[#25D366] text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-[#25D366]/20 hover:shadow-[#25D366]/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                >
-                  <MessageCircle className="w-4 h-4 text-white fill-white" />
-                  Enviar via WhatsApp
-                </button>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => shareAsPDF(false, 'pdf')}
@@ -4675,14 +4634,6 @@ export default function App() {
 
               {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
               <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareViaWhatsApp('printable-receipt')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-[#25D366] text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-[#25D366]/20 hover:shadow-[#25D366]/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                >
-                  <MessageCircle className="w-4 h-4 text-white fill-white" />
-                  Enviar via WhatsApp
-                </button>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => shareAsPDF(false, 'pdf')}
@@ -4705,11 +4656,11 @@ export default function App() {
                     Imprimir
                   </button>
                 </div>
-                <button
+                <button 
                   onClick={() => setViewingReceipt(null)}
-                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 transition-colors pt-6"
+                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-colors pt-6 text-center"
                 >
-                  Voltar
+                  Voltar ao Painel
                 </button>
               </div>
             </div>
@@ -4743,36 +4694,30 @@ export default function App() {
                   <span className="text-xl mr-2 text-slate-300">R$</span>
                   {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
-                <div className="mt-6 flex items-center justify-center gap-2 text-amber-600">
-                  <div className="w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center">
-                    <Clock className="w-4 h-4" />
-                  </div>
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">Agendamento Realizado</span>
-                </div>
               </div>
 
               {/* Essential Details Grid */}
               <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
                 <div className="col-span-2 pb-6 border-b border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Beneficiário</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Cliente Beneficiário</span>
                   <p className="text-xl font-black text-slate-900 uppercase tracking-tight">
                     {viewingScheduleReceipt.clientName}
                   </p>
                 </div>
                 
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data Prevista</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data para Liberação</span>
                   <p className="font-black text-slate-900 uppercase text-sm leading-tight">{safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Vencimento</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Previsão de Vencimento</span>
                   <p className="font-black text-neon-red uppercase text-sm leading-tight">{safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}</p>
                 </div>
 
                 <div className="col-span-2 pt-6 border-t border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Detalhes da Operação</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Observações do Agendamento</span>
                   <p className="text-xs text-slate-600 leading-relaxed font-medium uppercase tracking-tight">
-                    Operação financeira agendada para ativação na data prevista. O crédito de R$ {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} será liberado conforme planejamento.
+                    O crédito de R$ {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} está programado no sistema para processamento na data indicada. A ativação ocorrerá automaticamente após a validação do lastro financeiro.
                   </p>
                 </div>
               </div>
@@ -4784,7 +4729,7 @@ export default function App() {
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
-                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Chave de Controle</p>
+                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Controle de Agendamento</p>
                     <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">
                       SCH-{viewingScheduleReceipt.id.toUpperCase()}-{new Date(viewingScheduleReceipt.createdAt || new Date()).getTime()}
                     </p>
@@ -4796,16 +4741,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
+              {/* Action Buttons (Hidden in PDF) */}
               <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
-                <button
-                  onClick={() => shareViaWhatsApp('printable-schedule-receipt')}
-                  disabled={isGeneratingPDF}
-                  className="flex items-center justify-center gap-3 px-6 py-5 bg-[#25D366] text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-[#25D366]/20 hover:shadow-[#25D366]/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                >
-                  <MessageCircle className="w-4 h-4 text-white fill-white" />
-                  Enviar via WhatsApp
-                </button>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => shareAsPDF(false, 'pdf')}
@@ -4828,11 +4765,11 @@ export default function App() {
                     Imprimir
                   </button>
                 </div>
-                <button
+                <button 
                   onClick={() => setViewingScheduleReceipt(null)}
-                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-xs hover:text-slate-600 transition-colors pt-6"
+                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-colors pt-6 text-center"
                 >
-                  Voltar
+                  Voltar ao Painel
                 </button>
               </div>
             </div>
