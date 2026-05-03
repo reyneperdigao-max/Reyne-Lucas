@@ -38,7 +38,6 @@ import {
   Moon,
   Bell,
   User as UserIcon,
-  UserPlus,
 } from 'lucide-react';
 import { 
   collection, 
@@ -138,6 +137,7 @@ interface SystemAction {
   amount?: number;
   capitalAmount?: number;
   interestAmount?: number;
+  paymentMethod?: 'DINHEIRO' | 'PIX';
   clientName: string;
   loanId: string;
   date: string;
@@ -194,6 +194,19 @@ export default function App() {
   const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
   const [viewingContract, setViewingContract] = useState<Loan[] | null>(null);
+  const [selectedLoansForUnified, setSelectedLoansForUnified] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (viewingClientLoans) {
+      const activeLoans = loans
+        .filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago')
+        .map(l => l.id);
+      setSelectedLoansForUnified(activeLoans);
+    } else {
+      setSelectedLoansForUnified([]);
+    }
+  }, [viewingClientLoans, loans]);
+
   const [viewingReceipt, setViewingReceipt] = useState<SystemAction | null>(null);
   const [viewingScheduleReceipt, setViewingScheduleReceipt] = useState<Loan | null>(null);
   const [lastAction, setLastAction] = useState<SystemAction | null>(null);
@@ -249,7 +262,8 @@ export default function App() {
   const [pendingPayment, setPendingPayment] = useState<{ 
     amount: number; 
     type: 'interest' | 'renew' | 'payoff' | 'amortization'; 
-    label: string 
+    label: string;
+    method?: 'DINHEIRO' | 'PIX';
   } | null>(null);
   const [isConfirmingPix, setIsConfirmingPix] = useState(false);
   const [pixConfirmed, setPixConfirmed] = useState(false);
@@ -618,47 +632,6 @@ export default function App() {
     }
   };
 
-  const shareViaWhatsApp = (elementId: string) => {
-    let clientName = '';
-    let clientPhone = '';
-    let message = '';
-    let amount = 0;
-
-    if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
-      clientName = viewingScheduleReceipt.clientName || 'Cliente';
-      clientPhone = viewingScheduleReceipt.clientPhone || '';
-      amount = viewingScheduleReceipt.capital;
-      message = `Olá ${clientName.split(' ')[0]}, segue o comprovante de *Agendamento Nexus Private* no valor de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*. \n\nO crédito está programado para ser liberado em ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}.`;
-    } else if (elementId === 'printable-contract' && viewingContract) {
-      const loan = viewingContract[0];
-      clientName = loan.clientName || 'Cliente';
-      clientPhone = loan.clientPhone || '';
-      amount = viewingContract.reduce((acc, l) => acc + l.totalBruto, 0);
-      message = `Olá ${clientName.split(' ')[0]}, segue o comprovante da operação *Nexus Private* no valor total de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*.`;
-    } else if (elementId === 'printable-receipt' && viewingReceipt) {
-      clientName = viewingReceipt.clientName || 'Cliente';
-      // We don't have phone in action, so we try to find it from loans if needed, or ask user later
-      const loan = loans.find(l => l.clientName === viewingReceipt.clientName);
-      clientPhone = loan?.clientPhone || '';
-      amount = viewingReceipt.amount || 0;
-      message = `Olá ${clientName.split(' ')[0]}, segue o *Recibo Nexus Private* referente ao pagamento de *R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}* recebido em ${safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy')}.`;
-    }
-
-    if (clientPhone) {
-      const cleanPhone = clientPhone.replace(/\D/g, '');
-      const phone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-      window.open(url, '_blank');
-    } else {
-      // Fallback: share without phone
-      const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-      window.open(url, '_blank');
-    }
-
-    // After opening WA, trigger the PDF download/share for the user to pick up
-    shareAsPDF(false, 'pdf', elementId);
-  };
-
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -692,17 +665,18 @@ export default function App() {
   // --- Helpers ---
   const parseLocaleNumber = (str: string) => {
     if (!str) return 0;
-    // Replace comma with dot for parsing
-    const normalized = str.replace(',', '.');
-    const parsed = parseFloat(normalized);
+    // Remove dots (thousands) and replace comma (decimal) with dot
+    const clean = str.replace(/\./g, '').replace(',', '.');
+    const parsed = parseFloat(clean);
     return isNaN(parsed) ? 0 : parsed;
   };
 
-  const toDate = (val: any): Date | null => {
+  const toDate = (val: unknown): Date | null => {
     if (!val) return null;
     if (val instanceof Date) return val;
     // Firestore Timestamp check
-    if (typeof val.toDate === 'function') return val.toDate();
+    const v = val as { toDate?: () => Date };
+    if (typeof v.toDate === 'function') return v.toDate();
     if (typeof val === 'string') {
       try {
         const d = parseISO(val);
@@ -711,10 +685,10 @@ export default function App() {
         return new Date(val);
       }
     }
-    return new Date(val);
+    return new Date(val as string | number);
   };
 
-  const safeFormatDate = (dateVal: any, formatStr: string, fallback: string = '---') => {
+  const safeFormatDate = (dateVal: unknown, formatStr: string, fallback: string = '---') => {
     const date = toDate(dateVal);
     if (!date || isNaN(date.getTime())) return fallback;
     return format(date, formatStr, { locale: ptBR });
@@ -974,11 +948,12 @@ export default function App() {
     loanId: string, 
     amount?: number,
     capitalAmount?: number,
-    interestAmount?: number
+    interestAmount?: number,
+    paymentMethod?: 'DINHEIRO' | 'PIX'
   ) => {
     if (!user) return null;
     try {
-      const actionData = {
+      const actionData: Partial<SystemAction> & Record<string, unknown> = {
         type,
         description,
         clientName,
@@ -990,6 +965,7 @@ export default function App() {
         uid: user.uid,
         confirmed: type === 'payment_received' ? false : true
       };
+      if (paymentMethod) actionData.paymentMethod = paymentMethod;
       const docRef = await addDoc(collection(db, 'actions'), actionData);
       return { id: docRef.id, ...actionData } as SystemAction;
     } catch (err: unknown) {
@@ -1017,40 +993,6 @@ export default function App() {
     };
     console.error('Firestore Error:', JSON.stringify(errInfo));
     setError("Erro de permissão ou conexão com o banco de dados.");
-  };
-
-  const handleImportContact = async () => {
-    if (!('contacts' in navigator) || !('select' in (navigator as any).contacts)) {
-      alert('Seu dispositivo não suporta a importação direta de contatos via navegador.');
-      return;
-    }
-
-    try {
-      const props = ['name', 'tel', 'address'];
-      const opts = { multiple: false };
-      const contacts = await (navigator as any).contacts.select(props, opts);
-
-      if (contacts && contacts.length > 0) {
-        const contact = contacts[0];
-        const name = contact.name && contact.name.length > 0 ? contact.name[0] : '';
-        const phone = contact.tel && contact.tel.length > 0 ? contact.tel[0] : '';
-        
-        let address = '';
-        if (contact.address && contact.address.length > 0) {
-          const addr = contact.address[0];
-          address = [addr.addressLine, addr.city, addr.region].filter(Boolean).join(', ');
-        }
-
-        setNewLoan(prev => ({
-          ...prev,
-          clientName: name,
-          clientPhone: phone,
-          clientAddress: address || prev.clientAddress
-        }));
-      }
-    } catch (err) {
-      console.error('Erro ao importar contato:', err);
-    }
   };
 
   const addLoan = async (e: React.FormEvent) => {
@@ -1177,7 +1119,7 @@ export default function App() {
     setIsAdding(true);
   };
 
-  const handleAmortization = async () => {
+  const handleAmortization = async (method?: 'DINHEIRO' | 'PIX') => {
     if (!payingLoan || !amortizationAmount) return;
     const amount = parseFloat(amortizationAmount);
     if (isNaN(amount) || amount <= 0) return;
@@ -1194,7 +1136,8 @@ export default function App() {
         status: newCapital === 0 ? 'Pago' : payingLoan.status
       });
       
-      const description = `Amortização de capital: R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      const methodText = method ? ` via ${method}` : '';
+      const description = `Amortização de capital: R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText}`;
       let action: SystemAction | null = null;
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
@@ -1205,11 +1148,12 @@ export default function App() {
           amount: newAmount,
           capitalAmount: newCapitalAmount,
           description: newDescription,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          paymentMethod: method || null
         });
-        action = { ...lastAction, amount: newAmount, capitalAmount: newCapitalAmount, description: newDescription };
+        action = { ...lastAction, amount: newAmount, capitalAmount: newCapitalAmount, description: newDescription, paymentMethod: method };
       } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0);
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0, method);
       }
 
       setAmortizationAmount('');
@@ -1219,7 +1163,7 @@ export default function App() {
     }
   };
 
-  const handleInterestPayment = async () => {
+  const handleInterestPayment = async (method?: 'DINHEIRO' | 'PIX') => {
     if (!payingLoan) return;
     const today = startOfDay(new Date());
     let currentDueDate: Date;
@@ -1250,7 +1194,8 @@ export default function App() {
         jurosPagos: newJurosPagos
       });
 
-      const description = `Pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      const methodText = method ? ` via ${method}` : '';
+      const description = `Pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText}`;
       let action: SystemAction | null = null;
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
@@ -1261,11 +1206,12 @@ export default function App() {
           amount: newAmount,
           interestAmount: newInterestAmount,
           description: newDescription,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          paymentMethod: method || null
         });
-        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription };
+        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription, paymentMethod: method };
       } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount);
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
       }
 
       if (action) setLastAction(action);
@@ -1274,7 +1220,7 @@ export default function App() {
     }
   };
 
-  const handleRenewLoan = async () => {
+  const handleRenewLoan = async (method?: 'DINHEIRO' | 'PIX') => {
     if (!payingLoan) return;
     const today = startOfDay(new Date());
     let currentDueDate: Date;
@@ -1309,7 +1255,8 @@ export default function App() {
         jurosPagos: newJurosPagos
       });
 
-      const description = `Renovação com pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      const methodText = method ? ` via ${method}` : '';
+      const description = `Renovação com pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText}`;
       let action: SystemAction | null = null;
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
@@ -1320,11 +1267,12 @@ export default function App() {
           amount: newAmount,
           interestAmount: newInterestAmount,
           description: newDescription,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          paymentMethod: method || null
         });
-        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription };
+        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription, paymentMethod: method };
       } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount);
+        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
       }
 
       if (action) setLastAction(action);
@@ -1333,7 +1281,7 @@ export default function App() {
     }
   };
 
-  const handlePayoffLoan = async () => {
+  const handlePayoffLoan = async (method?: 'DINHEIRO' | 'PIX') => {
     if (!payingLoan) return;
     
     const payoffAmount = payingLoan.totalBruto;
@@ -1349,9 +1297,10 @@ export default function App() {
         jurosPagos: (payingLoan.jurosPagos || 0) + interestAmount
       });
 
-      const description = `Quitação Total: R$ ${payoffAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Capital: R$ ${capitalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`;
+      const methodText = method ? ` via ${method}` : '';
+      const description = `Quitação Total: R$ ${payoffAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Capital: R$ ${capitalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText})`;
       
-      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount, capitalAmount, interestAmount);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount, capitalAmount, interestAmount, method);
 
       if (action) setLastAction(action);
     } catch (err) {
@@ -2796,6 +2745,19 @@ export default function App() {
                               </button>
                               <button 
                                 onClick={() => {
+                                  const oldestActive = loans
+                                    .filter(l => l.clientName === client.name && l.status !== 'Pago')
+                                    .sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0))[0];
+                                  if (oldestActive) sendWhatsAppCollection(oldestActive);
+                                  else alert('Este cliente não possui contratos ativos para cobrança.');
+                                }}
+                                className="p-3.5 bg-brand-primary/10 text-brand-primary rounded-xl border border-brand-primary/20 active:scale-95 transition-all"
+                                title="Cobrança WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => {
                                   const latestLoan = loans
                                     .filter(l => l.clientName === client.name)
                                     .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
@@ -2893,9 +2855,19 @@ export default function App() {
                                 {action.description}
                               </td>
                               <td className="px-8 py-4">
-                                <span className="text-brand-accent font-black text-xs">
-                                  R$ {action.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </span>
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-brand-accent font-black text-xs">
+                                    R$ {action.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  {action.paymentMethod && (
+                                    <span className={cn(
+                                      "text-[8px] font-black px-1.5 py-0.5 rounded-md w-fit uppercase tracking-tighter",
+                                      action.paymentMethod === 'PIX' ? "bg-brand-primary/10 text-brand-primary" : "bg-emerald-500/10 text-emerald-500"
+                                    )}>
+                                      {action.paymentMethod}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-8 py-4 text-right">
                                 <div className="flex items-center justify-end gap-2">
@@ -2946,8 +2918,18 @@ export default function App() {
                             </div>
                             <div className="text-right">
                               <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest block mb-1">Valor</span>
-                              <div className="text-brand-accent font-black text-sm">
-                                R$ {action.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="text-brand-accent font-black text-sm">
+                                  R$ {action.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </div>
+                                {action.paymentMethod && (
+                                  <span className={cn(
+                                    "text-[7px] font-black px-1.5 py-0.5 rounded-md w-fit uppercase tracking-tighter",
+                                    action.paymentMethod === 'PIX' ? "bg-brand-primary/10 text-brand-primary" : "bg-emerald-500/10 text-emerald-500"
+                                  )}>
+                                    {action.paymentMethod}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -3539,6 +3521,13 @@ export default function App() {
                                       >
                                         <FileText className="w-4 h-4" />
                                       </button>
+                                      <button 
+                                        onClick={() => sendWhatsAppCollection(loan)}
+                                        className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl border border-emerald-500/20"
+                                        title="Cobrança WhatsApp"
+                                      >
+                                        <MessageCircle className="w-4 h-4" />
+                                      </button>
                                     </>
                                   )}
                                   {loan.status !== 'Pago' && (
@@ -3665,6 +3654,13 @@ export default function App() {
                                   >
                                     <FileText className="w-5 h-5" />
                                   </button>
+                                  <button 
+                                    onClick={() => sendWhatsAppCollection(loan)}
+                                    className="p-3.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 active:scale-95 transition-all"
+                                    title="Cobrança WhatsApp"
+                                  >
+                                    <MessageCircle className="w-5 h-5" />
+                                  </button>
                                 </>
                               )}
                               {loan.status !== 'Pago' && (
@@ -3749,14 +3745,6 @@ export default function App() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between ml-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nome do Cliente</label>
-                      <button
-                        type="button"
-                        onClick={handleImportContact}
-                        className="sm:hidden flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-primary/10 text-brand-primary rounded-xl border border-brand-primary/20 text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        Importar
-                      </button>
                     </div>
                     <input 
                       required
@@ -3793,7 +3781,20 @@ export default function App() {
                       placeholder="(00) 00000-0000"
                       className="w-full glass-input py-3 sm:py-4"
                       value={newLoan.clientPhone || ""}
-                      onChange={(e) => setNewLoan({...newLoan, clientPhone: e.target.value})}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, '');
+                        if (val.length > 11) val = val.substring(0, 11);
+                        if (val.length > 10) {
+                          val = `(${val.substring(0, 2)}) ${val.substring(2, 7)}-${val.substring(7)}`;
+                        } else if (val.length > 6) {
+                          val = `(${val.substring(0, 2)}) ${val.substring(2, 6)}-${val.substring(6)}`;
+                        } else if (val.length > 2) {
+                          val = `(${val.substring(0, 2)}) ${val.substring(2)}`;
+                        } else if (val.length > 0) {
+                          val = `(${val}`;
+                        }
+                        setNewLoan({...newLoan, clientPhone: val});
+                      }}
                     />
                   </div>
 
@@ -3812,22 +3813,34 @@ export default function App() {
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Capital (R$)</label>
                     <input 
                       required
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="numeric"
                       className="w-full glass-input py-3 sm:py-4"
                       value={newLoan.capital || ""}
-                      onChange={(e) => setNewLoan({...newLoan, capital: e.target.value})}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        if (val) {
+                          const num = (parseInt(val) / 100).toFixed(2);
+                          const formatted = parseFloat(num).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                          setNewLoan({...newLoan, capital: formatted});
+                        } else {
+                          setNewLoan({...newLoan, capital: ''});
+                        }
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Juros (%)</label>
                     <input 
                       required
-                      type="number"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       className="w-full glass-input py-3 sm:py-4"
                       value={newLoan.interestRate || ""}
-                      onChange={(e) => setNewLoan({...newLoan, interestRate: e.target.value})}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^\d.,]/g, '').replace(',', '.');
+                        setNewLoan({...newLoan, interestRate: val});
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
@@ -3947,139 +3960,180 @@ export default function App() {
                           )}
                         </div>
                       ) : (
-                        <>
-                          <div className="glass-card bg-brand-primary/5 border-brand-primary/20 p-4 mb-4">
-                             <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest block mb-1">Total a Receber</span>
-                             <div className="text-2xl font-black text-white">R$ {pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                             <div className="text-[9px] font-bold text-slate-500 uppercase mt-1">Ref: {pendingPayment.label}</div>
-                          </div>
-                   
-                          <div className="bg-white p-4 rounded-3xl mx-auto inline-block border-8 border-white/5 relative group cursor-pointer"
-                            onClick={() => {
-                              if (pixPayload) {
-                                navigator.clipboard.writeText(pixPayload);
-                                setPixCopied(true);
-                                setTimeout(() => setPixCopied(false), 2000);
-                              }
-                            }}
-                          >
-                            {userProfile?.pixKey ? (
-                              <QRCodeSVG 
-                                value={pixPayload} 
-                                size={220}
-                                level="H"
-                                includeMargin={true}
-                              />
-                            ) : (
-                              <div className="w-[220px] h-[220px] flex items-center justify-center text-slate-400 bg-slate-100 rounded-2xl italic text-xs text-center p-4">
-                                PIX não configurado nas configurações do sistema.
-                              </div>
-                            )}
-                            {pixPayload && (
-                              <div className="absolute inset-0 bg-brand-primary/90 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-[24px]">
-                                <Copy className="w-8 h-8 text-black mb-2" />
-                                <span className="text-black font-black uppercase text-[10px] tracking-widest">Clique para Copiar</span>
-                              </div>
-                            )}
+                        <div className="space-y-6">
+                           <div className="glass-card bg-brand-primary/5 border-brand-primary/20 p-4">
+                              <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest block mb-1">Total a Receber</span>
+                              <div className="text-2xl font-black text-white">R$ {pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                              <div className="text-[9px] font-bold text-slate-500 uppercase mt-1">Ref: {pendingPayment.label}</div>
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-3 p-1 bg-white/5 rounded-2xl border border-white/10">
+                            <button 
+                              onClick={() => setPendingPayment({ ...pendingPayment, method: 'PIX' })}
+                              className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                                pendingPayment.method === 'PIX' 
+                                  ? 'bg-brand-primary text-black shadow-lg shadow-brand-primary/20' 
+                                  : 'text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              <QrCode className="w-4 h-4" />
+                              PIX
+                            </button>
+                            <button 
+                              onClick={() => setPendingPayment({ ...pendingPayment, method: 'DINHEIRO' })}
+                              className={`py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                                pendingPayment.method === 'DINHEIRO' 
+                                  ? 'bg-brand-primary text-black shadow-lg shadow-brand-primary/20' 
+                                  : 'text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              <DollarSign className="w-4 h-4" />
+                              Dinheiro
+                            </button>
                           </div>
 
-                          {pixPayload && (
-                            <div className="mt-4 px-2">
-                              <div className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-start gap-3 text-left">
-                                <div className="flex-1 min-w-0">
-                                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Código Copia e Cola</span>
-                                  <p className="text-[10px] font-mono text-slate-300 break-all line-clamp-2 leading-relaxed opacity-60">
-                                    {pixPayload}
-                                  </p>
-                                </div>
-                                <button 
-                                  onClick={() => {
+                          {pendingPayment.method === 'PIX' ? (
+                            <>
+                              <div className="bg-white p-4 rounded-3xl mx-auto inline-block border-8 border-white/5 relative group cursor-pointer"
+                                onClick={() => {
+                                  if (pixPayload) {
                                     navigator.clipboard.writeText(pixPayload);
                                     setPixCopied(true);
                                     setTimeout(() => setPixCopied(false), 2000);
+                                  }
+                                }}
+                              >
+                                {userProfile?.pixKey ? (
+                                  <QRCodeSVG 
+                                    value={pixPayload} 
+                                    size={220}
+                                    level="H"
+                                    includeMargin={true}
+                                  />
+                                ) : (
+                                  <div className="w-[220px] h-[220px] flex items-center justify-center text-slate-400 bg-slate-100 rounded-2xl italic text-xs text-center p-4">
+                                    PIX não configurado nas configurações do sistema.
+                                  </div>
+                                )}
+                                {pixPayload && (
+                                  <div className="absolute inset-0 bg-brand-primary/90 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-[24px]">
+                                    <Copy className="w-8 h-8 text-black mb-2" />
+                                    <span className="text-black font-black uppercase text-[10px] tracking-widest">Clique para Copiar</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {pixPayload && (
+                                <div className="px-2">
+                                  <div className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-start gap-3 text-left">
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Código Copia e Cola</span>
+                                      <p className="text-[10px] font-mono text-slate-300 break-all line-clamp-2 leading-relaxed opacity-60">
+                                        {pixPayload}
+                                      </p>
+                                    </div>
+                                    <button 
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(pixPayload);
+                                        setPixCopied(true);
+                                        setTimeout(() => setPixCopied(false), 2000);
+                                      }}
+                                      className={`p-2 rounded-lg transition-all ${pixCopied ? 'bg-emerald-500/20 text-emerald-400' : 'bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20'}`}
+                                    >
+                                      {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="space-y-3">
+                                <button 
+                                  disabled={!userProfile?.pixKey}
+                                  onClick={() => {
+                                    if (pixPayload) {
+                                      shareAsPDF(false, 'image', 'pix-payment-share-template', pixPayload);
+                                    }
                                   }}
-                                  className={`p-2 rounded-lg transition-all ${pixCopied ? 'bg-emerald-500/20 text-emerald-400' : 'bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20'}`}
+                                  className="w-full flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-brand-accent/20 to-emerald-600/20 hover:from-brand-accent/30 hover:to-emerald-600/30 text-emerald-400 rounded-2xl font-bold transition-all border border-emerald-500/30 active:scale-95 text-sm"
                                 >
-                                  {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                  <Share2 className="w-4 h-4" />
+                                  Compartilhar QR + Código
+                                </button>
+                                
+                                <button 
+                                  onClick={() => {
+                                    setIsConfirmingPix(true);
+                                    setTimeout(() => {
+                                      setPixConfirmed(true);
+                                      setTimeout(() => {
+                                        if (pendingPayment.type === 'interest') handleInterestPayment(pendingPayment.method);
+                                        else if (pendingPayment.type === 'renew') handleRenewLoan(pendingPayment.method);
+                                        else if (pendingPayment.type === 'payoff') handlePayoffLoan(pendingPayment.method);
+                                        else if (pendingPayment.type === 'amortization') handleAmortization(pendingPayment.method);
+                                        
+                                        setPendingPayment(null);
+                                        setIsConfirmingPix(false);
+                                        setPixConfirmed(false);
+                                      }, 1500);
+                                    }, 2500);
+                                  }}
+                                  className="w-full py-4 bg-brand-primary text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 active:scale-95"
+                                >
+                                  Confirmar Recebimento
+                                </button>
+                                
+                                <button 
+                                  onClick={() => setPendingPayment(null)}
+                                  className="w-full py-4 text-slate-500 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest"
+                                >
+                                  Voltar / Alterar Valor
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="space-y-6 pt-4">
+                              <div className="w-20 h-20 bg-brand-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <DollarSign className="w-10 h-10 text-brand-primary" />
+                              </div>
+                              
+                              <p className="text-slate-400 text-center text-sm px-4 leading-relaxed">
+                                Você está registrando um recebimento em <span className="text-white font-bold">DINHEIRO</span>. 
+                                Certifique-se de que o valor já está em mãos antes de confirmar.
+                              </p>
+
+                              <div className="space-y-4">
+                                <button 
+                                  onClick={() => {
+                                    setIsConfirmingPix(true);
+                                    setTimeout(() => {
+                                      setPixConfirmed(true);
+                                      setTimeout(() => {
+                                        if (pendingPayment.type === 'interest') handleInterestPayment(pendingPayment.method);
+                                        else if (pendingPayment.type === 'renew') handleRenewLoan(pendingPayment.method);
+                                        else if (pendingPayment.type === 'payoff') handlePayoffLoan(pendingPayment.method);
+                                        else if (pendingPayment.type === 'amortization') handleAmortization(pendingPayment.method);
+                                        
+                                        setPendingPayment(null);
+                                        setIsConfirmingPix(false);
+                                        setPixConfirmed(false);
+                                      }, 1000);
+                                    }, 1500);
+                                  }}
+                                  className="w-full py-5 bg-brand-primary text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 active:scale-95"
+                                >
+                                  Confirmar Recebimento em Dinheiro
+                                </button>
+                                
+                                <button 
+                                  onClick={() => setPendingPayment(null)}
+                                  className="w-full py-4 text-slate-500 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest font-black"
+                                >
+                                  Voltar / Alterar
                                 </button>
                               </div>
                             </div>
                           )}
-
-                          <div className="space-y-3">
-                            <button 
-                              disabled={!userProfile?.pixKey}
-                              onClick={() => {
-                                if (pixPayload) {
-                                  navigator.clipboard.writeText(pixPayload);
-                                  setPixCopied(true);
-                                  setTimeout(() => setPixCopied(false), 2000);
-                                }
-                              }}
-                              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold transition-all border active:scale-95 text-sm ${
-                                pixCopied 
-                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' 
-                                  : 'bg-white/5 hover:bg-white/10 text-white border-white/10'
-                              }`}
-                            >
-                              {pixCopied ? (
-                                <>
-                                  <Check className="w-4 h-4" />
-                                  <span>Copiado!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-4 h-4" />
-                                  <span>Copia e Cola</span>
-                                </>
-                              )}
-                            </button>
-
-                            <button 
-                              disabled={!userProfile?.pixKey}
-                              onClick={() => {
-                                if (pixPayload) {
-                                  shareAsPDF(false, 'image', 'pix-payment-share-template', pixPayload);
-                                }
-                              }}
-                              className="w-full flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-brand-accent/20 to-emerald-600/20 hover:from-brand-accent/30 hover:to-emerald-600/30 text-emerald-400 rounded-2xl font-bold transition-all border border-emerald-500/30 active:scale-95 text-sm"
-                            >
-                              <Share2 className="w-4 h-4" />
-                              Compartilhar QR + Código
-                            </button>
-                            
-                            <button 
-                              onClick={() => {
-                                setIsConfirmingPix(true);
-                                // Simulation: wait 2.5 seconds then confirm
-                                setTimeout(() => {
-                                  setPixConfirmed(true);
-                                  setTimeout(() => {
-                                    // Actually execute the discharge
-                                    if (pendingPayment.type === 'interest') handleInterestPayment();
-                                    else if (pendingPayment.type === 'renew') handleRenewLoan();
-                                    else if (pendingPayment.type === 'payoff') handlePayoffLoan();
-                                    else if (pendingPayment.type === 'amortization') handleAmortization();
-                                    
-                                    setPendingPayment(null);
-                                    setIsConfirmingPix(false);
-                                    setPixConfirmed(false);
-                                  }, 1500);
-                                }, 2500);
-                              }}
-                              className="w-full py-4 bg-brand-primary text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 active:scale-95"
-                            >
-                              Confirmar Recebimento
-                            </button>
-                            
-                            <button 
-                              onClick={() => setPendingPayment(null)}
-                              className="w-full py-4 text-slate-500 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest"
-                            >
-                              Voltar / Alterar Valor
-                            </button>
-                          </div>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -4169,7 +4223,7 @@ export default function App() {
                           onClick={() => {
                             const amount = parseFloat(amortizationAmount);
                             if (amount > 0 && amount <= payingLoan.capital) {
-                              setPendingPayment({ amount, type: 'amortization', label: 'Amortização' });
+                              setPendingPayment({ amount, type: 'amortization', label: 'Amortização', method: 'PIX' });
                             }
                           }}
                           className="px-6 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-accent/20 hover:shadow-brand-accent/40 active:scale-95"
@@ -4190,7 +4244,8 @@ export default function App() {
                           onClick={() => setPendingPayment({ 
                             amount: payingLoan.totalBruto - payingLoan.capital, 
                             type: 'renew', 
-                            label: 'Pagar Juros e Renovar +30 dias' 
+                            label: 'Pagar Juros e Renovar +30 dias',
+                            method: 'PIX'
                           })}
                           className="w-full py-5 bg-gradient-to-r from-brand-primary to-indigo-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
                         >
@@ -4203,7 +4258,8 @@ export default function App() {
                           onClick={() => setPendingPayment({ 
                             amount: payingLoan.totalBruto, 
                             type: 'payoff', 
-                            label: 'Quitação Total' 
+                            label: 'Quitação Total',
+                            method: 'PIX'
                           })}
                           className="w-full py-5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 flex items-center justify-between px-6 active:scale-[0.98]"
                         >
@@ -4323,16 +4379,23 @@ export default function App() {
                 <div className="flex items-center gap-4">
                   <button 
                     onClick={() => {
-                      const activeLoans = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago');
-                      if (activeLoans.length > 0) {
+                      const selected = loans.filter(l => selectedLoansForUnified.includes(l.id));
+                      if (selected.length > 0) {
                         setViewingClientLoans(null);
-                        setViewingContract(activeLoans);
+                        setViewingContract(selected);
+                        setSelectedLoansForUnified([]);
                       }
                     }}
-                    className="bg-emerald-500/10 text-emerald-500 px-4 py-2 rounded-xl font-bold border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2 text-[10px] uppercase tracking-widest"
+                    disabled={selectedLoansForUnified.length === 0}
+                    className={cn(
+                      "px-4 py-2 rounded-xl font-bold border transition-all flex items-center gap-2 text-[10px] uppercase tracking-widest",
+                      selectedLoansForUnified.length > 0 
+                        ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500 hover:text-white" 
+                        : "bg-slate-500/5 text-slate-500 border-white/5 cursor-not-allowed opacity-50"
+                    )}
                   >
                     <FileText className="w-4 h-4" />
-                    Contrato Unificado
+                    Contrato Unificado ({selectedLoansForUnified.length})
                   </button>
                   <button 
                     onClick={() => {
@@ -4370,6 +4433,24 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead className="sticky top-0 z-10 bg-surface-900/50 backdrop-blur-md">
                     <tr className="border-b border-white/[0.03]">
+                      <th className="px-6 py-4 w-10">
+                        <input 
+                          type="checkbox"
+                          checked={
+                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago').length > 0 &&
+                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago').every(l => selectedLoansForUnified.includes(l.id))
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const active = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago').map(l => l.id);
+                              setSelectedLoansForUnified(active);
+                            } else {
+                              setSelectedLoansForUnified([]);
+                            }
+                          }}
+                          className="w-4 h-4 bg-white/5 border-white/10 rounded focus:ring-brand-primary text-brand-primary cursor-pointer"
+                        />
+                      </th>
                       <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Original</th>
                       <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">Vencimento</th>
                       <th className="px-6 py-4 text-[9px] font-black text-slate-500 uppercase tracking-[0.3em]">Total</th>
@@ -4382,7 +4463,28 @@ export default function App() {
                       .filter(l => l.clientName === viewingClientLoans)
                       .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))
                       .map((loan) => (
-                        <tr key={loan.id} className="group hover:bg-white/[0.01] transition-colors">
+                        <tr key={loan.id} className={cn(
+                          "group hover:bg-white/[0.01] transition-colors",
+                          selectedLoansForUnified.includes(loan.id) && "bg-brand-primary/5"
+                        )}>
+                          <td className="px-6 py-4">
+                            {loan.status !== 'Pago' ? (
+                              <input 
+                                type="checkbox"
+                                checked={selectedLoansForUnified.includes(loan.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedLoansForUnified(prev => [...prev, loan.id]);
+                                  } else {
+                                    setSelectedLoansForUnified(prev => prev.filter(id => id !== loan.id));
+                                  }
+                                }}
+                                className="w-4 h-4 bg-white/5 border-white/10 rounded focus:ring-brand-primary text-brand-primary cursor-pointer"
+                              />
+                            ) : (
+                              <div className="w-4 h-4 bg-white/5 border-white/10 rounded opacity-20" />
+                            )}
+                          </td>
                           <td className="px-6 py-4 text-white text-xs">
                             R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
@@ -4425,6 +4527,15 @@ export default function App() {
                                   title="Pagamento"
                                 >
                                   <DollarSign className="w-4 h-4" />
+                                </button>
+                              )}
+                              {loan.status !== 'Pago' && (
+                                <button 
+                                  onClick={() => sendWhatsAppCollection(loan)}
+                                  className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
+                                  title="Cobrança WhatsApp"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
                                 </button>
                               )}
                               <button 

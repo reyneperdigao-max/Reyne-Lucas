@@ -99,6 +99,7 @@ service cloud.firestore {
              (!('amount' in data) || data.amount is number) &&
              (!('capitalAmount' in data) || data.capitalAmount is number) &&
              (!('interestAmount' in data) || data.interestAmount is number) &&
+             (!('paymentMethod' in data) || data.paymentMethod in ['DINHEIRO', 'PIX']) &&
              (!('confirmed' in data) || data.confirmed is bool);
     }
 
