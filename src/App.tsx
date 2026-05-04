@@ -2067,6 +2067,7 @@ export default function App() {
     { id: 'Principal', label: 'Principal', icon: BarChart3 },
     { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
     { id: 'Clientes', label: 'Clientes', icon: Users },
+    { id: 'Transações', label: 'Transações', icon: Wallet },
     { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
     { id: 'Relatórios', label: 'Relatórios', icon: FileText },
     { id: 'Histórico', label: 'Histórico', icon: History },
@@ -3110,9 +3111,85 @@ export default function App() {
                            animate={{ opacity: 1, x: 0 }}
                            exit={{ opacity: 0, x: -20 }}
                            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                           className="space-y-4"
+                           className="space-y-10"
                          >
-                           {/* Desktop Table */}
+                           {/* Summary Cards */}
+                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                             <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                               <div className="flex items-center gap-4 mb-4">
+                                 <div className="p-3 bg-brand-primary/10 rounded-2xl">
+                                   <DollarSign className="w-5 h-5 text-brand-primary" />
+                                 </div>
+                                 <div>
+                                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Total Recebido</p>
+                                   <h4 className={cn("text-lg font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>no período</h4>
+                                 </div>
+                               </div>
+                               <p className="text-2xl font-black text-brand-primary">
+                                 R$ {(stats.capitalRecebido + stats.jurosRealizados).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                               </p>
+                             </div>
+
+                             <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                               <div className="flex items-center gap-4 mb-4">
+                                 <div className="p-3 bg-emerald-500/10 rounded-2xl">
+                                   <TrendingUp className="w-5 h-5 text-emerald-500" />
+                                 </div>
+                                 <div>
+                                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Juros Realizados</p>
+                                   <h4 className={cn("text-lg font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>Lucro Líquido</h4>
+                                 </div>
+                               </div>
+                               <p className="text-2xl font-black text-emerald-500">
+                                 R$ {stats.jurosRealizados.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                               </p>
+                             </div>
+
+                             <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                               <div className="flex items-center gap-4 mb-4">
+                                 <div className="p-3 bg-brand-accent/10 rounded-2xl">
+                                   <Users className="w-5 h-5 text-brand-accent" />
+                                 </div>
+                                 <div>
+                                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Capital Recuperado</p>
+                                   <h4 className={cn("text-lg font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>Amortizações</h4>
+                                 </div>
+                               </div>
+                               <p className={cn("text-2xl font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                 R$ {stats.capitalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                               </p>
+                             </div>
+                           </div>
+
+                           <div className="space-y-4">
+                             <div className="flex items-center justify-between px-2">
+                               <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-3">
+                                 <span className="w-2 h-2 bg-brand-primary rounded-full" />
+                                 Detalhando Recebimentos
+                                </h3>
+                                <div className="flex items-center gap-3">
+                                  <button 
+                                    onClick={() => setShowOnlyCapital(!showOnlyCapital)}
+                                    className={cn(
+                                      "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                                      showOnlyCapital ? "bg-brand-primary text-black" : "bg-white/5 text-slate-500 hover:text-white"
+                                    )}
+                                  >
+                                    Amortizações
+                                  </button>
+                                  <button 
+                                    onClick={() => setShowOnlyInterest(!showOnlyInterest)}
+                                    className={cn(
+                                      "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                                      showOnlyInterest ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500 hover:text-white"
+                                    )}
+                                  >
+                                    Juros
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              {/* Desktop Table */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -3262,8 +3339,9 @@ export default function App() {
                       ))
                     )}
                   </div>
-                         </motion.div>
-                       ) : activeTab === 'Pagamento' ? (
+                </div>
+              </motion.div>
+            ) : activeTab === 'Pagamento' ? (
                          <motion.div 
                            key="view-pagamento"
                            initial={{ opacity: 0, scale: 0.98 }}
