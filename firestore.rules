@@ -103,6 +103,17 @@ service cloud.firestore {
              (!('confirmed' in data) || data.confirmed is bool);
     }
 
+    function isValidClosure(data) {
+      let requiredFields = ['userId', 'month', 'year', 'closedAt', 'closurePeriodEnd', 'stats'];
+      return data.keys().hasAll(requiredFields) &&
+             data.userId == request.auth.uid &&
+             data.month is number && data.month >= 0 && data.month <= 11 &&
+             data.year is number &&
+             data.closedAt is string &&
+             data.closurePeriodEnd is string &&
+             data.stats is map;
+    }
+
     // ==========================================
     // Collections
     // ==========================================
@@ -139,6 +150,14 @@ service cloud.firestore {
                     incoming().uid == existing().uid &&
                     incoming().loanId == existing().loanId));
       allow delete: if isVerifiedUser() && isDocOwner() && isValidId(actionId);
+    }
+
+    match /monthly_closures/{closureId} {
+      allow get: if isVerifiedUser() && resource.data.userId == request.auth.uid && isValidId(closureId);
+      allow list: if isVerifiedUser() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidClosure(incoming()) && isValidId(closureId);
+      allow update: if isVerifiedUser() && (isAdmin() || (resource.data.userId == request.auth.uid && isValidClosure(incoming())));
+      allow delete: if isVerifiedUser() && resource.data.userId == request.auth.uid && isValidId(closureId);
     }
   }
 }

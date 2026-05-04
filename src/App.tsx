@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
   Search, 
@@ -31,13 +32,15 @@ import {
   Copy,
   Check,
   BarChart3,
-  MoreVertical,
+  Menu,
   Eye,
   EyeOff,
   Sun,
   Moon,
   Bell,
   User as UserIcon,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { 
   collection, 
@@ -51,7 +54,8 @@ import {
   deleteDoc,
   getDocs,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
@@ -113,6 +117,24 @@ function generatePixPayload(key: string, name: string, city: string, amount: num
 }
 
 // --- Types ---
+interface MonthlyClosure {
+  id: string;
+  userId: string;
+  month: number;
+  year: number;
+  closedAt: string;
+  closurePeriodEnd: string;
+  stats: {
+    totalLent: number;
+    totalPayments: number;
+    capitalPayments: number;
+    interestPayments: number;
+    paymentCount: number;
+    loanCount: number;
+    currentOutstanding: number;
+  };
+}
+
 interface Loan {
   id: string;
   clientName: string;
@@ -183,9 +205,10 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [actions, setActions] = useState<SystemAction[]>([]);
+  const [monthlyClosures, setMonthlyClosures] = useState<MonthlyClosure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Histórico' | 'Pagamento' | 'Relatórios'>('Empréstimos');
+  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Histórico' | 'Pagamento' | 'Relatórios'>('Principal');
   const [reportMonth, setReportMonth] = useState(new Date().getMonth());
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   
@@ -216,7 +239,6 @@ export default function App() {
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<{ 
     displayName?: string, 
     pixKey?: string, 
@@ -245,6 +267,12 @@ export default function App() {
   const [newPixBank, setNewPixBank] = useState('');
   const [newProfilePicture, setNewProfilePicture] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('nexus_sidebar_collapsed');
+    return saved === 'true';
+  });
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     const saved = localStorage.getItem('nexus_read_notifications');
     return saved ? JSON.parse(saved) : [];
@@ -935,9 +963,18 @@ export default function App() {
       handleFirestoreError(err, OperationType.LIST, 'actions');
     });
 
+    const qClosures = query(collection(db, 'monthly_closures'), where('userId', '==', user.uid), orderBy('year', 'desc'), orderBy('month', 'desc'));
+    const unsubscribeClosures = onSnapshot(qClosures, (snapshot) => {
+      const closuresData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MonthlyClosure));
+      setMonthlyClosures(closuresData);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, 'monthly_closures');
+    });
+
     return () => {
       unsubscribeLoans();
       unsubscribeActions();
+      unsubscribeClosures();
     };
   }, [user, isAuthReady]);
 
@@ -1097,7 +1134,7 @@ export default function App() {
     // Calculate interest for renewal option
     const interestAmount = loan.capital * loan.interestRate;
     
-    const message = `Olá ${firstName}, passando para lembrar do vencimento do seu empréstimo no valor de R$ ${loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.\n\n` +
+    const message = `Olá ${firstName}, passando para lembrar do vencimento do seu empréstimo no valor de R$ ${loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.\n\n` +
       `Caso prefira, você pode pagar apenas os juros de R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para renovar por mais 30 dias.\n\n` +
       (userProfile?.pixKey ? `Chave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}` : '');
 
@@ -1809,13 +1846,22 @@ export default function App() {
   const handleCloseMonth = async () => {
     if (!user) return;
     
+    // Check if current month is already closed
+    const isAlreadyClosed = monthlyClosures.some(c => c.month === reportMonth && c.year === reportYear);
+    
+    // Calculate end of selected month
+    const endOfMonth = new Date(reportYear, reportMonth + 1, 0, 23, 59, 59, 999);
+    const monthName = ptBrMonths[reportMonth];
+
     setConfirmPassword('');
     setConfirmError(null);
     setConfirmModal({
       isOpen: true,
       requiresPassword: true,
-      title: 'Fechar Caixa Mensal',
-      message: 'Ao fechar o caixa, os valores de "Capital Recebido" e "Juros Realizados" do dashboard serão zerados para o início de um novo ciclo. Esta ação não apaga o histórico de transações. Confirme sua senha para prosseguir.',
+      title: isAlreadyClosed ? `Atualizar Fechamento: ${monthName} / ${reportYear}` : `Fechar Caixa: ${monthName} / ${reportYear}`,
+      message: isAlreadyClosed 
+        ? `Este mês já possui um fechamento registrado. Deseja atualizar os dados salvos? Isso definirá a nova data de encerramento para o dashboard como ${safeFormatDate(endOfMonth.toISOString(), 'dd/MM/yyyy')}.`
+        : `Ao fechar este período, o sistema considerará ${safeFormatDate(endOfMonth.toISOString(), 'dd/MM/yyyy')} como o marco de encerramento. O dashboard principal continuará mostrando os dados posteriores a esta data. Esta ação salva um snapshot permanente deste mês.`,
       onConfirm: async (password?: string) => {
         if (!user || !user.email || !password) {
           setConfirmError("A senha é obrigatória.");
@@ -1832,8 +1878,42 @@ export default function App() {
 
           const userRef = doc(db, 'users', user.uid);
           await updateDoc(userRef, {
-            lastClosureDate: new Date().toISOString()
+            lastClosureDate: endOfMonth.toISOString()
           });
+
+          // Save or Update closure record
+          const closureRef = collection(db, 'monthly_closures');
+          const existingClosure = monthlyClosures.find(c => c.month === reportMonth && c.year === reportYear);
+
+          if (existingClosure) {
+            await updateDoc(doc(db, 'monthly_closures', existingClosure.id), {
+              updatedAt: new Date().toISOString(),
+              stats: monthlyReportStats
+            });
+          } else {
+            await addDoc(closureRef, {
+              userId: user.uid,
+              month: reportMonth,
+              year: reportYear,
+              closedAt: new Date().toISOString(),
+              closurePeriodEnd: endOfMonth.toISOString(),
+              stats: monthlyReportStats
+            });
+          }
+
+          // Delete history for the selected month/year
+          const monthActions = actions.filter(action => {
+            const actionDate = new Date(action.date);
+            return actionDate.getMonth() === reportMonth && actionDate.getFullYear() === reportYear;
+          });
+
+          if (monthActions.length > 0) {
+            const batch = writeBatch(db);
+            monthActions.forEach(action => {
+              batch.delete(doc(db, 'actions', action.id));
+            });
+            await batch.commit();
+          }
 
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
         } catch (err: unknown) {
@@ -1983,60 +2063,252 @@ export default function App() {
 
   const isDark = theme === 'dark';
 
+  const menuItems = [
+    { id: 'Principal', label: 'Principal', icon: BarChart3 },
+    { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
+    { id: 'Clientes', label: 'Clientes', icon: Users },
+    { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
+    { id: 'Relatórios', label: 'Relatórios', icon: FileText },
+    { id: 'Histórico', label: 'Histórico', icon: History },
+  ];
+
   return (
     <div className={cn(
-      "min-h-screen font-sans selection:bg-brand-primary/20 overflow-x-hidden transition-colors duration-500",
+      "min-h-screen flex font-sans selection:bg-brand-primary/20 overflow-x-hidden transition-colors duration-500",
       isDark ? "bg-black text-slate-300" : "bg-slate-50 text-slate-700"
     )}>
+      {/* Sidebar - Desktop */}
+      <aside className={cn(
+        "hidden lg:flex flex-col shrink-0 sticky top-0 h-screen border-r transition-all duration-300 z-50 overflow-hidden",
+        isSidebarCollapsed ? "w-20" : "w-72",
+        isDark ? "bg-black border-white/[0.03]" : "bg-white border-slate-200"
+      )}>
+        <div className={cn("p-8 flex items-center gap-4 transition-all", isSidebarCollapsed ? "p-5 justify-center" : "")}>
+          <div className="p-0.5 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl shrink-0">
+            {userProfile?.profilePicture ? (
+              <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
+            ) : (
+              <img 
+                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=64&h=64&fit=crop" 
+                className={cn(
+                  "w-10 h-10 rounded-xl object-cover transition-all",
+                  isDark ? "grayscale" : ""
+                )} 
+                alt="Nexus Logo"
+                referrerPolicy="no-referrer"
+              />
+            )}
+          </div>
+          {!isSidebarCollapsed && (
+            <div className="animate-in fade-in slide-in-from-left-2 duration-300">
+              <h1 className={cn(
+                "text-lg font-bold tracking-[0.05em] leading-none transition-colors",
+                isDark ? "text-white" : "text-slate-900"
+              )}>Nexus</h1>
+              <span className="text-[10px] uppercase tracking-[0.3em] text-brand-primary font-black">Private</span>
+            </div>
+          )}
+        </div>
+
+        <nav className={cn("flex-1 space-y-1 transition-all", isSidebarCollapsed ? "px-2" : "px-4")}>
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id as typeof activeTab);
+                  setCommand('');
+                  setShowOnlyOverdue(false);
+                }}
+                className={cn(
+                  "w-full flex items-center transition-all group",
+                  isSidebarCollapsed ? "justify-center p-3.5 rounded-xl" : "gap-4 px-4 py-3.5 rounded-2xl",
+                  isActive 
+                    ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" 
+                    : cn("text-slate-500", isDark ? "hover:text-white hover:bg-white/[0.03]" : "hover:text-slate-900 hover:bg-slate-100")
+                )}
+                title={isSidebarCollapsed ? item.label : ""}
+              >
+                <Icon className={cn("w-5 h-5 shrink-0", isActive ? "text-black" : "group-hover:text-brand-primary")} />
+                {!isSidebarCollapsed && <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap animate-in fade-in slide-in-from-left-2 duration-300">{item.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className={cn("transition-all", isSidebarCollapsed ? "p-2" : "p-4")}>
+          <div className={cn(
+            "border transition-colors overflow-hidden",
+            isSidebarCollapsed ? "p-2 rounded-xl" : "p-4 rounded-[24px]",
+            isDark ? "bg-white/[0.02] border-white/[0.05]" : "bg-slate-50 border-slate-200"
+          )}>
+            <div className={cn("flex items-center mb-3", isSidebarCollapsed ? "justify-center mb-0" : "gap-3")}>
+              <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center overflow-hidden shrink-0">
+                {userProfile?.profilePicture ? (
+                  <img src={userProfile.profilePicture} className="w-full h-full object-cover" alt="User" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-brand-primary" />
+                )}
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex flex-col truncate animate-in fade-in slide-in-from-left-2 duration-300">
+                  <span className={cn("text-[10px] font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>
+                    {userProfile?.displayName || user.displayName || 'Usuário'}
+                  </span>
+                  <span className="text-[8px] text-slate-500 font-medium truncate uppercase tracking-tighter">
+                    {user.email}
+                  </span>
+                </div>
+              )}
+            </div>
+            {!isSidebarCollapsed && (
+              <button 
+                onClick={() => auth.signOut()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] bg-brand-danger/10 text-brand-danger hover:bg-brand-danger/20 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Sair do Sistema
+              </button>
+            )}
+          </div>
+        </div>
+      </aside>
+
+      {/* Sidebar - Mobile Drawer */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-[100] lg:hidden">
+          <div 
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+          <aside className={cn(
+            "absolute inset-y-0 left-0 w-80 p-6 flex flex-col animate-in slide-in-from-left duration-500",
+            isDark ? "bg-black" : "bg-white"
+          )}>
+            <div className="flex items-center justify-between mb-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-brand-primary rounded-xl flex items-center justify-center">
+                   <BarChart3 className="w-5 h-5 text-black" />
+                </div>
+                <h1 className={cn("text-xl font-black tracking-tighter transition-colors", isDark ? "text-white" : "text-slate-900")}>NEXUS</h1>
+              </div>
+              <button 
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="p-2 text-slate-500"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-2">
+              {menuItems.map((item) => (
+                <button
+                  key={`mobile-${item.id}`}
+                  onClick={() => {
+                    setActiveTab(item.id as typeof activeTab);
+                    setCommand('');
+                    setShowOnlyOverdue(false);
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all",
+                    activeTab === item.id 
+                      ? "bg-brand-primary text-black font-black shadow-lg shadow-brand-primary/20" 
+                      : cn("text-slate-500", isDark ? "hover:bg-white/5 hover:text-white" : "hover:bg-slate-100 hover:text-slate-900")
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="text-xs uppercase tracking-widest">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+
+            <div className={cn("pt-6 border-t mt-6", isDark ? "border-white/5" : "border-slate-100")}>
+               <div className="flex items-center gap-4 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 overflow-hidden shrink-0">
+                    {userProfile?.profilePicture ? (
+                      <img src={userProfile.profilePicture} className="w-full h-full object-cover" alt="Profile" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-brand-primary/10 text-brand-primary">
+                        <UserIcon className="w-5 h-5" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className={cn("text-xs font-bold truncate transition-colors", isDark ? "text-white" : "text-slate-900")}>{userProfile?.displayName || user.displayName}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
+                  </div>
+               </div>
+               <button 
+                 onClick={() => auth.signOut()}
+                 className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-brand-danger bg-brand-danger/10 border border-brand-danger/20"
+               >
+                 <LogOut className="w-4 h-4" />
+                 Sair
+               </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 max-h-screen overflow-y-auto">
       {/* Background Glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className={cn(
-          "absolute -top-32 -left-32 w-[600px] h-[600px] rounded-full blur-[180px] transition-all duration-1000",
+          "absolute -top-32 -left-32 w-full max-w-[800px] aspect-square rounded-full blur-[180px] transition-all duration-1000",
           isDark ? "bg-brand-primary/10" : "bg-brand-primary/15"
         )} />
         <div className={cn(
-          "absolute top-1/2 -right-32 w-[500px] h-[500px] rounded-full blur-[160px] transition-all duration-1000",
+          "absolute top-1/2 -right-32 w-full max-w-[700px] aspect-square rounded-full blur-[160px] transition-all duration-1000",
           isDark ? "bg-brand-accent/5" : "bg-brand-accent/10"
         )} />
-        <div className="absolute -bottom-24 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-brand-primary/5 rounded-full blur-[120px]" />
       </div>
 
-      {/* Header */}
-      <header className={cn(
-        "sticky top-0 z-40 border-b transition-colors",
-        isDark ? "bg-black border-white/[0.03]" : "bg-white border-slate-200"
-      )}>
-        <div className="w-full px-4 sm:px-6 h-20 sm:h-24 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="p-0.5 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl">
-              {userProfile?.profilePicture ? (
-                <img 
-                  src={userProfile.profilePicture} 
-                  className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl object-cover transition-all" 
-                  alt="Profile"
-                />
-              ) : (
-                <img 
-                  src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=64&h=64&fit=crop" 
-                  className={cn(
-                    "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl object-cover transition-all",
-                    isDark ? "grayscale" : ""
-                  )} 
-                  alt="Nexus Logo"
-                  referrerPolicy="no-referrer"
-                />
-              )}
+        {/* Header */}
+        <header className={cn(
+          "sticky top-0 z-40 border-b transition-colors",
+          isDark ? "bg-black/80 backdrop-blur-md border-white/[0.03]" : "bg-white/80 backdrop-blur-md border-slate-200"
+        )}>
+          <div className="w-full px-4 sm:px-6 h-20 sm:h-24 flex items-center justify-between">
+            {/* Mobile Sidebar Toggle */}
+            <div className="flex lg:hidden items-center gap-2">
+              <button 
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="p-2 text-slate-400 hover:text-brand-primary"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+              <h1 className={cn("text-sm font-bold tracking-[0.05em]", isDark ? "text-white" : "text-slate-900")}>Nexus</h1>
             </div>
-            <div>
-              <h1 className={cn(
-                "text-sm sm:text-lg font-bold tracking-[0.05em] sm:tracking-[0.1em] leading-none transition-colors",
-                isDark ? "text-white" : "text-slate-900"
-              )}>Nexus Private</h1>
-              <span className="text-[8px] sm:text-[10px] uppercase tracking-[0.3em] sm:tracking-[0.4em] text-brand-primary font-black">crédito e gestão</span>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2 sm:gap-6">
+            <div className="hidden lg:flex items-center gap-4">
+              <button 
+                onClick={() => {
+                  const newValue = !isSidebarCollapsed;
+                  setIsSidebarCollapsed(newValue);
+                  localStorage.setItem('nexus_sidebar_collapsed', String(newValue));
+                }}
+                className="p-2 text-slate-400 hover:text-brand-primary transition-all active:scale-95"
+                title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-brand-primary/10 rounded-xl">
+                   <BarChart3 className="w-5 h-5 text-brand-primary" />
+                </div>
+                <div>
+                  <h2 className={cn("text-sm font-black uppercase tracking-widest", isDark ? "text-white" : "text-slate-900")}>
+                    {activeTab === 'Principal' ? 'Dashboard Geral' : activeTab}
+                  </h2>
+                  <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">Terminal de Gestão Nexus Private</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-6">
             <div className="hidden lg:flex flex-col items-end">
               <span className={cn(
                 "text-sm font-bold transition-colors",
@@ -2081,7 +2353,7 @@ export default function App() {
                     <div className="fixed inset-0 z-[45]" onClick={() => setIsNotificationsOpen(false)} />
                     <div className={cn(
                       "absolute right-0 top-full mt-2 w-72 sm:w-80 max-h-[400px] overflow-y-auto rounded-3xl border shadow-2xl z-[50] animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200",
-                      isDark ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"
+                      isDark ? "bg-black border-white/10" : "bg-white border-slate-200"
                     )}>
                       <div className="p-5 border-b border-white/5 flex items-center justify-between sticky top-0 bg-inherit z-10">
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Notificações</span>
@@ -2185,64 +2457,6 @@ export default function App() {
       </header>
 
       <main className="w-full px-4 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-10 relative z-10">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          <StatCard 
-            title="Capital Liberado" 
-            value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
-            icon={<DollarSign className="w-5 h-5" />}
-            color="primary"
-            trend="Ativo"
-            isDark={isDark}
-          />
-          <StatCard 
-            title="Capital Recebido" 
-            value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
-            icon={<Wallet className="w-5 h-5" />}
-            color="success"
-            trend="Liquidado"
-            isDark={isDark}
-            onClick={() => {
-              setActiveTab('Transações');
-              setShowOnlyCapital(true);
-              setShowOnlyInterest(false);
-              setShowOnlyOverdue(false);
-              setFilterDate('');
-              setCommand('');
-            }}
-          />
-          <StatCard 
-            title="Juros Realizados" 
-            value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
-            icon={<TrendingUp className="w-5 h-5" />}
-            color="success"
-            trend="Lucro"
-            isDark={isDark}
-            onClick={() => {
-              setActiveTab('Transações');
-              setShowOnlyInterest(true);
-              setShowOnlyCapital(false);
-              setShowOnlyOverdue(false);
-              setFilterDate('');
-              setCommand('');
-            }}
-          />
-          <StatCard 
-            title="Atrasados" 
-            value={maskValue(stats.atrasadosCount)} 
-            icon={<AlertCircle className="w-5 h-5" />}
-            color="danger"
-            trend="Risco"
-            isDark={isDark}
-            onClick={() => {
-              setActiveTab('Empréstimos');
-              setShowOnlyOverdue(true);
-              setFilterDate('');
-              setCommand('');
-            }}
-          />
-        </div>
-
         {/* Error Alert */}
         {error && (
           <div className="bg-brand-danger/10 border border-brand-danger/20 text-brand-danger p-5 rounded-[24px] flex items-center justify-between">
@@ -2256,558 +2470,649 @@ export default function App() {
           </div>
         )}
 
-        {/* Main Content Area */}
         <div className="space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="flex flex-col gap-4">
-              <div className={cn(
-                "flex items-center p-1.5 rounded-2xl border w-full sm:w-fit relative flex-nowrap transition-colors",
-                isDark ? "bg-white/[0.03] border-white/[0.05]" : "bg-slate-200/50 border-slate-300/50"
-              )}>
-                <nav className="flex-1 flex items-center overflow-x-auto no-scrollbar scroll-smooth">
-                  <div className="flex items-center flex-nowrap min-w-max">
-                    {(['Empréstimos', 'Agendados', 'Clientes'] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        id={`tab-btn-${tab}`}
-                        onClick={() => {
-                          setActiveTab(tab);
-                          setShowOnlyOverdue(false);
-                          setShowOnlyCapital(false);
-                          setShowOnlyInterest(false);
-                          setFilterDate('');
-                          setCommand('');
-                          setIsMoreMenuOpen(false);
-                        }}
-                        className={cn(
-                          "px-4 sm:px-6 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.15em] transition-all duration-300 whitespace-nowrap",
-                          activeTab === tab 
-                            ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/30" 
-                            : cn(isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-500 hover:text-slate-900")
-                        )}
-                      >
-                        {tab}
-                      </button>
-                    ))}
+          {activeTab !== 'Principal' && (
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="flex-1">
+                {filterDate && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-lg w-fit">
+                    <Calendar className="w-3 h-3 text-brand-primary" />
+                    <span className="text-[9px] font-bold text-brand-primary uppercase tracking-widest">
+                      Vencimento dia: {filterDate}
+                    </span>
+                    <button 
+                      onClick={() => setFilterDate('')}
+                      className="p-1 hover:bg-brand-primary/20 rounded-md transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5 text-brand-primary" />
+                    </button>
                   </div>
-                </nav>
-
-                {/* More Options Menu - Outside scrolling area to prevent clipping */}
-                <div className={cn("relative ml-1 shrink-0 border-l pl-1.5 flex items-center transition-colors", isDark ? "border-white/5" : "border-slate-300")}>
-                  <button
-                    id="more-options-btn"
-                    onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                    className={cn(
-                      "p-3 rounded-xl transition-all duration-300 flex items-center justify-center",
-                      (['Transações', 'Histórico', 'Pagamento', 'Relatórios'] as string[]).includes(activeTab)
-                        ? "bg-brand-primary text-white shadow-lg shadow-brand-primary/20"
-                        : cn(isDark ? "text-slate-500 hover:text-slate-300 hover:bg-white/5" : "text-slate-500 hover:text-slate-900 hover:bg-slate-300/50")
-                    )}
-                    aria-label="Mais Opções"
-                  >
-                    <MoreVertical className="w-5 h-5 sm:w-4 sm:h-4" />
-                  </button>
-
-                  {isMoreMenuOpen && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-[60] bg-black/20 backdrop-blur-[2px]" 
-                        onClick={() => setIsMoreMenuOpen(false)} 
-                      />
-                      <div className={cn(
-                        "absolute right-0 top-full mt-3 w-56 border rounded-2xl shadow-2xl overflow-hidden z-[70] animate-in fade-in slide-in-from-top-2 duration-200 transition-colors",
-                        isDark ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"
-                      )}>
-                        <div className={cn("p-3 border-b transition-colors", isDark ? "border-white/5 bg-white/[0.02]" : "border-slate-100 bg-slate-50")}>
-                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest pl-2">Menu Principal</span>
-                        </div>
-                        <div className="py-1">
-                          {(['Transações', 'Histórico', 'Pagamento', 'Relatórios'] as const).map((tab) => (
-                            <button
-                              key={tab}
-                              id={`more-tab-${tab}`}
-                              onClick={() => {
-                                setActiveTab(tab);
-                                setShowOnlyOverdue(false);
-                                setShowOnlyCapital(false);
-                                setShowOnlyInterest(false);
-                                setFilterDate('');
-                                setCommand('');
-                                setIsMoreMenuOpen(false);
-                              }}
-                              className={cn(
-                                "w-full px-6 py-4 text-left text-[11px] font-bold uppercase tracking-[0.15em] transition-all border-b last:border-0 flex items-center justify-between group transition-colors",
-                                isDark ? "border-white/5" : "border-slate-100",
-                                activeTab === tab 
-                                  ? "bg-brand-primary/10 text-brand-primary" 
-                                  : cn(isDark ? "text-slate-400 hover:text-white hover:bg-white/5" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50")
-                              )}
-                            >
-                              <div className="flex items-center gap-3">
-                                {tab === 'Transações' && <Wallet className="w-4 h-4" />}
-                                {tab === 'Histórico' && <History className="w-4 h-4" />}
-                                {tab === 'Pagamento' && <QrCode className="w-4 h-4" />}
-                                {tab === 'Relatórios' && <BarChart3 className="w-4 h-4" />}
-                                <span>{tab}</span>
-                              </div>
-                              {activeTab === tab && <div className="w-1.5 h-1.5 rounded-full bg-brand-primary shadow-[0_0_8px_rgba(59,130,246,0.5)]" />}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                )}
+                {showOnlyOverdue && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-brand-danger/10 border border-brand-danger/20 rounded-lg w-fit">
+                    <AlertCircle className="w-3 h-3 text-brand-danger" />
+                    <span className="text-[9px] font-bold text-brand-danger uppercase tracking-widest">
+                      Apenas Atrasados
+                    </span>
+                    <button 
+                      onClick={() => setShowOnlyOverdue(false)}
+                      className="p-1 hover:bg-brand-danger/20 rounded-md transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5 text-brand-danger" />
+                    </button>
+                  </div>
+                )}
+                {showOnlyCapital && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-lg w-fit">
+                    <Wallet className="w-3 h-3 text-brand-accent" />
+                    <span className="text-[9px] font-bold text-brand-accent uppercase tracking-widest">
+                      Capital Recebido
+                    </span>
+                    <button 
+                      onClick={() => setShowOnlyCapital(false)}
+                      className="p-1 hover:bg-brand-accent/20 rounded-md transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5 text-brand-accent" />
+                    </button>
+                  </div>
+                )}
+                {showOnlyInterest && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-brand-secondary/10 border border-brand-secondary/20 rounded-lg w-fit">
+                    <TrendingUp className="w-3 h-3 text-brand-secondary" />
+                    <span className="text-[9px] font-bold text-brand-secondary uppercase tracking-widest">
+                      Juros Realizados
+                    </span>
+                    <button 
+                      onClick={() => setShowOnlyInterest(false)}
+                      className="p-1 hover:bg-brand-secondary/20 rounded-md transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5 text-brand-secondary" />
+                    </button>
+                  </div>
+                )}
               </div>
-              {filterDate && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-lg w-fit">
-                  <Calendar className="w-3 h-3 text-brand-primary" />
-                  <span className="text-[9px] font-bold text-brand-primary uppercase tracking-widest">
-                    Vencimento dia: {filterDate}
-                  </span>
+              
+              {activeTab === 'Empréstimos' && (
+                <div className="flex gap-2 sm:gap-3">
                   <button 
-                    onClick={() => setFilterDate('')}
-                    className="p-1 hover:bg-brand-primary/20 rounded-md transition-colors"
+                    onClick={() => {
+                      setEditingLoanId(null);
+                      setNewLoan({
+                        clientName: '',
+                        clientPhone: '',
+                        clientAddress: '',
+                        capital: '',
+                        interestRate: '',
+                        date: format(new Date(), 'yyyy-MM-dd'),
+                        dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                        status: 'Agendado'
+                      });
+                      setIsAdding(true);
+                    }}
+                    className={cn(
+                      "px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] hover:-translate-y-0.5 active:translate-y-0",
+                      isDark ? "bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                    )}
                   >
-                    <X className="w-2.5 h-2.5 text-brand-primary" />
+                    <Clock className="w-4 h-4 text-brand-primary" />
+                    Agendar
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEditingLoanId(null);
+                      setNewLoan({
+                        clientName: '',
+                        clientPhone: '',
+                        clientAddress: '',
+                        capital: '',
+                        interestRate: '',
+                        date: format(new Date(), 'yyyy-MM-dd'),
+                        dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                        status: 'Pendente'
+                      });
+                      setIsAdding(true);
+                    }}
+                    className="bg-brand-primary text-slate-950 px-6 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Novo Empréstimo
                   </button>
                 </div>
               )}
-              {showOnlyOverdue && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-brand-danger/10 border border-brand-danger/20 rounded-lg w-fit">
-                  <AlertCircle className="w-3 h-3 text-brand-danger" />
-                  <span className="text-[9px] font-bold text-brand-danger uppercase tracking-widest">
-                    Apenas Atrasados
-                  </span>
-                  <button 
-                    onClick={() => setShowOnlyOverdue(false)}
-                    className="p-1 hover:bg-brand-danger/20 rounded-md transition-colors"
-                  >
-                    <X className="w-2.5 h-2.5 text-brand-danger" />
-                  </button>
-                </div>
-              )}
-              {showOnlyCapital && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-brand-accent/10 border border-brand-accent/20 rounded-lg w-fit">
-                  <Wallet className="w-3 h-3 text-brand-accent" />
-                  <span className="text-[9px] font-bold text-brand-accent uppercase tracking-widest">
-                    Capital Recebido
-                  </span>
-                  <button 
-                    onClick={() => setShowOnlyCapital(false)}
-                    className="p-1 hover:bg-brand-accent/20 rounded-md transition-colors"
-                  >
-                    <X className="w-2.5 h-2.5 text-brand-accent" />
-                  </button>
-                </div>
-              )}
-              {showOnlyInterest && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-brand-secondary/10 border border-brand-secondary/20 rounded-lg w-fit">
-                  <TrendingUp className="w-3 h-3 text-brand-secondary" />
-                  <span className="text-[9px] font-bold text-brand-secondary uppercase tracking-widest">
-                    Juros Realizados
-                  </span>
-                  <button 
-                    onClick={() => setShowOnlyInterest(false)}
-                    className="p-1 hover:bg-brand-secondary/20 rounded-md transition-colors"
-                  >
-                    <X className="w-2.5 h-2.5 text-brand-secondary" />
-                  </button>
-                </div>
+
+              {activeTab === 'Histórico' && actions.length > 0 && (
+                <button 
+                  onClick={clearHistory}
+                  className="bg-gradient-to-r from-brand-danger to-rose-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-danger/25 hover:shadow-brand-danger/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  <span>Limpar Histórico</span>
+                </button>
               )}
             </div>
-            
-            {activeTab === 'Empréstimos' && (
-              <div className="flex gap-2 sm:gap-3">
-                <button 
-                  onClick={() => {
-                    setEditingLoanId(null);
-                    setNewLoan({
-                      clientName: '',
-                      clientPhone: '',
-                      clientAddress: '',
-                      capital: '',
-                      interestRate: '',
-                      date: format(new Date(), 'yyyy-MM-dd'),
-                      dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
-                      status: 'Agendado'
-                    });
-                    setIsAdding(true);
-                  }}
-                  className={cn(
-                    "px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] hover:-translate-y-0.5 active:translate-y-0",
-                    isDark ? "bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                  )}
-                >
-                  <Clock className="w-4 h-4 text-brand-primary" />
-                  Agendar
-                </button>
-                <button 
-                  onClick={() => {
-                    setEditingLoanId(null);
-                    setNewLoan({
-                      clientName: '',
-                      clientPhone: '',
-                      clientAddress: '',
-                      capital: '',
-                      interestRate: '',
-                      date: format(new Date(), 'yyyy-MM-dd'),
-                      dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
-                      status: 'Pendente'
-                    });
-                    setIsAdding(true);
-                  }}
-                  className="bg-brand-primary text-slate-950 px-6 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
-                >
-                  <Plus className="w-5 h-5" />
-                  Novo Empréstimo
-                </button>
-              </div>
-            )}
+          )}
 
-            {activeTab === 'Histórico' && actions.length > 0 && (
-              <button 
-                onClick={clearHistory}
-                className="bg-gradient-to-r from-brand-danger to-rose-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-danger/25 hover:shadow-brand-danger/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
+          <AnimatePresence mode="wait">
+            {activeTab === 'Principal' ? (
+              <motion.div 
+                key="tab-principal"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="px-0 py-4 sm:py-8 space-y-10"
               >
-                <Trash2 className="w-5 h-5" />
-                <span>Limpar Histórico</span>
-              </button>
-            )}
-          </div>
-
-          <div className={cn("glass-card overflow-hidden transition-colors", !isDark && "bg-white border-slate-200 shadow-xl")}>
-              {(activeTab === 'Clientes' || activeTab === 'Transações' || activeTab === 'Empréstimos' || activeTab === 'Histórico' || activeTab === 'Agendados') && (
-              <div className={cn("p-3 sm:p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors", isDark ? "border-white/[0.03]" : "border-slate-100")}>
-                <div className="relative group flex-1">
-                  <div className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 flex items-center gap-2 sm:gap-3">
-                    <Search className="w-4 h-4 sm:w-5 sm:h-5 text-slate-500 group-focus-within:text-brand-primary transition-colors" />
-                    <div className={cn("h-4 w-px transition-colors", isDark ? "bg-white/10" : "bg-slate-200")} />
-                  </div>
-                  <input 
-                    type="text"
-                    placeholder={`Buscar em ${activeTab.toLowerCase()}...`}
-                    className={cn(
-                      "w-full rounded-xl sm:rounded-2xl py-3 sm:py-4 pl-12 sm:pl-16 pr-10 sm:pr-12 transition-all text-base font-bold tracking-tight border focus:border-brand-primary/30 focus:outline-none",
-                      isDark 
-                        ? "bg-white/[0.02] text-white placeholder:text-slate-600 focus:bg-white/[0.04] border-white/[0.05]" 
-                        : "bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:bg-white border-slate-200"
-                    )}
-                    value={command || ""}
-                    onChange={(e) => {
-                      setCommand(e.target.value);
-                    }}
-                  />
-                  {command && (
-                    <button 
-                      onClick={() => setCommand('')}
-                      className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-slate-900 transition-colors"
-                      title="Limpar pesquisa"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                
-                <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 px-1">
-                  {activeTab === 'Clientes' && (
-                    <div className={cn("flex flex-col items-end px-4 border-r transition-colors", isDark ? "border-white/10" : "border-slate-200")}>
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Clientes</span>
-                      <span className="text-lg font-bold text-brand-primary">{stats.totalClients}</span>
-                    </div>
-                  )}
-
-                  <div className={cn("flex items-center gap-2 border rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
-                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                    <select 
-                      className={cn(
-                        "bg-transparent text-base font-bold uppercase tracking-widest focus:outline-none cursor-pointer",
-                        isDark ? "text-white [color-scheme:dark]" : "text-slate-900 [color-scheme:light]"
-                      )}
-                      value={filterDate || ""}
-                      onChange={(e) => {
-                        setFilterDate(e.target.value);
-                      }}
-                    >
-                      <option value="" className={isDark ? "bg-slate-900" : "bg-white"}>Dia</option>
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                        <option key={day} value={day.toString()} className={isDark ? "bg-slate-900" : "bg-white"}>
-                          Dia {day}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                {/* Stats Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <StatCard 
+                  title="Capital Liberado" 
+                  value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
+                  icon={<DollarSign className="w-5 h-5" />}
+                  color="primary"
+                  trend="Ativo"
+                  isDark={isDark}
+                />
+                <StatCard 
+                  title="Capital Recebido" 
+                  value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
+                  icon={<Wallet className="w-5 h-5" />}
+                  color="success"
+                  trend="Liquidado"
+                  isDark={isDark}
+                  onClick={() => {
+                    setActiveTab('Transações');
+                    setShowOnlyCapital(true);
+                    setShowOnlyInterest(false);
+                    setShowOnlyOverdue(false);
+                    setFilterDate('');
+                    setCommand('');
+                  }}
+                />
+                <StatCard 
+                  title="Juros Realizados" 
+                  value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  color="success"
+                  trend="Lucro"
+                  isDark={isDark}
+                  onClick={() => {
+                    setActiveTab('Transações');
+                    setShowOnlyInterest(true);
+                    setShowOnlyCapital(false);
+                    setShowOnlyOverdue(false);
+                    setFilterDate('');
+                    setCommand('');
+                  }}
+                />
+                <StatCard 
+                  title="Atrasados" 
+                  value={maskValue(stats.atrasadosCount)} 
+                  icon={<AlertCircle className="w-5 h-5" />}
+                  color="danger"
+                  trend="Risco"
+                  isDark={isDark}
+                  onClick={() => {
+                    setActiveTab('Empréstimos');
+                    setShowOnlyOverdue(true);
+                    setFilterDate('');
+                    setCommand('');
+                  }}
+                />
               </div>
-            )}
-            <div className="">
-              {activeTab === 'Clientes' ? (
-                <div className="space-y-4">
-                  {/* Desktop Table */}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 mb-6 flex items-center gap-3">
+                        <span className="w-2 h-2 bg-brand-primary rounded-full" />
+                        Visão de Ativos
+                      </h3>
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-end border-b border-white/5 pb-4">
+                           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes</span>
+                           <span className={cn("text-xl font-black", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
+                        </div>
+                        <div className="flex justify-between items-end border-b border-white/5 pb-4">
+                           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Contratos Ativos</span>
+                           <span className={cn("text-xl font-black", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago').length}</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Taxa de Inadimplência</span>
+                           <span className={cn("text-xl font-black text-brand-danger")}>
+                             {((loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago').length || 1)) * 100).toFixed(1)}%
+                           </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={cn("p-8 rounded-[32px] border transition-all relative overflow-hidden", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                      <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <AlertTriangle className="w-16 h-16 text-brand-danger" />
+                      </div>
+                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-brand-danger mb-6 flex items-center gap-3">
+                        <span className="w-2 h-2 bg-brand-danger rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                        Contratos Atrasados
+                      </h3>
+                      <div className="space-y-4">
+                        {loans
+                          .filter(l => l.status !== 'Pago' && isOverdue(l))
+                          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                          .slice(0, 4)
+                          .map(loan => (
+                            <div key={`overdue-dash-${loan.id}`} className="flex items-center justify-between p-3 rounded-2xl hover:bg-brand-danger/5 transition-colors group">
+                              <div className="flex flex-col">
+                                <span className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                                <span className="text-[9px] text-brand-danger font-black uppercase tracking-tighter">
+                                  {Math.abs(getDaysDiff(loan.dueDate))} dias de atraso
+                                </span>
+                              </div>
+                              <span className="text-xs font-black text-brand-danger">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                            </div>
+                          ))}
+                        {loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length === 0 && (
+                          <div className="text-center py-10 text-emerald-500 text-[10px] font-bold uppercase tracking-widest flex flex-col items-center gap-2">
+                             <CheckCircle2 className="w-5 h-5" />
+                             Nenhum atraso detectado
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-amber-500 mb-6 flex items-center gap-3">
+                        <span className="w-2 h-2 bg-amber-500 rounded-full" />
+                        Próximos Vencimentos
+                      </h3>
+                      <div className="space-y-4">
+                        {loans
+                          .filter(l => l.status === 'Pendente' && !isOverdue(l))
+                          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                          .slice(0, 4)
+                          .map(loan => (
+                            <div key={`upcoming-dash-${loan.id}`} className="flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-colors group">
+                              <div className="flex flex-col">
+                                <span className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                                <span className="text-[9px] text-slate-500 font-medium uppercase">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                              </div>
+                              <span className="text-xs font-black text-brand-primary">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                            </div>
+                          ))}
+                        {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
+                          <div className="text-center py-10 text-slate-500 text-[10px] font-bold uppercase">Nenhum vencimento próximo</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                     <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-3">
+                          <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                          Atividade Recente
+                        </h3>
+                        <button 
+                          onClick={() => setActiveTab('Histórico')}
+                          className="text-[10px] font-black text-brand-primary uppercase tracking-widest hover:underline"
+                        >
+                          Ver Tudo
+                        </button>
+                     </div>
+                     <div className="space-y-4">
+                        {actions.slice(0, 5).map(action => (
+                          <div key={action.id} className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-4">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                action.type === 'payment_received' ? "bg-emerald-500" : "bg-brand-primary"
+                              )} />
+                              <div className="flex flex-col">
+                                <span className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{action.clientName}</span>
+                                <span className="text-[9px] text-slate-500 font-medium uppercase">{action.description}</span>
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-slate-600 font-bold uppercase">{safeFormatDate(action.date, 'dd/MM HH:mm')}</span>
+                          </div>
+                        ))}
+                      </div>
+                 </div>
+              </motion.div>
+            ) : (
+              <motion.div 
+                key="tab-others"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className={cn("glass-card overflow-hidden transition-colors shadow-2xl", !isDark && "bg-white border-slate-200")}
+              >
+                {(activeTab === 'Clientes' || activeTab === 'Empréstimos') && (
+                     <div className={cn("p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors", isDark ? "border-white/[0.03]" : "border-slate-100")}>
+                       <div className="relative group flex-1">
+                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                         <input 
+                           type="text"
+                           placeholder={`Buscar em ${activeTab.toLowerCase()}...`}
+                           className={cn(
+                             "w-full rounded-xl py-3 pl-12 pr-10 transition-all text-sm font-bold border focus:border-brand-primary/30 focus:outline-none",
+                             isDark 
+                               ? "bg-white/[0.02] text-white placeholder:text-slate-600 focus:bg-white/[0.04] border-white/[0.05]" 
+                               : "bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:bg-white border-slate-200"
+                           ) || ""}
+                           value={command || ""}
+                           onChange={(e) => setCommand(e.target.value)}
+                         />
+                       </div>
+                       <div className="flex items-center gap-3">
+                         <div className={cn("flex items-center gap-2 border rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                           <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                           <select 
+                             className={cn("bg-transparent text-xs font-black uppercase tracking-widest focus:outline-none cursor-pointer", isDark ? "text-white" : "text-slate-900")}
+                             value={filterDate || ""}
+                             onChange={(e) => setFilterDate(e.target.value)}
+                           >
+                             <option value="">Dia</option>
+                             {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                               <option key={day} value={day.toString()}>Dia {day}</option>
+                             ))}
+                           </select>
+                         </div>
+                       </div>
+                     </div>
+                   )}
+                   <div className="p-1">
+                     <AnimatePresence mode="wait">
+                       {activeTab === 'Clientes' ? (
+                         <motion.div 
+                           key="view-clientes"
+                           initial={{ opacity: 0, x: 20 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           exit={{ opacity: 0, x: -20 }}
+                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                           className="space-y-4"
+                         >
+                           {/* Desktop Table */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className={cn("border-b transition-colors", isDark ? "bg-white/[0.01] border-white/[0.03]" : "bg-slate-50 border-slate-100")}>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Telefone</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Contratos</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Capital Total</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Dívida Ativa</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
+                          <th className="px-8 py-6">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</span>
+                              <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em]">Total: {stats.totalClients}</span>
+                            </div>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className={cn("divide-y transition-colors", isDark ? "divide-white/[0.05]" : "divide-slate-100")}>
                         {clients.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="px-8 py-20 text-center text-slate-500 font-medium">
+                            <td colSpan={2} className="px-8 py-20 text-center text-slate-500 font-medium">
                               {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
                             </td>
                           </tr>
                         ) : (
-                          clients.map((client, index) => (
-                            <tr key={`client-${client.name}-${index}`} className={cn("group transition-colors", isDark ? "hover:bg-white/[0.01]" : "hover:bg-slate-50")}>
-                              <td className={cn("px-8 py-6 font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{client.name}</td>
-                              <td className="px-8 py-6 text-slate-400 text-sm">{client.phone || '-'}</td>
-                              <td className="px-8 py-6">
-                                <button 
-                                  onClick={() => setViewingClientLoans(client.name)}
+                          clients.map((client, index) => {
+                            const isExpanded = expandedClient === client.name;
+                            return (
+                              <React.Fragment key={`client-row-${client.name}-${index}`}>
+                                <tr 
+                                  onClick={() => setExpandedClient(isExpanded ? null : client.name)}
                                   className={cn(
-                                    "flex items-center gap-2 px-3 py-1.5 border transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest",
-                                    isDark 
-                                      ? "bg-white/5 text-slate-300 border-white/10 hover:bg-brand-primary/20 hover:text-brand-primary hover:border-brand-primary/30" 
-                                      : "bg-slate-100 text-slate-700 border-slate-200 hover:bg-brand-primary/10 hover:text-brand-primary hover:border-brand-primary/20"
+                                    "group transition-all cursor-pointer", 
+                                    isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50",
+                                    isExpanded && (isDark ? "bg-white/[0.03]" : "bg-slate-100")
                                   )}
                                 >
-                                  <History className="w-3.5 h-3.5" />
-                                  <span>{client.loanCount} {client.loanCount === 1 ? 'Contrato' : 'Contratos'}</span>
-                                </button>
-                              </td>
-                              <td className={cn("px-8 py-6 text-sm transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {client.totalCapital.toLocaleString('pt-BR')}</td>
-                              <td className="px-8 py-6 text-brand-primary font-bold">R$ {client.activeDebt.toLocaleString('pt-BR')}</td>
-                              <td className="px-8 py-6 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <button 
-                                    onClick={() => {
-                                      setEditingLoanId(null);
-                                      setNewLoan({
-                                        clientName: client.name,
-                                        clientPhone: client.phone || '',
-                                        clientAddress: client.address || '',
-                                        capital: '',
-                                        interestRate: '',
-                                        date: format(new Date(), 'yyyy-MM-dd'),
-                                        dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
-                                        status: 'Pendente'
-                                      });
-                                      setIsAdding(true);
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-primary/20"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                    <span>Novo</span>
-                                  </button>
-                                  <button 
-                                    onClick={() => {
-                                      const activeLoans = loans.filter(l => l.clientName === client.name && l.status !== 'Pago');
-                                      if (activeLoans.length > 0) {
-                                        setViewingContract(activeLoans);
-                                      }
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-emerald-500/20"
-                                    title="Gerar contrato com todos os empréstimos ativos"
-                                  >
-                                    <FileText className="w-4 h-4" />
-                                    <span>Contrato</span>
-                                  </button>
-                                  <button 
-                                    onClick={() => {
-                                      const latestLoan = loans
-                                        .filter(l => l.clientName === client.name)
-                                        .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
-                                      if (latestLoan) openEditModal(latestLoan);
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-amber-500/20"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                    <span>Editar</span>
-                                  </button>
-                                  <button 
-                                    onClick={() => {
-                                      setConfirmModal({
-                                        isOpen: true,
-                                        title: 'Excluir Cliente',
-                                        message: `Deseja excluir todos os empréstimos de ${client.name}? Esta ação não pode ser desfeita.`,
-                                        onConfirm: async () => {
-                                          try {
-                                            const clientLoans = loans.filter(l => l.clientName === client.name);
-                                            const loanDeletions = clientLoans.map(l => deleteDoc(doc(db, 'loans', l.id)));
-                                            
-                                            // Delete associated actions
-                                            const q = query(
-                                              collection(db, 'actions'), 
-                                              where('clientName', '==', client.name),
-                                              where('uid', '==', user.uid)
-                                            );
-                                            const snapshot = await getDocs(q);
-                                            const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
-                                            
-                                            await Promise.all([...loanDeletions, ...actionDeletions]);
-                                            setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                                          } catch (err) {
-                                            handleFirestoreError(err, OperationType.DELETE, 'loans/bulk');
-                                          }
-                                        }
-                                      });
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-brand-danger/10 text-brand-danger hover:bg-brand-danger hover:text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest border border-brand-danger/20"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                    <span>Excluir</span>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                                  <td className="px-8 py-6">
+                                    <div className="flex items-center justify-between">
+                                      <span className={cn("font-black tracking-tight text-base transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                        {client.name}
+                                      </span>
+                                      <div className="flex items-center gap-4">
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                          {client.loanCount} {client.loanCount === 1 ? 'Contrato' : 'Contratos'}
+                                        </span>
+                                        <ChevronRight className={cn("w-5 h-5 text-slate-400 transition-transform duration-300", isExpanded && "rotate-90 text-brand-primary")} />
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr className={cn("transition-all animate-in fade-in slide-in-from-top-2 duration-300", isDark ? "bg-white/[0.01]" : "bg-slate-50/50")}>
+                                    <td className="px-8 py-8">
+                                      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                                        <div className="space-y-1">
+                                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] block">Telefone</span>
+                                          <p className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>{client.phone || '-'}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] block">Capital Total</span>
+                                          <p className={cn("text-sm font-black", isDark ? "text-white" : "text-slate-900")}>R$ {client.totalCapital.toLocaleString('pt-BR')}</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] block">Dívida Ativa</span>
+                                          <p className="text-sm font-black text-brand-primary">R$ {client.activeDebt.toLocaleString('pt-BR')}</p>
+                                        </div>
+                                        <div className="flex items-center justify-end gap-3 pt-2 md:pt-0">
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setViewingClientLoans(client.name);
+                                            }}
+                                            className={cn(
+                                              "p-3 rounded-xl border transition-all active:scale-95",
+                                              isDark ? "bg-white/5 border-white/10 text-brand-primary hover:bg-brand-primary/10" : "bg-white border-slate-200 text-brand-primary hover:bg-slate-50 shadow-sm"
+                                            )}
+                                            title="Histórico"
+                                          >
+                                            <History className="w-5 h-5" />
+                                          </button>
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingLoanId(null);
+                                              setNewLoan({
+                                                clientName: client.name,
+                                                clientPhone: client.phone || '',
+                                                clientAddress: client.address || '',
+                                                capital: '',
+                                                interestRate: '',
+                                                date: format(new Date(), 'yyyy-MM-dd'),
+                                                dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                                                status: 'Pendente'
+                                              });
+                                              setIsAdding(true);
+                                            }}
+                                            className="p-3 bg-brand-primary text-black rounded-xl shadow-lg shadow-brand-primary/20 hover:scale-105 active:scale-95 transition-all"
+                                            title="Novo Empréstimo"
+                                          >
+                                            <Plus className="w-5 h-5" />
+                                          </button>
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const activeLoans = loans.filter(l => l.clientName === client.name && l.status !== 'Pago');
+                                              if (activeLoans.length > 0) {
+                                                setViewingContract(activeLoans);
+                                              }
+                                            }}
+                                            className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-105 active:scale-95 transition-all"
+                                            title="Gerar Contrato"
+                                          >
+                                            <FileText className="w-5 h-5" />
+                                          </button>
+                                          <button 
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setConfirmModal({
+                                                isOpen: true,
+                                                title: 'Excluir Cliente',
+                                                message: `Deseja excluir todos os empréstimos de ${client.name}? Esta ação não pode ser desfeita.`,
+                                                onConfirm: async () => {
+                                                  try {
+                                                    const clientLoans = loans.filter(l => l.clientName === client.name);
+                                                    const loanDeletions = clientLoans.map(l => deleteDoc(doc(db, 'loans', l.id)));
+                                                    const q = query(
+                                                      collection(db, 'actions'), 
+                                                      where('clientName', '==', client.name),
+                                                      where('uid', '==', user.uid)
+                                                    );
+                                                    const snapshot = await getDocs(q);
+                                                    const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
+                                                    await Promise.all([...loanDeletions, ...actionDeletions]);
+                                                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                                  } catch (err) {
+                                                    handleFirestoreError(err, OperationType.DELETE, 'loans/bulk');
+                                                  }
+                                                }
+                                              });
+                                            }}
+                                            className="p-3 bg-brand-danger text-white rounded-xl shadow-lg shadow-brand-danger/20 hover:scale-105 active:scale-95 transition-all"
+                                            title="Excluir"
+                                          >
+                                            <Trash2 className="w-5 h-5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            )
+                          })
                         )}
                       </tbody>
                     </table>
                   </div>
 
                   {/* Mobile Cards */}
-                  <div className="lg:hidden grid grid-cols-1 gap-4">
+                  {activeTab === 'Clientes' && (
+                    <div className="lg:hidden flex items-center justify-between px-6 py-4 bg-brand-primary/5 border border-brand-primary/10 rounded-2xl mb-4">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Quantidade de Clientes</span>
+                      <span className="text-sm font-black text-brand-primary">{stats.totalClients}</span>
+                    </div>
+                  )}
+                  <div className="lg:hidden grid grid-cols-1 divide-y transition-colors overflow-hidden rounded-2xl border border-white/5">
                     {clients.length === 0 ? (
                       <div className="py-20 text-center text-slate-500 font-medium glass-card">
                         {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
                       </div>
                     ) : (
-                      clients.map((client, index) => (
-                        <div key={`client-mobile-${client.name}-${index}`} className={cn("glass-card p-5 space-y-4 border transition-colors", isDark ? "border-white/5" : "bg-white border-slate-200 shadow-lg")}>
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className={cn("font-bold text-lg leading-tight uppercase tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{client.name}</h3>
-                              <p className="text-slate-500 text-xs font-medium mt-1 uppercase tracking-widest">{client.phone || 'Sem Telefone'}</p>
-                            </div>
-                            <button 
-                              onClick={() => setViewingClientLoans(client.name)}
-                              className={cn("p-3 transition-colors rounded-xl border", isDark ? "bg-white/5 text-brand-primary border-white/10" : "bg-brand-primary/10 text-brand-primary border-brand-primary/20")}
+                      clients.map((client, index) => {
+                        const isExpanded = expandedClient === client.name;
+                        return (
+                          <div key={`client-mobile-${client.name}-${index}`} className={cn("transition-all", isDark ? "bg-white/[0.01]" : "bg-white")}>
+                            <div 
+                              onClick={() => setExpandedClient(isExpanded ? null : client.name)}
+                              className={cn("p-6 flex justify-between items-center cursor-pointer transition-colors", isExpanded && (isDark ? "bg-white/[0.03]" : "bg-slate-50"))}
                             >
-                              <History className="w-5 h-5" />
-                            </button>
-                          </div>
+                              <div className="flex flex-col">
+                                <h3 className={cn("font-black text-base uppercase tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{client.name}</h3>
+                                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">
+                                  {client.loanCount} {client.loanCount === 1 ? 'Contrato' : 'Contratos'}
+                                </p>
+                              </div>
+                              <ChevronRight className={cn("w-6 h-6 text-slate-400 transition-transform duration-300", isExpanded && "rotate-90 text-brand-primary")} />
+                            </div>
 
-                          <div className={cn("grid grid-cols-2 gap-4 pt-2 border-t transition-colors", isDark ? "border-white/5" : "border-slate-100")}>
-                            <div>
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Contratos</span>
-                              <div className={cn("font-bold text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{client.loanCount} ativos</div>
-                            </div>
-                            <div>
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Capital Inv.</span>
-                              <div className={cn("font-bold text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {client.totalCapital.toLocaleString('pt-BR')}</div>
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Dívida Ativa</span>
-                              <div className="text-brand-primary font-black text-lg tracking-tight">R$ {client.activeDebt.toLocaleString('pt-BR')}</div>
-                            </div>
-                          </div>
+                            {isExpanded && (
+                              <div className={cn("p-6 space-y-6 pt-0 animate-in fade-in slide-in-from-top-2 duration-300", isDark ? "bg-white/[0.03]" : "bg-slate-50")}>
+                                <div className={cn("grid grid-cols-2 gap-6 pt-6 border-t", isDark ? "border-white/5" : "border-slate-100")}>
+                                  <div>
+                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Telefone</span>
+                                    <div className={cn("font-bold text-sm tracking-tight", isDark ? "text-white" : "text-slate-900")}>{client.phone || 'Sem Telefone'}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Capital Inv.</span>
+                                    <div className={cn("font-bold text-sm tracking-tight", isDark ? "text-white" : "text-slate-900")}>R$ {client.totalCapital.toLocaleString('pt-BR')}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Dívida Ativa</span>
+                                    <div className="text-brand-primary font-black text-lg tracking-tight">R$ {client.activeDebt.toLocaleString('pt-BR')}</div>
+                                  </div>
+                                </div>
 
-                          <div className="flex gap-2 pt-2">
-                            <button 
-                                onClick={() => {
-                                  setEditingLoanId(null);
-                                  setNewLoan({
-                                    clientName: client.name,
-                                    clientPhone: client.phone || '',
-                                    clientAddress: client.address || '',
-                                    capital: '',
-                                    interestRate: '',
-                                    date: format(new Date(), 'yyyy-MM-dd'),
-                                    dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
-                                    status: 'Pendente'
-                                  });
-                                  setIsAdding(true);
-                                }}
-                                className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-brand-primary/10 text-brand-primary rounded-xl text-[9px] font-black uppercase tracking-widest border border-brand-primary/20 active:scale-95 transition-all"
-                              >
-                                <Plus className="w-4 h-4" />
-                                <span>Novo</span>
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  const activeLoans = loans.filter(l => l.clientName === client.name && l.status !== 'Pago');
-                                  if (activeLoans.length > 0) {
-                                    setViewingContract(activeLoans);
-                                  }
-                                }}
-                                className="flex-1 flex items-center justify-center gap-2 py-3.5 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-widest border border-emerald-500/20 active:scale-95 transition-all"
-                              >
-                                <FileText className="w-4 h-4" />
-                                <span>Recibo</span>
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  const oldestActive = loans
-                                    .filter(l => l.clientName === client.name && l.status !== 'Pago')
-                                    .sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0))[0];
-                                  if (oldestActive) sendWhatsAppCollection(oldestActive);
-                                  else alert('Este cliente não possui contratos ativos para cobrança.');
-                                }}
-                                className="p-3.5 bg-brand-primary/10 text-brand-primary rounded-xl border border-brand-primary/20 active:scale-95 transition-all"
-                                title="Cobrança WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  const latestLoan = loans
-                                    .filter(l => l.clientName === client.name)
-                                    .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))[0];
-                                  if (latestLoan) openEditModal(latestLoan);
-                                }}
-                                className="p-3.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 active:scale-95 transition-all"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  setConfirmModal({
-                                    isOpen: true,
-                                    title: 'Excluir Cliente',
-                                    message: `Deseja excluir todos os empréstimos de ${client.name}? Esta ação não pode ser desfeita.`,
-                                    onConfirm: async () => {
-                                      try {
-                                        const clientLoans = loans.filter(l => l.clientName === client.name);
-                                        const loanDeletions = clientLoans.map(l => deleteDoc(doc(db, 'loans', l.id)));
-                                        
-                                        // Delete associated actions
-                                        const q = query(
-                                          collection(db, 'actions'), 
-                                          where('clientName', '==', client.name),
-                                          where('uid', '==', user.uid)
-                                        );
-                                        const snapshot = await getDocs(q);
-                                        const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
-                                        
-                                        await Promise.all([...loanDeletions, ...actionDeletions]);
-                                        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                                      } catch (err) {
-                                        handleFirestoreError(err, OperationType.DELETE, 'loans/bulk');
-                                      }
-                                    }
-                                  });
-                                }}
-                                className="p-3.5 bg-brand-danger/10 text-brand-danger rounded-xl border border-brand-danger/20 active:scale-95 transition-all"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                                <div className="flex flex-wrap gap-3 pt-2">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewingClientLoans(client.name);
+                                    }}
+                                    className={cn("flex-1 px-4 py-4 flex flex-col items-center gap-2 rounded-2xl border transition-all active:scale-95", isDark ? "bg-white/5 border-white/10 text-brand-primary" : "bg-brand-primary/10 border-brand-primary/20 text-brand-primary shadow-sm")}
+                                  >
+                                    <History className="w-5 h-5" />
+                                    <span className="text-[8px] font-black uppercase">Histórico</span>
+                                  </button>
+                                  <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingLoanId(null);
+                                        setNewLoan({
+                                          clientName: client.name,
+                                          clientPhone: client.phone || '',
+                                          clientAddress: client.address || '',
+                                          capital: '',
+                                          interestRate: '',
+                                          date: format(new Date(), 'yyyy-MM-dd'),
+                                          dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                                          status: 'Pendente'
+                                        });
+                                        setIsAdding(true);
+                                      }}
+                                      className="flex-1 px-4 py-4 flex flex-col items-center gap-2 bg-brand-primary text-black rounded-2xl shadow-lg shadow-brand-primary/20 active:scale-95 transition-all"
+                                  >
+                                    <Plus className="w-5 h-5" />
+                                    <span className="text-[8px] font-black uppercase text-black">Novo</span>
+                                  </button>
+                                  <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setConfirmModal({
+                                          isOpen: true,
+                                          title: 'Excluir Cliente',
+                                          message: `Deseja excluir todos os empréstimos de ${client.name}? Esta ação não pode ser desfeita.`,
+                                          onConfirm: async () => {
+                                            try {
+                                              const clientLoans = loans.filter(l => l.clientName === client.name);
+                                              const loanDeletions = clientLoans.map(l => deleteDoc(doc(db, 'loans', l.id)));
+                                              const q = query(
+                                                collection(db, 'actions'), 
+                                                where('clientName', '==', client.name),
+                                                where('uid', '==', user.uid)
+                                              );
+                                              const snapshot = await getDocs(q);
+                                              const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
+                                              await Promise.all([...loanDeletions, ...actionDeletions]);
+                                              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                            } catch (err) {
+                                              handleFirestoreError(err, OperationType.DELETE, 'loans/bulk');
+                                            }
+                                          }
+                                        });
+                                      }}
+                                      className="flex-1 px-4 py-4 flex flex-col items-center gap-2 bg-brand-danger text-white rounded-2xl shadow-lg shadow-brand-danger/20 active:scale-95 transition-all"
+                                  >
+                                    <Trash2 className="w-5 h-5" />
+                                    <span className="text-[8px] font-black uppercase">Excluir</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))
+                        )
+                      })
                     )}
                   </div>
-                </div>
-              ) : activeTab === 'Transações' ? (
-                <div className="space-y-4">
-                  {/* Desktop Table */}
+                         </motion.div>
+                       ) : activeTab === 'Transações' ? (
+                         <motion.div 
+                           key="view-transacoes"
+                           initial={{ opacity: 0, x: 20 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           exit={{ opacity: 0, x: -20 }}
+                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                           className="space-y-4"
+                         >
+                           {/* Desktop Table */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -2957,10 +3262,17 @@ export default function App() {
                       ))
                     )}
                   </div>
-                </div>
-              ) : activeTab === 'Pagamento' ? (
-                <div className="p-12 flex flex-col items-center text-center">
-                  <div id="printable-pix" className="bg-white p-12 rounded-[40px] w-full max-w-md shadow-2xl text-slate-900 mb-8 printable-content relative overflow-hidden">
+                         </motion.div>
+                       ) : activeTab === 'Pagamento' ? (
+                         <motion.div 
+                           key="view-pagamento"
+                           initial={{ opacity: 0, scale: 0.98 }}
+                           animate={{ opacity: 1, scale: 1 }}
+                           exit={{ opacity: 0, scale: 0.98 }}
+                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                           className="p-12 flex flex-col items-center text-center"
+                         >
+                           <div id="printable-pix" className="bg-white p-12 rounded-[40px] w-full max-w-md shadow-2xl text-slate-900 mb-8 printable-content relative overflow-hidden">
                     {/* Background Watermark */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -rotate-12">
                       <span className="text-[80px] font-black tracking-tighter whitespace-nowrap text-brand-primary opacity-10">Nexus Private</span>
@@ -3054,9 +3366,16 @@ export default function App() {
                       {pixCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
                     </button>
                   </div>
-                </div>
+                </motion.div>
               ) : activeTab === 'Relatórios' ? (
-                <div className="p-6 sm:p-10 space-y-8">
+                         <motion.div 
+                           key="view-relatorios"
+                           initial={{ opacity: 0, y: 10 }}
+                           animate={{ opacity: 1, y: 0 }}
+                           exit={{ opacity: 0, y: -10 }}
+                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                           className="p-6 sm:p-10 space-y-8"
+                         >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                     <div>
                       <h2 className={cn("text-xl font-bold tracking-tight uppercase transition-colors", isDark ? "text-white" : "text-slate-900")}>Relatório Mensal</h2>
@@ -3064,12 +3383,24 @@ export default function App() {
                     </div>
                     
                     <div className="flex flex-wrap items-center gap-3">
+                      {monthlyClosures.some(c => c.month === reportMonth && c.year === reportYear) ? (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 text-brand-primary rounded-xl text-[9px] font-black uppercase tracking-[0.2em]">
+                          <Check className="w-3 h-3" />
+                          Período Fechado
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-[9px] font-black uppercase tracking-[0.2em]">
+                          <Clock className="w-3 h-3" />
+                          Pendente
+                        </div>
+                      )}
+
                       <button
                         onClick={handleCloseMonth}
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-0.5 active:translate-y-0"
                       >
                         <Lock className="w-3.5 h-3.5" />
-                        Fechar Caixa
+                        {monthlyClosures.some(c => c.month === reportMonth && c.year === reportYear) ? 'Refazer Fechamento' : 'Fechar Caixa'}
                       </button>
 
                       <div className={cn("flex items-center gap-2 border rounded-xl px-4 py-2 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-white border-slate-200 shadow-sm")}>
@@ -3083,7 +3414,7 @@ export default function App() {
                           onChange={(e) => setReportMonth(parseInt(e.target.value))}
                         >
                           {ptBrMonths.map((month, index) => (
-                            <option key={month} value={index} className={isDark ? "bg-slate-900" : "bg-white"}>{month}</option>
+                            <option key={month} value={index} className={isDark ? "bg-black" : "bg-white"}>{month}</option>
                           ))}
                         </select>
                       </div>
@@ -3098,7 +3429,7 @@ export default function App() {
                           onChange={(e) => setReportYear(parseInt(e.target.value))}
                         >
                           {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                            <option key={year} value={year} className={isDark ? "bg-slate-900" : "bg-white"}>{year}</option>
+                            <option key={year} value={year} className={isDark ? "bg-black" : "bg-white"}>{year}</option>
                           ))}
                         </select>
                       </div>
@@ -3159,8 +3490,8 @@ export default function App() {
                       </div>
 
                       {/* Simplified Progress Section */}
-                      <div className="mb-14 flex-grow">
-                        <div className="max-w-xl mx-auto lg:mx-0">
+                      <div className="mb-14 flex-grow w-full">
+                        <div className="w-full">
                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8 pb-4 border-b border-slate-100">Distribuição de Receita</h3>
                            <div className="space-y-10">
                              <div className="space-y-4">
@@ -3186,17 +3517,17 @@ export default function App() {
                       </div>
 
                       {/* Professional Sign-off & Footer */}
-                      <div className="mt-auto grid grid-cols-2 lg:grid-cols-3 gap-12 pt-12 border-t border-slate-200">
-                        <div className="col-span-1 lg:col-span-2">
-                           <div className="flex items-center gap-10">
+                      <div className="mt-auto grid grid-cols-2 lg:grid-cols-4 gap-12 pt-12 border-t border-slate-200">
+                        <div className="col-span-1 lg:col-span-3">
+                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-10">
                              <div className="w-24 h-24 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center p-3">
                                <QrCode className="w-full h-full text-slate-200" />
                              </div>
-                             <div className="space-y-2">
-                               <p className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Controle de Autenticidade</p>
-                               <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter max-w-[200px]">REF-{reportYear}{String(reportMonth + 1).padStart(2, '0')}-0229384-NXB-SECURE</p>
-                               <p className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] pt-2">Nexus Private Asset Management <br/> Divisão de Controle Interno</p>
-                             </div>
+                             <div className="w-full">
+                              <p className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Controle de Autenticidade</p>
+                              <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter w-full">REF-{reportYear}{String(reportMonth + 1).padStart(2, '0')}-0229384-NXB-SECURE</p>
+                              <p className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] pt-2">Nexus Private Asset Management <br/> Divisão de Controle Interno</p>
+                            </div>
                            </div>
                         </div>
                         <div className="text-right flex flex-col items-end justify-end space-y-4">
@@ -3235,9 +3566,74 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                </div>
-            ) : activeTab === 'Histórico' ? (
-                <div className="space-y-4">
+
+                  {/* Monthly Closures History */}
+                  <div className="space-y-6 pt-10 border-t border-white/5">
+                    <div className="flex items-center gap-3 mb-2">
+                       <History className="w-4 h-4 text-slate-500" />
+                       <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Histórico de Fechamentos</h3>
+                    </div>
+                    {monthlyClosures.length === 0 ? (
+                      <div className={cn("p-10 rounded-3xl border text-center transition-colors", isDark ? "bg-white/[0.02] border-white/5" : "bg-slate-50 border-slate-100")}>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nenhum fechamento registrado ainda.</p>
+                      </div>
+                    ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {monthlyClosures.map((closure) => (
+                          <div 
+                            key={closure.id} 
+                            onClick={() => {
+                              setReportMonth(closure.month);
+                              setReportYear(closure.year);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                            className={cn(
+                              "p-6 rounded-3xl border cursor-pointer transition-all hover:scale-[1.02] active:scale-95 group",
+                              isDark ? "bg-white/[0.02] border-white/5 hover:bg-white/[0.05]" : "bg-white border-slate-100 hover:shadow-xl shadow-slate-200/50"
+                            )}
+                          >
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h4 className={cn("text-xs font-black uppercase tracking-widest transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                  {ptBrMonths[closure.month]} / {closure.year}
+                                </h4>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter mt-1">
+                                  Fechado em: {safeFormatDate(closure.closedAt, 'dd/MM/yyyy')}
+                                </p>
+                              </div>
+                              <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg">
+                                <Check className="w-3 h-3" />
+                              </div>
+                            </div>
+                            <div className="space-y-2 pt-4 border-t border-white/5">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase">Entradas</span>
+                                <span className={cn("text-[10px] font-black", isDark ? "text-white" : "text-slate-900")}>
+                                  R$ {(closure.stats?.totalPayments || 0).toLocaleString('pt-BR')}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-[9px] text-slate-500 font-bold uppercase">Lucro</span>
+                                <span className="text-[10px] font-black text-brand-primary">
+                                  R$ {(closure.stats?.interestPayments || 0).toLocaleString('pt-BR')}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ) : activeTab === 'Histórico' ? (
+                         <motion.div 
+                           key="view-historico"
+                           initial={{ opacity: 0, x: 20 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           exit={{ opacity: 0, x: -20 }}
+                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                           className="space-y-4"
+                         >
                   {/* Desktop Table */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
@@ -3402,27 +3798,43 @@ export default function App() {
                       ))
                     )}
                   </div>
-                </div>
+                </motion.div>
               ) : (
-                <div className="space-y-4">
+                         <motion.div 
+                           key="view-others"
+                           initial={{ opacity: 0, x: 20 }}
+                           animate={{ opacity: 1, x: 0 }}
+                           exit={{ opacity: 0, x: -20 }}
+                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                           className="space-y-4"
+                         >
                   {/* Desktop Table */}
                   <div className="hidden lg:block overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-white/[0.01] border-b border-white/[0.03]">
                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Original</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Vencimento</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Juros</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Total</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Status</th>
+                          {activeTab === 'Agendados' ? (
+                            <>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Agendado</th>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Data para Efetuar</th>
+                            </>
+                          ) : (
+                            <>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Original</th>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Vencimento</th>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Juros</th>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Total</th>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Status</th>
+                            </>
+                          )}
                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.05]">
                         {loading ? (
                           <tr>
-                            <td colSpan={7} className="px-8 py-20 text-center">
+                            <td colSpan={activeTab === 'Agendados' ? 4 : 7} className="px-8 py-20 text-center">
                               <div className="flex flex-col items-center gap-3">
                                 <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
                                 <span className="text-slate-500 font-medium">Sincronizando dados...</span>
@@ -3431,7 +3843,7 @@ export default function App() {
                           </tr>
                         ) : filteredLoans.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="px-8 py-20 text-center">
+                            <td colSpan={activeTab === 'Agendados' ? 4 : 7} className="px-8 py-20 text-center">
                               <div className="flex flex-col items-center gap-4">
                                 <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
                                   <Users className="w-8 h-8 text-slate-600" />
@@ -3460,40 +3872,58 @@ export default function App() {
                                 >
                                   {loan.clientName}
                                 </button>
-                                {loan.clientPhone && <div className="text-[10px] text-slate-500 font-medium">{loan.clientPhone}</div>}
+                                {loan.clientPhone && <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{loan.clientPhone}</div>}
                               </td>
-                              <td className={cn("px-8 py-4 text-xs transition-colors", isDark ? "text-white" : "text-slate-900")}>
-                                R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="px-8 py-4 text-slate-400 text-xs font-medium">
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                                    <span className="text-neon-red font-bold">
-                                      {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
-                                    </span>
-                                  </div>
-                                  {loan.status === 'Pendente' && (
-                                    <span className={cn(
-                                      "text-[9px] font-bold uppercase tracking-wider",
-                                      isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
-                                    )}>
-                                      {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
-                                       getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
-                                       `Atrasado ${Math.abs(getDaysDiff(loan.dueDate))} dias`}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-8 py-4 text-brand-accent/80 text-xs">
-                                {((loan.interestRate || 0) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%
-                              </td>
-                              <td className={cn("px-8 py-4 font-bold text-sm transition-colors", isDark ? "text-white" : "text-slate-900")}>
-                                R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="px-8 py-4">
-                                <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
-                              </td>
+                              {activeTab === 'Agendados' ? (
+                                <>
+                                  <td className={cn("px-8 py-4 text-xs font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                    R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-8 py-4 text-slate-400 text-xs font-medium">
+                                    <div className="flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                      <span className="text-brand-primary font-black">
+                                        {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                      </span>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className={cn("px-8 py-4 text-xs transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                    R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-8 py-4 text-slate-400 text-xs font-medium">
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                        <span className="text-neon-red font-bold">
+                                          {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                        </span>
+                                      </div>
+                                      {loan.status === 'Pendente' && (
+                                        <span className={cn(
+                                          "text-[9px] font-bold uppercase tracking-wider",
+                                          isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
+                                        )}>
+                                          {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
+                                           getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
+                                           `Atrasado ${Math.abs(getDaysDiff(loan.dueDate))} dias`}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-8 py-4 text-brand-accent/80 text-xs">
+                                    {((loan.interestRate || 0) * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%
+                                  </td>
+                                  <td className={cn("px-8 py-4 font-bold text-sm transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                    R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-8 py-4">
+                                    <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
+                                  </td>
+                                </>
+                              )}
                               <td className="px-8 py-6 text-right">
                                 <div className="flex items-center justify-end gap-2">
                                   <button 
@@ -3599,35 +4029,50 @@ export default function App() {
                             <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
                           </div>
 
-                          <div className={cn("grid grid-cols-2 gap-4 pt-2 border-t transition-colors", isDark ? "border-white/5" : "border-slate-100")}>
-                            <div>
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Vencimento</span>
-                              <div className="flex flex-col">
-                                <span className={cn("font-bold text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
-                                {loan.status === 'Pendente' && (
-                                  <span className={cn(
-                                    "text-[9px] font-bold uppercase mt-0.5",
-                                    isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
-                                  )}>
-                                    {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
-                                     getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
-                                     `Atrasado ${Math.abs(getDaysDiff(loan.dueDate))} dias`}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Taxa Juros</span>
-                              <div className="text-brand-accent font-bold text-sm tracking-tight">{((loan.interestRate || 0) * 100).toLocaleString('pt-BR')}%</div>
-                            </div>
-                            <div>
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Capital Inv.</span>
-                              <div className={cn("font-medium text-xs tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {loan.capital.toLocaleString('pt-BR')}</div>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Total à Receber</span>
-                              <div className={cn("font-black text-lg tracking-tighter transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</div>
-                            </div>
+                          <div className={cn("grid grid-cols-2 gap-4 pt-4 border-t transition-colors", isDark ? "border-white/5" : "border-slate-100")}>
+                            {activeTab === 'Agendados' ? (
+                              <>
+                                <div>
+                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Valor Agendado</span>
+                                  <div className={cn("font-black text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Data Efetuar</span>
+                                  <div className={cn("font-black text-xs tracking-tight text-brand-primary")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div>
+                                  <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Vencimento</span>
+                                  <div className="flex flex-col">
+                                    <span className={cn("font-bold text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                                    {loan.status === 'Pendente' && (
+                                      <span className={cn(
+                                        "text-[9px] font-bold uppercase mt-0.5",
+                                        isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
+                                      )}>
+                                        {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
+                                         getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
+                                         `Atrasado ${Math.abs(getDaysDiff(loan.dueDate))} dias`}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Taxa Juros</span>
+                                  <div className="text-brand-accent font-bold text-sm tracking-tight">{((loan.interestRate || 0) * 100).toLocaleString('pt-BR')}%</div>
+                                </div>
+                                <div>
+                                  <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Capital Inv.</span>
+                                  <div className={cn("font-medium text-xs tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {loan.capital.toLocaleString('pt-BR')}</div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Total à Receber</span>
+                                  <div className={cn("font-black text-lg tracking-tighter transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</div>
+                                </div>
+                              </>
+                            )}
                           </div>
 
                           <div className="flex gap-2 pt-2">
@@ -3693,12 +4138,15 @@ export default function App() {
                       ))
                     )}
                   </div>
-                </div>
+                </motion.div>
               )}
-            </div>
+            </AnimatePresence>
           </div>
-        </div>
-      </main>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+</main>
 
       {/* Add Loan Modal */}
       {isAdding && (
@@ -4953,7 +5401,7 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-end sm:justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-sm overflow-hidden">
           <div className={cn(
             "w-full max-w-md sm:rounded-[32px] rounded-t-[32px] border overflow-hidden shadow-2xl transition-colors duration-500 flex flex-col max-h-[92vh] sm:max-h-[90vh]",
-            isDark ? "bg-slate-900 border-white/10" : "bg-white border-slate-200"
+            isDark ? "bg-black border-white/10" : "bg-white border-slate-200"
           )}>
             <div className={cn("p-6 sm:p-8 border-b flex justify-between items-center transition-colors shrink-0", isDark ? "border-white/5" : "border-slate-100")}>
               <div className="flex items-center gap-3">
@@ -5287,6 +5735,7 @@ export default function App() {
       )}
 
       {/* Modal de Confirmação de PIX */}
+      </div>
     </div>
   );
 }

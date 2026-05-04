@@ -91,6 +91,32 @@
         "confirmed": { "type": "boolean", "description": "Whether the transaction has been verified." }
       },
       "required": ["type", "description", "clientName", "loanId", "date", "uid"]
+    },
+    "monthly_closure": {
+      "title": "Monthly Closure",
+      "description": "Represents a monthly financial closure.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "closurePeriodEnd": { "type": "string", "format": "date-time" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "totalLent": { "type": "number" },
+            "totalPayments": { "type": "number" },
+            "capitalPayments": { "type": "number" },
+            "interestPayments": { "type": "number" },
+            "paymentCount": { "type": "number" },
+            "loanCount": { "type": "number" },
+            "currentOutstanding": { "type": "number" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "month", "year", "closedAt", "closurePeriodEnd", "stats"]
     }
   },
   "firestore": {
@@ -105,6 +131,10 @@
     "/actions/{actionId}": {
       "schema": "system_action",
       "description": "Log of all system actions."
+    },
+    "/monthly_closures/{closureId}": {
+      "schema": "monthly_closure",
+      "description": "History of monthly closures."
     }
   }
 }
