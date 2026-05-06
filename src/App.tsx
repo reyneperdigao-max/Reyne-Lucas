@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Clock,
   ChevronRight,
+  ChevronLeft,
   Wallet,
   Trash2,
   History,
@@ -27,20 +28,22 @@ import {
   MessageCircle,
   Printer,
   Settings,
+  Settings2,
   X,
   QrCode,
   Copy,
   Check,
   BarChart3,
   Menu,
-  Eye,
-  EyeOff,
   Sun,
   Moon,
   Bell,
   User as UserIcon,
   AlertTriangle,
   CheckCircle2,
+  Palette,
+  Database,
+  Download,
 } from 'lucide-react';
 import { 
   collection, 
@@ -59,7 +62,6 @@ import {
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
-  signOut,
   User,
   signInWithEmailAndPassword,
   EmailAuthProvider,
@@ -195,6 +197,34 @@ const ptBrMonths = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
+interface SystemSettings {
+  whatsappTemplate: string;
+  defaultInterestRate: number;
+  accentColor: 'yellow' | 'green' | 'blue';
+}
+
+const DEFAULT_SETTINGS: SystemSettings = {
+  whatsappTemplate: 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {valor}.\n\nVencimento: {vencimento}',
+  defaultInterestRate: 0,
+  accentColor: 'yellow'
+};
+
+export const BRAZILIAN_BANKS = [
+  { id: 'nubank', name: 'Nubank', color: '#8A05BE', short: 'Nu' },
+  { id: 'itau', name: 'Itaú', color: '#FF7800', short: 'It' },
+  { id: 'bradesco', name: 'Bradesco', color: '#ED1C24', short: 'Br' },
+  { id: 'bb', name: 'Banco do Brasil', color: '#FFF000', short: 'BB', textColor: '#0038A8' },
+  { id: 'caixa', name: 'Caixa', color: '#005CA9', short: 'Cx' },
+  { id: 'santander', name: 'Santander', color: '#EC0000', short: 'St' },
+  { id: 'inter', name: 'Inter', color: '#FF7A00', short: 'In' },
+  { id: 'c6', name: 'C6 Bank', color: '#212121', short: 'C6' },
+  { id: 'picpay', name: 'PicPay', color: '#21C25E', short: 'Pp' },
+  { id: 'mercadopago', name: 'Mercado Pago', color: '#009EE3', short: 'MP' },
+  { id: 'pagbank', name: 'PagBank', color: '#00A650', short: 'Pb' },
+  { id: 'btg', name: 'BTG Pactual', color: '#00315C', short: 'BTG' },
+  { id: 'safra', name: 'Safra', color: '#B08D57', short: 'Sf' },
+];
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
@@ -203,12 +233,22 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeSettingsSection, setActiveSettingsSection] = useState<'menu' | 'regras' | 'mensagem' | 'aparencia' | 'dados'>('menu');
   const [loans, setLoans] = useState<Loan[]>([]);
   const [actions, setActions] = useState<SystemAction[]>([]);
   const [monthlyClosures, setMonthlyClosures] = useState<MonthlyClosure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Histórico' | 'Pagamento' | 'Relatórios'>('Principal');
+  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações'>('Principal');
+  const [previousTab, setPreviousTab] = useState<typeof activeTab>('Principal');
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+
+  const changeTab = (newTab: typeof activeTab) => {
+    if (newTab !== activeTab) {
+      setPreviousTab(activeTab);
+      setActiveTab(newTab);
+    }
+  };
   const [reportMonth, setReportMonth] = useState(new Date().getMonth());
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
   
@@ -238,7 +278,6 @@ export default function App() {
   const [showOnlyCapital, setShowOnlyCapital] = useState(false);
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
   const [filterDate, setFilterDate] = useState('');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<{ 
     displayName?: string, 
     pixKey?: string, 
@@ -251,17 +290,9 @@ export default function App() {
     const saved = localStorage.getItem('nexus_theme');
     return (saved as 'light' | 'dark') || 'dark';
   });
-  const [isPrivacyMode, setIsPrivacyMode] = useState(() => {
-    const saved = localStorage.getItem('nexus_privacy_mode');
-    return saved === 'true';
-  });
   const [newDisplayName, setNewDisplayName] = useState('');
   const [pixCopied, setPixCopied] = useState(false);
 
-  const maskValue = (value: string | number) => {
-    if (!isPrivacyMode) return value.toString();
-    return '••••';
-  };
   const [newPixKey, setNewPixKey] = useState('');
   const [newPixName, setNewPixName] = useState('');
   const [newPixBank, setNewPixBank] = useState('');
@@ -277,6 +308,16 @@ export default function App() {
     const saved = localStorage.getItem('nexus_read_notifications');
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    if (activeTab === 'Configurações' && userProfile) {
+      setNewDisplayName(userProfile.displayName || '');
+      setNewPixKey(userProfile.pixKey || '');
+      setNewPixName(userProfile.pixName || '');
+      setNewPixBank(userProfile.pixBank || '');
+      setNewProfilePicture(userProfile.profilePicture || null);
+    }
+  }, [activeTab, userProfile]);
 
   const markNotificationAsRead = (id: string) => {
     setReadNotificationIds(prev => {
@@ -442,7 +483,7 @@ export default function App() {
               --color-slate-800: #1e293b !important;
               --color-slate-900: #0f172a !important;
               --color-emerald-600: #059669 !important;
-              --color-brand-primary: #d4af37 !important;
+              --color-brand-primary: ${getAccentColorHex()} !important;
               --color-brand-danger: #ff4d4d !important;
             }
             * {
@@ -486,7 +527,7 @@ export default function App() {
             .text-slate-500 { color: #64748b !important; }
             .text-slate-400 { color: #94a3b8 !important; }
             .text-white { color: #ffffff !important; }
-            .text-brand-primary { color: #d4af37 !important; }
+            .text-brand-primary { color: ${getAccentColorHex()} !important; }
             .text-neon-red { color: #ff3131 !important; text-shadow: none !important; }
           `;
           clonedDoc.head.appendChild(style);
@@ -822,8 +863,12 @@ export default function App() {
               pixKey: '',
               pixName: '',
               pixBank: ''
-            }, { merge: true });
+            }, { merge: true }).catch(err => {
+              handleFirestoreError(err, OperationType.WRITE, `users/${u.uid}`);
+            });
           }
+        }, (err) => {
+          handleFirestoreError(err, OperationType.GET, `users/${u.uid}`);
         });
       } else {
         setUserProfile(null);
@@ -853,7 +898,6 @@ export default function App() {
       };
 
       await setDoc(userRef, updateData, { merge: true });
-      setIsSettingsOpen(false);
     } catch (err) {
       console.error("Error saving profile:", err);
       setError("Erro ao salvar configurações. " + (err instanceof Error ? err.message : ""));
@@ -905,7 +949,6 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => signOut(auth);
 
   // Keep payingLoan in sync with loans array
   useEffect(() => {
@@ -971,10 +1014,20 @@ export default function App() {
       handleFirestoreError(err, OperationType.GET, 'monthly_closures');
     });
 
+    const settingsRef = doc(db, 'users', user.uid, 'settings', 'system');
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setSystemSettings(docSnap.data() as SystemSettings);
+      }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${user.uid}/settings/system`);
+    });
+
     return () => {
       unsubscribeLoans();
       unsubscribeActions();
       unsubscribeClosures();
+      unsubscribeSettings();
     };
   }, [user, isAuthReady]);
 
@@ -1011,7 +1064,7 @@ export default function App() {
     }
   };
 
-  const handleFirestoreError = (err: unknown, type: OperationType, path: string) => {
+  const handleFirestoreError = (err: unknown, type: OperationType, path: string | null) => {
     const errInfo: FirestoreErrorInfo = {
       error: err instanceof Error ? err.message : String(err),
       operationType: type,
@@ -1030,6 +1083,7 @@ export default function App() {
     };
     console.error('Firestore Error:', JSON.stringify(errInfo));
     setError("Erro de permissão ou conexão com o banco de dados.");
+    throw new Error(JSON.stringify(errInfo));
   };
 
   const addLoan = async (e: React.FormEvent) => {
@@ -1113,7 +1167,7 @@ export default function App() {
         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
       });
       await logAction('loan_updated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
-      setActiveTab('Empréstimos');
+      changeTab('Empréstimos');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${loan.id}`);
     }
@@ -1131,12 +1185,14 @@ export default function App() {
     // Use only first name
     const firstName = (loan.clientName || 'Cliente').trim().split(' ')[0];
     
-    // Calculate interest for renewal option
-    const interestAmount = loan.capital * loan.interestRate;
-    
-    const message = `Olá ${firstName}, passando para lembrar do vencimento do seu empréstimo no valor de R$ ${loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.\n\n` +
-      `Caso prefira, você pode pagar apenas os juros de R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} para renovar por mais 30 dias.\n\n` +
-      (userProfile?.pixKey ? `Chave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}` : '');
+    let message = systemSettings.whatsappTemplate
+      .replace(/{nome}/g, firstName)
+      .replace(/{valor}/g, `R$ ${loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
+      .replace(/{vencimento}/g, format(parseISO(loan.dueDate), 'dd/MM/yyyy'));
+
+    if (userProfile?.pixKey) {
+      message += `\n\nChave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}`;
+    }
 
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
@@ -1399,50 +1455,6 @@ export default function App() {
     });
   };
 
-  const clearHistory = async () => {
-    if (!user || actions.length === 0) return;
-    
-    setConfirmPassword('');
-    setConfirmError(null);
-    setConfirmModal({
-      isOpen: true,
-      requiresPassword: true,
-      title: 'Limpar Histórico',
-      message: 'Deseja excluir permanentemente todo o histórico de transações? Você deve confirmar sua senha para prosseguir.',
-      onConfirm: async (password?: string) => {
-        if (!user || !user.email || !password) {
-          setConfirmError("A senha é obrigatória.");
-          return;
-        }
-
-        setIsVerifyingPassword(true);
-        setConfirmError(null);
-
-        try {
-          // Verify password
-          const credential = EmailAuthProvider.credential(user.email, password);
-          await reauthenticateWithCredential(user, credential);
-
-          const q = query(collection(db, 'actions'), where('uid', '==', user.uid));
-          const snapshot = await getDocs(q);
-          const deletions = snapshot.docs.map(d => deleteDoc(d.ref));
-          await Promise.all(deletions);
-          setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        } catch (err: unknown) {
-          console.error("Clear History Error:", err);
-          const error = err as { code?: string };
-          if (error.code === 'auth/wrong-password') {
-            setConfirmError("Senha incorreta.");
-          } else {
-            setConfirmError("Erro ao processar solicitação.");
-          }
-        } finally {
-          setIsVerifyingPassword(false);
-        }
-      }
-    });
-  };
-
   const deleteAction = async (id: string) => {
     const action = actions.find(a => a.id === id);
     if (!action) return;
@@ -1664,6 +1676,13 @@ export default function App() {
     const overdueLoans = activeLoans.filter(l => l.status === 'Atrasado' || isOverdue(l));
     const atrasado = overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0);
     const atrasadosCount = overdueLoans.length;
+
+    // Calculate due today
+    const today = startOfDay(new Date());
+    const dueTodayCount = activeLoans.filter(l => {
+      const d = toDate(l.dueDate);
+      return d && startOfDay(d).getTime() === today.getTime();
+    }).length;
     
     // Calculate total unique clients
     const totalClients = new Set(loans.map(l => l.clientName)).size;
@@ -1674,6 +1693,7 @@ export default function App() {
       jurosRealizados,
       atrasado,
       atrasadosCount,
+      dueTodayCount,
       totalClients
     };
   }, [loans, actions, userProfile]);
@@ -2070,22 +2090,46 @@ export default function App() {
     { id: 'Transações', label: 'Transações', icon: Wallet },
     { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
     { id: 'Relatórios', label: 'Relatórios', icon: FileText },
-    { id: 'Histórico', label: 'Histórico', icon: History },
+    { id: 'Configurações', label: 'Configurações', icon: Settings },
   ];
 
+  const handleSaveSystemSettings = async (settings: SystemSettings) => {
+    if (!user) return;
+    const path = `users/${user.uid}/settings/system`;
+    try {
+      const settingsRef = doc(db, 'users', user.uid, 'settings', 'system');
+      await setDoc(settingsRef, settings);
+      setSystemSettings(settings);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const getAccentColorHex = () => {
+    switch (systemSettings.accentColor) {
+      case 'yellow': return '#FFD700';
+      case 'green': return '#39FF14';
+      case 'blue': return '#00F0FF';
+      default: return '#FFD700';
+    }
+  };
+
   return (
-    <div className={cn(
-      "min-h-screen flex font-sans selection:bg-brand-primary/20 overflow-x-hidden transition-colors duration-500",
-      isDark ? "bg-black text-slate-300" : "bg-slate-50 text-slate-700"
-    )}>
+    <div 
+      className={cn(
+        "min-h-screen flex font-sans selection:bg-brand-primary/20 overflow-x-hidden transition-colors duration-500",
+        isDark ? "bg-black text-slate-300" : "bg-slate-50 text-slate-700"
+      )}
+      style={{ '--color-brand-primary': getAccentColorHex() } as React.CSSProperties}
+    >
       {/* Sidebar - Desktop */}
       <aside className={cn(
         "hidden lg:flex flex-col shrink-0 sticky top-0 h-screen border-r transition-all duration-300 z-50 overflow-hidden",
         isSidebarCollapsed ? "w-20" : "w-72",
-        isDark ? "bg-black border-white/[0.03]" : "bg-white border-slate-200"
+        isDark ? "bg-black border-surface-border" : "bg-white border-slate-200"
       )}>
         <div className={cn("p-8 flex items-center gap-4 transition-all", isSidebarCollapsed ? "p-5 justify-center" : "")}>
-          <div className="p-0.5 bg-gradient-to-br from-brand-primary/30 to-transparent rounded-2xl shrink-0">
+          <div className="p-0.5 rounded-2xl shrink-0">
             {userProfile?.profilePicture ? (
               <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
             ) : (
@@ -2119,7 +2163,7 @@ export default function App() {
               <button
                 key={item.id}
                 onClick={() => {
-                  setActiveTab(item.id as typeof activeTab);
+                  changeTab(item.id as typeof activeTab);
                   setCommand('');
                   setShowOnlyOverdue(false);
                 }}
@@ -2128,7 +2172,7 @@ export default function App() {
                   isSidebarCollapsed ? "justify-center p-3.5 rounded-xl" : "gap-4 px-4 py-3.5 rounded-2xl",
                   isActive 
                     ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" 
-                    : cn("text-slate-500", isDark ? "hover:text-white hover:bg-white/[0.03]" : "hover:text-slate-900 hover:bg-slate-100")
+                    : cn("text-slate-500", isDark ? "hover:text-white hover:bg-surface-800" : "hover:text-slate-900 hover:bg-slate-100")
                 )}
                 title={isSidebarCollapsed ? item.label : ""}
               >
@@ -2143,7 +2187,7 @@ export default function App() {
           <div className={cn(
             "border transition-colors overflow-hidden",
             isSidebarCollapsed ? "p-2 rounded-xl" : "p-4 rounded-[24px]",
-            isDark ? "bg-white/[0.02] border-white/[0.05]" : "bg-slate-50 border-slate-200"
+            isDark ? "bg-surface-900 border-surface-border" : "bg-slate-50 border-slate-200"
           )}>
             <div className={cn("flex items-center mb-3", isSidebarCollapsed ? "justify-center mb-0" : "gap-3")}>
               <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center overflow-hidden shrink-0">
@@ -2185,7 +2229,7 @@ export default function App() {
           />
           <aside className={cn(
             "absolute inset-y-0 left-0 w-80 p-6 flex flex-col animate-in slide-in-from-left duration-500",
-            isDark ? "bg-black" : "bg-white"
+            isDark ? "bg-[#050505] border-r border-surface-border" : "bg-white"
           )}>
             <div className="flex items-center justify-between mb-10">
               <div className="flex items-center gap-3">
@@ -2207,7 +2251,7 @@ export default function App() {
                 <button
                   key={`mobile-${item.id}`}
                   onClick={() => {
-                    setActiveTab(item.id as typeof activeTab);
+                    changeTab(item.id as typeof activeTab);
                     setCommand('');
                     setShowOnlyOverdue(false);
                     setIsMobileSidebarOpen(false);
@@ -2216,7 +2260,7 @@ export default function App() {
                     "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all",
                     activeTab === item.id 
                       ? "bg-brand-primary text-black font-black shadow-lg shadow-brand-primary/20" 
-                      : cn("text-slate-500", isDark ? "hover:bg-white/5 hover:text-white" : "hover:bg-slate-100 hover:text-slate-900")
+                      : cn("text-slate-500", isDark ? "hover:bg-surface-800 hover:text-white" : "hover:bg-slate-100 hover:text-slate-900")
                   )}
                 >
                   <item.icon className="w-5 h-5" />
@@ -2256,21 +2300,23 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 max-h-screen overflow-y-auto">
       {/* Background Glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className={cn(
-          "absolute -top-32 -left-32 w-full max-w-[800px] aspect-square rounded-full blur-[180px] transition-all duration-1000",
-          isDark ? "bg-brand-primary/10" : "bg-brand-primary/15"
-        )} />
-        <div className={cn(
-          "absolute top-1/2 -right-32 w-full max-w-[700px] aspect-square rounded-full blur-[160px] transition-all duration-1000",
-          isDark ? "bg-brand-accent/5" : "bg-brand-accent/10"
-        )} />
-      </div>
+      {!isDark && (
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className={cn(
+            "absolute -top-32 -left-32 w-full max-w-[800px] aspect-square rounded-full blur-[180px] transition-all duration-1000",
+            isDark ? "bg-brand-primary/10" : "bg-brand-primary/15"
+          )} />
+          <div className={cn(
+            "absolute top-1/2 -right-32 w-full max-w-[700px] aspect-square rounded-full blur-[160px] transition-all duration-1000",
+            isDark ? "bg-brand-accent/5" : "bg-brand-accent/10"
+          )} />
+        </div>
+      )}
 
         {/* Header */}
         <header className={cn(
           "sticky top-0 z-40 border-b transition-colors",
-          isDark ? "bg-black/80 backdrop-blur-md border-white/[0.03]" : "bg-white/80 backdrop-blur-md border-slate-200"
+          isDark ? "bg-black/95 backdrop-blur-md border-surface-border" : "bg-white/80 backdrop-blur-md border-slate-200"
         )}>
           <div className="w-full px-4 sm:px-6 h-20 sm:h-24 flex items-center justify-between">
             {/* Mobile Sidebar Toggle */}
@@ -2322,18 +2368,6 @@ export default function App() {
               isDark ? "bg-white/10" : "bg-slate-200"
             )} />
             <div className="flex items-center gap-1 sm:gap-2">
-              <button 
-                onClick={() => {
-                  const newValue = !isPrivacyMode;
-                  setIsPrivacyMode(newValue);
-                  localStorage.setItem('nexus_privacy_mode', String(newValue));
-                }}
-                className="p-2 sm:p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-xl sm:rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
-                title={isPrivacyMode ? "Mostrar Números" : "Ocultar Números"}
-              >
-                {isPrivacyMode ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
-              </button>
-
               <div className="relative">
                 <button 
                   onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
@@ -2411,10 +2445,10 @@ export default function App() {
                                       <button 
                                         onClick={() => {
                                           if (n.item.status === 'Agendado') {
-                                            setActiveTab('Agendados');
+                                            changeTab('Agendados');
                                             setShowOnlyOverdue(false);
                                           } else {
-                                            setActiveTab('Empréstimos');
+                                            changeTab('Empréstimos');
                                             if (n.type === 'overdue') setShowOnlyOverdue(true);
                                           }
                                           setCommand(n.item.clientName);
@@ -2437,21 +2471,6 @@ export default function App() {
                   </>
                 )}
               </div>
-
-              <button 
-                onClick={() => {
-                  setIsSettingsOpen(true);
-                  setNewDisplayName(userProfile?.displayName || user?.displayName || '');
-                  setNewPixKey(userProfile?.pixKey || '');
-                  setNewPixName(userProfile?.pixName || '');
-                  setNewPixBank(userProfile?.pixBank || '');
-                  setNewProfilePicture(userProfile?.profilePicture || null);
-                }}
-                className="p-2 sm:p-3 text-slate-400 hover:text-brand-primary hover:bg-brand-primary/10 rounded-xl sm:rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20"
-                title="Configurações"
-              >
-                <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
-              </button>
             </div>
           </div>
         </div>
@@ -2473,9 +2492,20 @@ export default function App() {
 
         <div className="space-y-6">
           {activeTab !== 'Principal' && (
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              <div className="flex-1">
-                {filterDate && (
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 no-print">
+              <div className="flex items-center gap-4 flex-1">
+                <button 
+                  onClick={() => setActiveTab(previousTab)}
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95 border border-white/10 group"
+                  title="Voltar para Dashboard"
+                >
+                  <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-brand-primary" />
+                </button>
+                <div className="flex-1">
+                  <h2 className={cn("text-xl font-bold tracking-tight uppercase transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                    {activeTab === 'Agendados' ? 'Agendamentos' : activeTab}
+                  </h2>
+                  {filterDate && (
                   <div className="flex items-center gap-2 px-3 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-lg w-fit">
                     <Calendar className="w-3 h-3 text-brand-primary" />
                     <span className="text-[9px] font-bold text-brand-primary uppercase tracking-widest">
@@ -2532,8 +2562,9 @@ export default function App() {
                   </div>
                 )}
               </div>
+            </div>
               
-              {activeTab === 'Empréstimos' && (
+            {activeTab === 'Empréstimos' && (
                 <div className="flex gap-2 sm:gap-3">
                   <button 
                     onClick={() => {
@@ -2543,7 +2574,7 @@ export default function App() {
                         clientPhone: '',
                         clientAddress: '',
                         capital: '',
-                        interestRate: '',
+                        interestRate: systemSettings.defaultInterestRate > 0 ? systemSettings.defaultInterestRate.toString() : '',
                         date: format(new Date(), 'yyyy-MM-dd'),
                         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
                         status: 'Agendado'
@@ -2566,7 +2597,7 @@ export default function App() {
                         clientPhone: '',
                         clientAddress: '',
                         capital: '',
-                        interestRate: '',
+                        interestRate: systemSettings.defaultInterestRate > 0 ? systemSettings.defaultInterestRate.toString() : '',
                         date: format(new Date(), 'yyyy-MM-dd'),
                         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
                         status: 'Pendente'
@@ -2579,16 +2610,6 @@ export default function App() {
                     Novo Empréstimo
                   </button>
                 </div>
-              )}
-
-              {activeTab === 'Histórico' && actions.length > 0 && (
-                <button 
-                  onClick={clearHistory}
-                  className="bg-gradient-to-r from-brand-danger to-rose-600 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-brand-danger/25 hover:shadow-brand-danger/40 transition-all flex items-center gap-2 text-xs uppercase tracking-widest"
-                >
-                  <Trash2 className="w-5 h-5" />
-                  <span>Limpar Histórico</span>
-                </button>
               )}
             </div>
           )}
@@ -2604,10 +2625,10 @@ export default function App() {
                 className="px-0 py-4 sm:py-8 space-y-10"
               >
                 {/* Stats Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                 <StatCard 
                   title="Capital Liberado" 
-                  value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
+                  value={`R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
                   icon={<DollarSign className="w-5 h-5" />}
                   color="primary"
                   trend="Ativo"
@@ -2615,13 +2636,13 @@ export default function App() {
                 />
                 <StatCard 
                   title="Capital Recebido" 
-                  value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
+                  value={`R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
                   icon={<Wallet className="w-5 h-5" />}
                   color="success"
                   trend="Liquidado"
                   isDark={isDark}
                   onClick={() => {
-                    setActiveTab('Transações');
+                    changeTab('Transações');
                     setShowOnlyCapital(true);
                     setShowOnlyInterest(false);
                     setShowOnlyOverdue(false);
@@ -2631,13 +2652,13 @@ export default function App() {
                 />
                 <StatCard 
                   title="Juros Realizados" 
-                  value={isPrivacyMode ? 'R$ ••••' : `R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
+                  value={`R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
                   icon={<TrendingUp className="w-5 h-5" />}
                   color="success"
                   trend="Lucro"
                   isDark={isDark}
                   onClick={() => {
-                    setActiveTab('Transações');
+                    changeTab('Transações');
                     setShowOnlyInterest(true);
                     setShowOnlyCapital(false);
                     setShowOnlyOverdue(false);
@@ -2645,24 +2666,43 @@ export default function App() {
                     setCommand('');
                   }}
                 />
-                <StatCard 
-                  title="Atrasados" 
-                  value={maskValue(stats.atrasadosCount)} 
-                  icon={<AlertCircle className="w-5 h-5" />}
-                  color="danger"
-                  trend="Risco"
-                  isDark={isDark}
-                  onClick={() => {
-                    setActiveTab('Empréstimos');
-                    setShowOnlyOverdue(true);
-                    setFilterDate('');
-                    setCommand('');
-                  }}
-                />
+                
+                <div className="md:col-span-3 xl:col-span-1 grid grid-cols-2 gap-4 sm:gap-6">
+                  <StatCard 
+                    title="Atrasados" 
+                    value={stats.atrasadosCount.toString()} 
+                    icon={<AlertCircle className="w-5 h-5" />}
+                    color="danger"
+                    trend="Risco"
+                    isDark={isDark}
+                    isMini
+                    onClick={() => {
+                      changeTab('Empréstimos');
+                      setShowOnlyOverdue(true);
+                      setFilterDate('');
+                      setCommand('');
+                    }}
+                  />
+                  <StatCard 
+                    title="Vencem Hoje" 
+                    value={stats.dueTodayCount.toString()} 
+                    icon={<Calendar className="w-5 h-5" />}
+                    color="accent"
+                    trend="Alerta"
+                    isDark={isDark}
+                    isMini
+                    onClick={() => {
+                      changeTab('Empréstimos');
+                      setFilterDate(new Date().getDate().toString());
+                      setShowOnlyOverdue(false);
+                      setCommand('');
+                    }}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
                       <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 mb-6 flex items-center gap-3">
                         <span className="w-2 h-2 bg-brand-primary rounded-full" />
                         Visão de Ativos
@@ -2685,7 +2725,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className={cn("p-8 rounded-[32px] border transition-all relative overflow-hidden", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                    <div className={cn("p-8 rounded-[32px] border transition-all relative overflow-hidden", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
                       <div className="absolute top-0 right-0 p-4 opacity-10">
                         <AlertTriangle className="w-16 h-16 text-brand-danger" />
                       </div>
@@ -2718,7 +2758,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
                       <h3 className="text-xs font-black uppercase tracking-[0.3em] text-amber-500 mb-6 flex items-center gap-3">
                         <span className="w-2 h-2 bg-amber-500 rounded-full" />
                         Próximos Vencimentos
@@ -2744,18 +2784,13 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
+                  <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
                      <div className="flex items-center justify-between mb-8">
                         <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-3">
                           <span className="w-2 h-2 bg-emerald-500 rounded-full" />
                           Atividade Recente
                         </h3>
-                        <button 
-                          onClick={() => setActiveTab('Histórico')}
-                          className="text-[10px] font-black text-brand-primary uppercase tracking-widest hover:underline"
-                        >
-                          Ver Tudo
-                        </button>
+
                      </div>
                      <div className="space-y-4">
                         {actions.slice(0, 5).map(action => (
@@ -3111,8 +3146,21 @@ export default function App() {
                            animate={{ opacity: 1, x: 0 }}
                            exit={{ opacity: 0, x: -20 }}
                            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                           className="space-y-10"
+                           className="p-6 sm:p-0 space-y-10"
                          >
+                           {/* Tab Back Navigation */}
+                           <div className="flex items-center gap-4 mb-2 no-print">
+                              <button 
+                                onClick={() => setActiveTab(previousTab)}
+                                className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95 border border-white/10 group"
+                              >
+                                <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-brand-primary" />
+                              </button>
+                              <div>
+                                <h2 className={cn("text-xl font-bold tracking-tight uppercase transition-colors", isDark ? "text-white" : "text-slate-900")}>Transações</h2>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Histórico de recebimentos e amortizações</p>
+                              </div>
+                           </div>
                            {/* Summary Cards */}
                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                              <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
@@ -3348,8 +3396,17 @@ export default function App() {
                            animate={{ opacity: 1, scale: 1 }}
                            exit={{ opacity: 0, scale: 0.98 }}
                            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                           className="p-12 flex flex-col items-center text-center"
+                           className="p-6 sm:p-12 flex flex-col items-center"
                          >
+                            <div className="w-full flex justify-start mb-8 no-print">
+                               <button 
+                                 onClick={() => setActiveTab(previousTab)}
+                                 className="flex items-center gap-3 px-5 py-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95 border border-white/10 group"
+                               >
+                                 <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-brand-primary" />
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-white">Voltar</span>
+                               </button>
+                            </div>
                            <div id="printable-pix" className="bg-white p-12 rounded-[40px] w-full max-w-md shadow-2xl text-slate-900 mb-8 printable-content relative overflow-hidden">
                     {/* Background Watermark */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none -rotate-12">
@@ -3455,11 +3512,18 @@ export default function App() {
                            className="p-6 sm:p-10 space-y-8"
                          >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                    <div>
-                      <h2 className={cn("text-xl font-bold tracking-tight uppercase transition-colors", isDark ? "text-white" : "text-slate-900")}>Relatório Mensal</h2>
-                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Visão geral do desempenho financeiro</p>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setActiveTab(previousTab)}
+                        className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95 border border-white/10 group no-print"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-brand-primary" />
+                      </button>
+                      <div>
+                        <h2 className={cn("text-xl font-bold tracking-tight uppercase transition-colors", isDark ? "text-white" : "text-slate-900")}>Relatório Mensal</h2>
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1">Visão geral do desempenho financeiro</p>
+                      </div>
                     </div>
-                    
                     <div className="flex flex-wrap items-center gap-3">
                       {monthlyClosures.some(c => c.month === reportMonth && c.year === reportYear) ? (
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 text-brand-primary rounded-xl text-[9px] font-black uppercase tracking-[0.2em]">
@@ -3652,7 +3716,7 @@ export default function App() {
                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Histórico de Fechamentos</h3>
                     </div>
                     {monthlyClosures.length === 0 ? (
-                      <div className={cn("p-10 rounded-3xl border text-center transition-colors", isDark ? "bg-white/[0.02] border-white/5" : "bg-slate-50 border-slate-100")}>
+                      <div className={cn("p-10 rounded-3xl border text-center transition-colors", isDark ? "bg-surface-900 border-surface-border" : "bg-slate-50 border-slate-100")}>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nenhum fechamento registrado ainda.</p>
                       </div>
                     ) : (
@@ -3703,181 +3767,309 @@ export default function App() {
                     )}
                   </div>
                 </motion.div>
-              ) : activeTab === 'Histórico' ? (
-                         <motion.div 
-                           key="view-historico"
-                           initial={{ opacity: 0, x: 20 }}
-                           animate={{ opacity: 1, x: 0 }}
-                           exit={{ opacity: 0, x: -20 }}
-                           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                           className="space-y-4"
-                         >
-                  {/* Desktop Table */}
-                  <div className="hidden lg:block overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-white/[0.01] border-b border-white/[0.03]">
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Data/Hora</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Ação</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Descrição</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor</th>
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.05]">
-                        {loading ? (
-                          <tr>
-                            <td colSpan={6} className="px-8 py-20 text-center">
-                              <div className="flex flex-col items-center gap-3">
-                                <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                                <span className="text-slate-500 font-medium">Sincronizando logs...</span>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : filteredActions.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="px-8 py-20 text-center">
-                              <div className="flex flex-col items-center gap-4">
-                                <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
-                                  <History className="w-8 h-8 text-slate-600" />
-                                </div>
-                                <span className="text-slate-500 font-medium">
-                                  {command.trim() ? 'Nenhum registro encontrado para esta busca.' : 'Nenhuma ação registrada no sistema.'}
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : (
-                          filteredActions.map((action) => (
-                            <tr key={action.id} className={cn("group transition-colors", isDark ? "hover:bg-white/[0.01]" : "hover:bg-slate-50")}>
-                              <td className="px-8 py-4 text-slate-400 text-xs font-medium">
-                                {safeFormatDate(action.date, 'dd/MM/yyyy HH:mm')}
-                              </td>
-                              <td className="px-8 py-4">
-                                <span className={cn(
-                                  "text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border transition-colors",
-                                  action.type === 'loan_created' && "bg-brand-primary/10 text-brand-primary border-brand-primary/20",
-                                  action.type === 'payment_received' && "bg-brand-accent/10 text-brand-accent border-brand-accent/20",
-                                  action.type === 'loan_deleted' && "bg-brand-danger/10 text-brand-danger border-brand-danger/20",
-                                  action.type === 'loan_updated' && "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                                )}>
-                                  {action.type === 'loan_created' ? 'Novo Empréstimo' :
-                                  action.type === 'payment_received' ? 'Pagamento' :
-                                  action.type === 'loan_deleted' ? 'Exclusão' : 'Atualização'}
-                                </span>
-                              </td>
-                              <td className={cn("px-8 py-4 font-bold text-xs transition-colors", isDark ? "text-white" : "text-slate-900")}>
-                                {action.clientName}
-                              </td>
-                              <td className="px-8 py-4 text-slate-400 text-xs italic">
-                                {action.description}
-                              </td>
-                              <td className="px-8 py-4 text-white font-bold text-xs">
-                                {action.amount && action.amount > 0 ? `R$ ${action.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
-                              </td>
-                              <td className="px-8 py-4 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  {action.type === 'payment_received' && (
-                                    <button 
-                                      onClick={() => {
-                                        setViewingReceipt(action);
-                                      }}
-                                      className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl transition-all active:scale-95 text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-emerald-500/20"
-                                      title="Gerar Recibo"
-                                    >
-                                      <FileText className="w-4 h-4" />
-                                      <span>Recibo</span>
-                                    </button>
-                                  )}
-                                  <button 
-                                    onClick={() => deleteAction(action.id)}
-                                    className="p-2 text-slate-500 hover:text-brand-danger transition-colors"
-                                    title="Excluir Registro"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+              ) : activeTab === 'Configurações' ? (
+                <motion.div 
+                  key="tab-configuracoes"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.3 }}
+                  className="max-w-xl mx-auto py-8 px-4 sm:px-6"
+                >
+                  <div className="mb-12 text-center">
+                    <h2 className="text-3xl font-black tracking-tighter text-white mb-2 italic">NEXUS PRIVATE</h2>
+                    <div className="h-[2px] w-16 bg-[#FFD700] mx-auto shadow-[0_0_10px_rgba(255,215,0,0.5)]"></div>
                   </div>
 
-                  {/* Mobile Cards */}
-                  <div className="lg:hidden grid grid-cols-1 gap-4">
-                    {loading ? (
-                      <div className="py-20 text-center glass-card">
-                         <div className="flex flex-col items-center gap-3">
-                            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                            <span className="text-slate-500 font-medium">Sincronizando...</span>
-                          </div>
-                      </div>
-                    ) : filteredActions.length === 0 ? (
-                      <div className="py-20 text-center text-slate-500 font-medium glass-card">
-                         {command.trim() ? 'Nenhum registro encontrado.' : 'Nenhuma ação registrada.'}
-                      </div>
-                    ) : (
-                      filteredActions.map((action) => (
-                        <div key={`history-mobile-${action.id}`} className={cn("glass-card p-5 space-y-4 border transition-colors", isDark ? "border-white/5" : "bg-white border-slate-200 shadow-lg")}>
-                           <div className="flex justify-between items-start">
-                            <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">{safeFormatDate(action.date, 'dd/MM/yyyy HH:mm')}</span>
-                            <span className={cn(
-                              "text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border",
-                              action.type === 'loan_created' && "bg-brand-accent/10 text-brand-accent border-brand-accent/20",
-                              action.type === 'payment_received' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                              action.type === 'loan_deleted' && "bg-brand-danger/10 text-brand-danger border-brand-danger/20",
-                              action.type === 'loan_updated' && "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                            )}>
-                               {action.type === 'loan_created' ? 'Novo Empréstimo' :
-                                action.type === 'payment_received' ? 'Pagamento' :
-                                action.type === 'loan_deleted' ? 'Exclusão' : 'Atualização'}
-                            </span>
-                          </div>
-
-                           <div className="flex justify-between items-end">
-                            <div>
-                               <h3 className={cn("font-bold text-sm leading-tight uppercase tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{action.clientName}</h3>
-                               <p className="text-slate-400 text-[10px] italic mt-1">{action.description}</p>
+                  {activeSettingsSection === 'menu' ? (
+                    <div className="space-y-4">
+                      {[
+                        { id: 'perfil', title: 'Perfil Profissional', subtitle: 'Nome e Identidade Visual', icon: <UserIcon className="w-5 h-5" /> },
+                        { id: 'recebimentos', title: 'Dados de Recebimento', subtitle: 'PIX e Instituição Bancária', icon: <Wallet className="w-5 h-5" /> },
+                        { id: 'regras', title: 'Regras de Negócio', subtitle: 'Taxa de Juros e Prazos', icon: <Settings2 className="w-5 h-5" /> },
+                        { id: 'mensagem', title: 'Mensagem de Cobrança', subtitle: 'Template de WhatsApp', icon: <MessageCircle className="w-5 h-5" /> },
+                        { id: 'aparencia', title: 'Aparência', subtitle: 'Cores e Modo Dark', icon: <Palette className="w-5 h-5" /> },
+                        { id: 'dados', title: 'Exportação e Dados', subtitle: 'Backup e Reset de Sistema', icon: <Database className="w-5 h-5" /> },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveSettingsSection(item.id as any)}
+                          className="w-full flex items-center justify-between p-6 rounded-2xl transition-all border border-white/5 bg-black hover:border-[#FFD700]/50 hover:shadow-[0_0_20px_rgba(255,215,0,0.1)] group relative"
+                        >
+                          <div className="flex items-center gap-5">
+                            <div className="p-3 rounded-xl bg-white/5 text-slate-400 group-hover:text-[#FFD700] transition-colors">
+                              {item.icon}
                             </div>
-                            {action.amount && action.amount > 0 && (
-                              <div className="text-right">
-                                <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest block mb-1">Valor</span>
-                                <div className={cn("font-black text-sm transition-colors", isDark ? "text-white" : "text-slate-900")}>
-                                  R$ {action.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </div>
-                              </div>
-                            )}
+                            <div className="text-left">
+                              <h4 className="text-xs font-black uppercase tracking-widest text-white">{item.title}</h4>
+                              <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.2em] mt-1">{item.subtitle}</p>
+                            </div>
                           </div>
+                          <ChevronRight className="w-4 h-4 text-slate-700 group-hover:text-[#FFD700] group-hover:translate-x-1 transition-all" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <motion.div 
+                      key={`section-${activeSettingsSection}`}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="bg-black border border-white/10 rounded-[32px] overflow-hidden shadow-2xl"
+                    >
+                      <div className="p-6 border-b border-white/5 flex items-center justify-between bg-[#050505]">
+                         <button 
+                           onClick={() => setActiveSettingsSection('menu')}
+                           className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors"
+                         >
+                           <ChevronLeft className="w-4 h-4" /> Voltar
+                         </button>
+                         <span className="text-[9px] font-black uppercase tracking-[0.4em] text-[#FFD700]">
+                           {activeSettingsSection === 'perfil' && 'Perfil'}
+                           {activeSettingsSection === 'recebimentos' && 'Receber'}
+                           {activeSettingsSection === 'regras' && 'Regras'}
+                           {activeSettingsSection === 'mensagem' && 'Mensagem'}
+                           {activeSettingsSection === 'aparencia' && 'Aparência'}
+                           {activeSettingsSection === 'dados' && 'Sistema'}
+                         </span>
+                      </div>
 
-                          <div className="flex gap-2">
-                             {action.type === 'payment_received' && (
-                                <button 
-                                  onClick={() => setViewingReceipt(action)}
-                                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-                                >
-                                  <FileText className="w-4 h-4" />
-                                  <span>Recibo</span>
-                                </button>
-                              )}
+                      <div className="p-8 space-y-8">
+                        {activeSettingsSection === 'perfil' && (
+                          <div className="space-y-8">
+                            <div className="flex justify-center">
+                              <div className="relative group">
+                                <div className="w-24 h-24 rounded-[32px] overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center transition-all group-hover:border-[#FFD700]/50">
+                                  {newProfilePicture ? (
+                                    <img src={newProfilePicture} className="w-full h-full object-cover" alt="Preview" />
+                                  ) : (
+                                    <UserIcon className="w-8 h-8 text-slate-700" />
+                                  )}
+                                </div>
+                                <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-[32px]">
+                                  <span className="text-[10px] font-black text-white uppercase tracking-widest text-[#FFD700]">Mudar</span>
+                                  <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    className="hidden" 
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        try {
+                                          const compressed = await processImage(file);
+                                          setNewProfilePicture(compressed);
+                                        } catch (err) {
+                                          console.error("Erro ao processar imagem:", err);
+                                        }
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome Institucional</label>
+                              <input 
+                                type="text"
+                                value={newDisplayName}
+                                onChange={(e) => setNewDisplayName(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                              />
+                            </div>
+
                             <button 
-                              onClick={() => deleteAction(action.id)}
-                              className={cn(
-                                "p-3 bg-white/5 text-slate-500 rounded-xl border border-white/10 active:scale-95 transition-all",
-                                action.type !== 'payment_received' && "flex-1"
-                              )}
+                              onClick={handleSaveProfile}
+                              className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white transition-all"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              Atualizar Perfil
                             </button>
                           </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                        )}
+
+                        {activeSettingsSection === 'recebimentos' && (
+                          <div className="space-y-8">
+                            <div className="space-y-6">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Chave PIX</label>
+                                <input 
+                                  type="text"
+                                  value={newPixKey}
+                                  onChange={(e) => setNewPixKey(e.target.value)}
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Titular</label>
+                                <input 
+                                  type="text"
+                                  value={newPixName}
+                                  onChange={(e) => setNewPixName(e.target.value)}
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-4">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block">Instituição Bancária</label>
+                              <div className="grid grid-cols-4 gap-3 max-h-[180px] overflow-y-auto pr-2 custom-scrollbar">
+                                {BRAZILIAN_BANKS.map((bank) => (
+                                  <button
+                                    key={bank.id}
+                                    onClick={() => setNewPixBank(bank.name)}
+                                    className={cn(
+                                      "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all active:scale-95",
+                                      newPixBank === bank.name 
+                                        ? "bg-[#FFD700]/10 border-[#FFD700]" 
+                                        : "bg-white/5 border-transparent hover:border-white/10"
+                                    )}
+                                  >
+                                    <div 
+                                      className="w-10 h-10 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg"
+                                      style={{ backgroundColor: bank.color, color: bank.textColor || '#FFFFFF' }}
+                                    >
+                                      {bank.short}
+                                    </div>
+                                    <span className="text-[7px] font-black text-slate-500 uppercase truncate w-full text-center">
+                                      {bank.name.split(' ')[0]}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <button 
+                              onClick={handleSaveProfile}
+                              className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white transition-all"
+                            >
+                              Salvar Dados
+                            </button>
+                          </div>
+                        )}
+                        {activeSettingsSection === 'regras' && (
+                          <div className="space-y-6">
+                            <div className="space-y-4">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Taxa de Juros Padrão (%)</label>
+                              <div className="relative group">
+                                <input 
+                                  type="number"
+                                  value={systemSettings.interestRate * 100}
+                                  onChange={(e) => setSystemSettings(prev => ({ ...prev, interestRate: Number(e.target.value) / 100 }))}
+                                  className="w-full bg-transparent border-b-2 border-white/10 py-4 text-4xl font-black text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                                  placeholder="0.00"
+                                />
+                                <span className="absolute right-0 bottom-4 text-slate-700 font-black text-xl group-focus-within:text-[#FFD700] transition-colors">%</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {activeSettingsSection === 'mensagem' && (
+                          <div className="space-y-6">
+                            <div className="space-y-4">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Template de Cobrança</label>
+                              <textarea 
+                                value={systemSettings.whatsappTemplate}
+                                onChange={(e) => setSystemSettings(prev => ({ ...prev, whatsappTemplate: e.target.value }))}
+                                rows={8}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-xs leading-relaxed font-medium text-slate-300 focus:border-[#FFD700] focus:outline-none transition-all placeholder:text-slate-800"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {activeSettingsSection === 'aparencia' && (
+                          <div className="space-y-10">
+                            <div className="space-y-6">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Cor de Destaque</label>
+                              <div className="grid grid-cols-3 gap-4">
+                                {[
+                                  { id: 'yellow', color: '#FFD700' },
+                                  { id: 'green', color: '#39FF14' },
+                                  { id: 'blue', color: '#00F0FF' },
+                                ].map((choice) => (
+                                  <button
+                                    key={choice.id}
+                                    onClick={() => handleSaveSystemSettings({ ...systemSettings, accentColor: choice.id as any })}
+                                    className={cn(
+                                      "flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all active:scale-[0.95]",
+                                      systemSettings.accentColor === choice.id 
+                                        ? "bg-white/10 border-[#FFD700]" 
+                                        : "bg-white/5 border-transparent hover:border-white/10"
+                                    )}
+                                  >
+                                    <div className="w-8 h-8 rounded-full" style={{ backgroundColor: choice.color }} />
+                                    <span className="text-[8px] font-black uppercase text-white tracking-widest">{choice.id}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between p-7 rounded-2xl bg-white/5 border border-white/5">
+                              <div>
+                                <span className="text-[10px] font-black text-white uppercase tracking-widest">Interface Premium</span>
+                                <p className="text-[8px] text-slate-600 uppercase font-bold mt-1 tracking-wider">Dashboard em Modo Nexo Dark</p>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  const newVal = theme === 'dark' ? 'light' : 'dark';
+                                  setTheme(newVal);
+                                  localStorage.setItem('nexus_theme', newVal);
+                                }}
+                                className={cn(
+                                  "w-12 h-6 rounded-full relative transition-all",
+                                  isDark ? "bg-[#FFD700]" : "bg-slate-800"
+                                )}
+                              >
+                                <div className={cn(
+                                  "absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-md",
+                                  isDark ? "left-7" : "left-1"
+                                )} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {activeSettingsSection === 'dados' && (
+                          <div className="space-y-4">
+                            <button 
+                              onClick={() => {
+                                const data = {
+                                  loans,
+                                  actions,
+                                  monthlyClosures,
+                                  settings: systemSettings,
+                                  exportedAt: new Date().toISOString()
+                                };
+                                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `nexus_backup.json`;
+                                a.click();
+                              }}
+                              className="w-full flex items-center justify-between p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+                            >
+                              <div className="flex items-center gap-4">
+                                <Download className="w-5 h-5 text-[#FFD700]" />
+                                <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Backup System</span>
+                              </div>
+                            </button>
+                          </div>
+                        )}
+
+                        <button 
+                          onClick={() => setActiveSettingsSection('menu')}
+                          className="w-full mt-8 py-5 bg-[#FFD700] text-black rounded-2xl font-black text-[11px] uppercase tracking-[0.4em] hover:brightness-110 active:scale-[0.98] transition-all"
+                        >
+                          Concluir
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
                 </motion.div>
               ) : (
+
+
                          <motion.div 
                            key="view-others"
                            initial={{ opacity: 0, x: 20 }}
@@ -3998,7 +4190,7 @@ export default function App() {
                                     R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </td>
                                   <td className="px-8 py-4">
-                                    <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
+                                    <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} isDark={isDark} />
                                   </td>
                                 </>
                               )}
@@ -4104,7 +4296,7 @@ export default function App() {
                               </button>
                               <p className="text-slate-500 text-[10px] font-medium mt-1 uppercase tracking-widest">{loan.clientPhone || 'Sem Telefone'}</p>
                             </div>
-                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
+                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} isDark={isDark} />
                           </div>
 
                           <div className={cn("grid grid-cols-2 gap-4 pt-4 border-t transition-colors", isDark ? "border-white/5" : "border-slate-100")}>
@@ -4436,11 +4628,7 @@ export default function App() {
             <div 
               className="relative w-full h-full sm:h-auto sm:max-w-md glass-card p-6 sm:p-8 overflow-y-auto sm:rounded-[32px] rounded-none shadow-2xl space-y-6 sm:space-y-8"
             >
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-xl font-bold text-white tracking-tight">Pagamento</h2>
-                  <p className="text-slate-600 text-sm font-medium mt-1">{payingLoan.clientName}</p>
-                </div>
+              <div className="flex items-center gap-4 mb-8">
                 <button 
                   onClick={() => { 
                     setPayingLoan(null); 
@@ -4449,10 +4637,14 @@ export default function App() {
                     setPixConfirmed(false);
                     setIsConfirmingPix(false);
                   }}
-                  className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95 border border-white/10 group"
                 >
-                  <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
+                  <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-brand-primary" />
                 </button>
+                <div>
+                  <h2 className="text-xl font-bold text-white tracking-tight">Pagamento</h2>
+                  <p className="text-slate-600 text-sm font-medium mt-1">{payingLoan.clientName}</p>
+                </div>
               </div>
 
               <div>
@@ -4898,9 +5090,17 @@ export default function App() {
               className="relative w-full max-w-5xl glass-card p-8 max-h-[90vh] flex flex-col"
             >
               <div className="flex items-center justify-between mb-8 shrink-0">
-                <div>
-                  <h2 className="text-2xl font-bold text-white tracking-tight">Contratos de {viewingClientLoans}</h2>
-                  <p className="text-slate-600 text-sm font-medium mt-1">Histórico completo de empréstimos e pagamentos.</p>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setViewingClientLoans(null)}
+                    className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all active:scale-95 border border-white/10 group"
+                  >
+                    <ChevronLeft className="w-6 h-6 text-slate-400 group-hover:text-brand-primary" />
+                  </button>
+                  <div>
+                    <h2 className="text-2xl font-bold text-white tracking-tight">Contratos de {viewingClientLoans}</h2>
+                    <p className="text-slate-600 text-sm font-medium mt-1">Histórico completo de empréstimos e pagamentos.</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <button 
@@ -4945,12 +5145,6 @@ export default function App() {
                   >
                     <Plus className="w-4 h-4" />
                     Novo Empréstimo
-                  </button>
-                  <button 
-                    onClick={() => setViewingClientLoans(null)}
-                    className="p-3 hover:bg-white/5 rounded-2xl transition-colors"
-                  >
-                    <ChevronRight className="w-6 h-6 rotate-90 text-slate-600" />
                   </button>
                 </div>
               </div>
@@ -5038,7 +5232,7 @@ export default function App() {
                             R$ {loan.totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
                           <td className="px-6 py-4">
-                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} />
+                            <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} isDark={isDark} />
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
@@ -5475,277 +5669,7 @@ export default function App() {
         </div>
       )}
 
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-end sm:justify-center p-0 sm:p-4 bg-black/90 backdrop-blur-sm overflow-hidden">
-          <div className={cn(
-            "w-full max-w-md sm:rounded-[32px] rounded-t-[32px] border overflow-hidden shadow-2xl transition-colors duration-500 flex flex-col max-h-[92vh] sm:max-h-[90vh]",
-            isDark ? "bg-black border-white/10" : "bg-white border-slate-200"
-          )}>
-            <div className={cn("p-6 sm:p-8 border-b flex justify-between items-center transition-colors shrink-0", isDark ? "border-white/5" : "border-slate-100")}>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-brand-primary/10 rounded-xl">
-                  <Settings className="w-5 h-5 text-brand-primary" />
-                </div>
-                <h2 className={cn("text-xl font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>Configurações</h2>
-              </div>
-              <button 
-                onClick={() => setIsSettingsOpen(false)}
-                className="p-2 text-slate-400 hover:text-brand-primary transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 sm:p-8 space-y-8 overflow-y-auto custom-scrollbar flex-1 pb-32">
-              <div className="space-y-4">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Foto de Perfil
-                </label>
-                <div className="flex items-center gap-6">
-                  <div className="relative group shrink-0">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-[32px] overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center transition-all group-hover:border-brand-primary/50">
-                      {newProfilePicture ? (
-                        <img src={newProfilePicture} className="w-full h-full object-cover" alt="Preview" />
-                      ) : (
-                        <UserIcon className="w-8 h-8 text-slate-600" />
-                      )}
-                    </div>
-                    <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-[32px]">
-                      <span className="text-[10px] font-bold text-white uppercase tracking-widest">Mudar</span>
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const compressed = await processImage(file);
-                              setNewProfilePicture(compressed);
-                            } catch (err) {
-                              console.error("Erro ao processar imagem:", err);
-                              setError("Erro ao processar a imagem. Tente outra foto.");
-                            }
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <div className="space-y-2">
-                    <p className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>Seu Logotipo</p>
-                    <p className="text-[10px] text-slate-500 leading-relaxed font-menu max-w-[150px] sm:max-w-[180px]">Personalize sua interface institucional.</p>
-                    {newProfilePicture && (
-                      <button 
-                        onClick={() => setNewProfilePicture(null)}
-                        className="text-[9px] font-black uppercase tracking-widest text-brand-danger flex items-center gap-1.5 hover:opacity-80 transition-opacity"
-                      >
-                        <Trash2 className="w-3 h-3" /> Remover Foto
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-4">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
-                  Notificações do Dispositivo
-                </label>
-                <div className={cn(
-                  "p-5 rounded-2xl border transition-all flex items-center justify-between",
-                  isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200"
-                )}>
-                  <div className="flex items-center gap-4">
-                    <div className={cn(
-                      "p-3 rounded-xl",
-                      isNativeNotificationsEnabled ? "bg-emerald-500/10 text-emerald-500" : "bg-slate-500/10 text-slate-500"
-                    )}>
-                      <Bell className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className={cn("text-xs font-bold transition-colors uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>
-                        Alertas no Sistema
-                      </p>
-                      <p className="text-[10px] text-slate-500 leading-relaxed max-w-[150px]">
-                        Receba notificações direto no seu Android, iPhone ou Desktop.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (isNativeNotificationsEnabled) {
-                        setIsNativeNotificationsEnabled(false);
-                        localStorage.setItem('nexus_native_notifications', 'false');
-                      } else {
-                        requestNotificationPermission();
-                      }
-                    }}
-                    className={cn(
-                      "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-primary focus:ring-offset-2",
-                      isNativeNotificationsEnabled ? "bg-brand-primary" : "bg-slate-700"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                        isNativeNotificationsEnabled ? "translate-x-6" : "translate-x-1"
-                      )}
-                    />
-                  </button>
-                </div>
-                {!isNativeNotificationsEnabled && (
-                  <p className="text-[9px] text-brand-primary font-bold uppercase tracking-widest italic flex items-center gap-2 px-1">
-                    <AlertCircle className="w-3 h-3" /> Recomenda-se abrir em nova aba para suporte completo.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Tema da Interface
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { id: 'light', icon: Sun, label: 'Claro' },
-                    { id: 'dark', icon: Moon, label: 'Escuro' }
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => {
-                        setTheme(t.id as 'light' | 'dark');
-                        localStorage.setItem('nexus_theme', t.id);
-                      }}
-                      className={cn(
-                        "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all active:scale-95",
-                        theme === t.id 
-                          ? "bg-brand-primary/10 border-brand-primary text-brand-primary" 
-                          : cn(isDark ? "bg-white/5 border-white/10 text-slate-400 hover:border-white/20" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300")
-                      )}
-                    >
-                      <t.icon className="w-5 h-5" />
-                      <span className="text-[9px] font-bold uppercase">{t.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Nome do Usuário (para recibos)
-                </label>
-                <input 
-                  type="text"
-                  value={newDisplayName || ""}
-                  onChange={(e) => setNewDisplayName(e.target.value)}
-                  placeholder="Ex: João Silva"
-                  className={cn(
-                    "w-full border rounded-2xl px-5 py-4 transition-all focus:outline-none",
-                    isDark 
-                      ? "bg-white/5 border-white/10 text-white focus:border-brand-primary/50" 
-                      : "bg-slate-50 border-slate-200 text-slate-900 focus:border-brand-primary/50"
-                  )}
-                />
-                <p className="text-[10px] text-slate-500 italic">
-                  Este nome aparecerá nos recibos como: "Eu, [Nome], declaro..."
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Chave PIX (para comprovantes)
-                </label>
-                <input 
-                  type="text"
-                  value={newPixKey || ""}
-                  onChange={(e) => setNewPixKey(e.target.value)}
-                  placeholder="CPF, E-mail, Telefone ou Chave Aleatória"
-                  className={cn(
-                    "w-full border rounded-2xl px-5 py-4 transition-all focus:outline-none",
-                    isDark 
-                      ? "bg-white/5 border-white/10 text-white focus:border-brand-primary/50" 
-                      : "bg-slate-50 border-slate-200 text-slate-900 focus:border-brand-primary/50"
-                  )}
-                />
-                <p className="text-[10px] text-slate-500 italic">
-                  Esta chave aparecerá nos comprovantes de empréstimo para o cliente realizar o pagamento.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Nome do Titular da Conta
-                </label>
-                <input 
-                  type="text"
-                  value={newPixName || ""}
-                  onChange={(e) => setNewPixName(e.target.value)}
-                  placeholder="Nome completo do titular"
-                  className={cn(
-                    "w-full border rounded-2xl px-5 py-4 transition-all focus:outline-none",
-                    isDark 
-                      ? "bg-white/5 border-white/10 text-white focus:border-brand-primary/50" 
-                      : "bg-slate-50 border-slate-200 text-slate-900 focus:border-brand-primary/50"
-                  )}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                  Nome do Banco
-                </label>
-                <input 
-                  type="text"
-                  value={newPixBank || ""}
-                  onChange={(e) => setNewPixBank(e.target.value)}
-                  placeholder="Ex: Nubank, Itaú, Bradesco"
-                  className={cn(
-                    "w-full border rounded-2xl px-5 py-4 transition-all focus:outline-none",
-                    isDark 
-                      ? "bg-white/5 border-white/10 text-white focus:border-brand-primary/50" 
-                      : "bg-slate-50 border-slate-200 text-slate-900 focus:border-brand-primary/50"
-                  )}
-                />
-                <p className="text-[10px] text-slate-500 italic">
-                  O nome do banco aparecerá junto ao nome do titular nos comprovantes e contratos.
-                </p>
-              </div>
-
-              <div className="pt-6 border-t border-white/5 mt-8">
-                <button 
-                  onClick={handleLogout}
-                  className={cn(
-                    "w-full py-4 px-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-[0.98]",
-                    isDark 
-                      ? "bg-brand-danger/10 text-brand-danger hover:bg-brand-danger/20 border border-brand-danger/20" 
-                      : "bg-rose-50 text-brand-danger hover:bg-rose-100 border border-rose-100"
-                  )}
-                >
-                  <LogOut className="w-5 h-5" />
-                  <span className="text-xs uppercase tracking-widest">Sair da Conta</span>
-                </button>
-              </div>
-            </div>
-
-            <div className={cn("p-6 sm:p-8 border-t flex gap-3 shrink-0", isDark ? "border-white/5 bg-white/[0.02]" : "border-slate-100 bg-slate-50/50")}>
-                <button 
-                  onClick={() => setIsSettingsOpen(false)}
-                  className={cn(
-                    "flex-1 px-6 py-4 font-bold rounded-2xl transition-all text-xs sm:text-sm active:scale-95",
-                    isDark ? "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white" : "bg-slate-200/50 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-                  )}
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSaveProfile}
-                  disabled={isSubmitting}
-                  className="flex-1 px-6 py-4 bg-brand-primary text-black font-bold rounded-2xl hover:bg-brand-primary/90 transition-all disabled:opacity-50 text-xs sm:text-sm active:scale-95 shadow-lg shadow-brand-primary/20"
-                >
-                  {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
-              </div>
-          </div>
-        </div>
-      )}
 
       {/* Hidden Shareable PIX Template */}
       {pendingPayment && (
@@ -5820,21 +5744,22 @@ export default function App() {
 
 // --- Sub-components ---
 
-function StatCard({ title, value, icon, color, trend, onClick, isDark }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger' | 'success', trend?: string, onClick?: () => void, isDark: boolean }) {
+function StatCard({ title, value, icon, color, trend, onClick, isDark, isMini }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger' | 'success', trend?: string, onClick?: () => void, isDark: boolean, isMini?: boolean }) {
   const colors = {
     primary: 'text-brand-primary bg-brand-primary/5 border-brand-primary/10',
     secondary: cn(isDark ? 'text-white bg-white/5 border-white/10' : 'text-black bg-slate-100 border-slate-200'),
     accent: 'text-brand-accent bg-brand-accent/5 border-brand-accent/10',
     danger: 'text-brand-danger bg-brand-danger/5 border-brand-danger/10',
-    success: 'text-emerald-500 bg-emerald-500/5 border-emerald-500/10',
+    success: cn(isDark ? 'text-brand-success bg-brand-success/5 border-brand-success/10 shadow-[0_0_15px_rgba(57,255,20,0.1)]' : 'text-emerald-500 bg-emerald-500/5 border-emerald-500/10'),
   };
 
   return (
     <div 
       onClick={onClick}
       className={cn(
-        "glass-card p-5 sm:p-7 space-y-4 sm:space-y-5 group relative overflow-hidden transition-all duration-500",
-        isDark ? "bg-white/[0.01] border-white/[0.03] shadow-2xl" : "bg-white border-slate-200 shadow-xl",
+        "glass-card group relative overflow-hidden transition-all duration-500 flex flex-col justify-between",
+        isMini ? "p-4 sm:p-5 h-full" : "p-5 sm:p-7 space-y-4 sm:space-y-5",
+        isDark ? "bg-surface-900 border-surface-border shadow-2xl" : "bg-white border-slate-200 shadow-xl",
         onClick && "cursor-pointer active:scale-[0.98] lg:hover:scale-[1.02]"
       )}
     >
@@ -5844,31 +5769,38 @@ function StatCard({ title, value, icon, color, trend, onClick, isDark }: { title
       )} />
       
       <div className="flex items-center justify-between relative z-10">
-        <div className={cn("p-2.5 sm:p-3.5 rounded-[16px] sm:rounded-[20px] transition-all duration-500", colors[color])}>
-          {React.cloneElement(icon as React.ReactElement, { className: "w-5 h-5 sm:w-6 sm:h-6" })}
+        <div className={cn("rounded-[16px] sm:rounded-[20px] transition-all duration-500", 
+          isMini ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3.5",
+          colors[color])}>
+          {React.cloneElement(icon as React.ReactElement, { className: isMini ? "w-4 h-4 sm:w-5 sm:h-5" : "w-5 h-5 sm:w-6 sm:h-6" })}
         </div>
         {trend && (
-          <span className={cn("text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border", colors[color])}>
+          <span className={cn("font-black uppercase border", 
+            isMini ? "text-[7px] sm:text-[8px] tracking-widest px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg" : "text-[8px] sm:text-[9px] tracking-[0.1em] sm:tracking-[0.2em] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl",
+            colors[color])}>
             {trend}
           </span>
         )}
       </div>
       <div className="relative z-10">
-        <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] sm:tracking-[0.3em] block mb-1 sm:mb-1.5 transition-colors">{title}</span>
-        <div className={cn("text-xl sm:text-2xl font-black tracking-tight group-hover:text-brand-primary transition-colors duration-500", isDark ? "text-white" : "text-black")}>{value}</div>
+        <span className={cn("font-bold text-slate-500 uppercase block transition-colors",
+          isMini ? "text-[8px] tracking-[0.15em] mb-0.5 sm:mb-1" : "text-[9px] sm:text-[10px] tracking-[0.2em] sm:tracking-[0.3em] mb-1 sm:mb-1.5")}>{title}</span>
+        <div className={cn("font-black tracking-tight group-hover:text-brand-primary transition-colors duration-500", 
+          isMini ? "text-base sm:text-lg" : "text-xl sm:text-2xl",
+          isDark ? "text-white" : "text-black")}>{value}</div>
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: Loan['status'] }) {
+function StatusBadge({ status, isDark }: { status: Loan['status'], isDark?: boolean }) {
   const config = {
     'Pendente': {
       classes: 'bg-slate-500/10 text-slate-500 border-slate-500/20 shadow-slate-500/5',
       icon: Clock
     },
     'Pago': {
-      classes: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shadow-emerald-500/5',
+      classes: cn(isDark ? 'bg-brand-success/10 text-brand-success border-brand-success/20 shadow-brand-success/5' : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 shadow-emerald-500/5'),
       icon: Check
     },
     'Atrasado': {

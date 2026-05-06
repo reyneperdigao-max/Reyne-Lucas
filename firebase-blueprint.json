@@ -117,6 +117,17 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "month", "year", "closedAt", "closurePeriodEnd", "stats"]
+    },
+    "system_settings": {
+      "title": "System Settings",
+      "description": "User-specific system configuration.",
+      "type": "object",
+      "properties": {
+        "whatsappTemplate": { "type": "string" },
+        "defaultInterestRate": { "type": "number" },
+        "accentColor": { "type": "string", "enum": ["yellow", "green", "blue"] }
+      },
+      "required": ["whatsappTemplate", "defaultInterestRate", "accentColor"]
     }
   },
   "firestore": {
@@ -127,6 +138,10 @@
     "/users/{userId}": {
       "schema": "user",
       "description": "User profile data."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "system_settings",
+      "description": "User-specific settings (e.g. system)."
     },
     "/actions/{actionId}": {
       "schema": "system_action",

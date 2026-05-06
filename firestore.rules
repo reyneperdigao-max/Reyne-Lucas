@@ -50,9 +50,9 @@ service cloud.firestore {
     // ==========================================
 
     function isValidUser(data) {
-      let requiredFields = ['email', 'role', 'uid'];
+      let requiredFields = ['role', 'uid'];
       return data.keys().hasAll(requiredFields) &&
-             data.email is string && data.email.size() < 256 &&
+             (data.email == null || (data.email is string && data.email.size() < 256)) &&
              data.role in ['admin', 'user'] &&
              data.uid == request.auth.uid &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
@@ -68,7 +68,7 @@ service cloud.firestore {
              data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 100 &&
              data.date is string && data.date.size() <= 20 &&
              data.dueDate is string && data.dueDate.size() <= 20 &&
-             data.capital is number && (data.status == 'Pago' ? data.capital >= 0 : data.capital > 0) &&
+             data.capital is number && (data.status == 'Pago' ? data.capital >= 0 : data.capital >= 0) &&
              data.interestRate is number && data.interestRate >= 0 &&
              data.totalBruto is number &&
              data.status in ['Pendente', 'Pago', 'Atrasado', 'Agendado'] &&
@@ -96,11 +96,11 @@ service cloud.firestore {
              data.loanId is string && data.loanId.size() <= 128 &&
              data.date is string && data.date.size() <= 50 &&
              data.uid == request.auth.uid &&
-             (!('amount' in data) || data.amount is number) &&
-             (!('capitalAmount' in data) || data.capitalAmount is number) &&
-             (!('interestAmount' in data) || data.interestAmount is number) &&
-             (!('paymentMethod' in data) || data.paymentMethod in ['DINHEIRO', 'PIX']) &&
-             (!('confirmed' in data) || data.confirmed is bool);
+             (!('amount' in data) || (data.amount == null || data.amount is number)) &&
+             (!('capitalAmount' in data) || (data.capitalAmount == null || data.capitalAmount is number)) &&
+             (!('interestAmount' in data) || (data.interestAmount == null || data.interestAmount is number)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod == null || data.paymentMethod in ['DINHEIRO', 'PIX'])) &&
+             (!('confirmed' in data) || (data.confirmed == null || data.confirmed is bool));
     }
 
     function isValidClosure(data) {
@@ -114,6 +114,14 @@ service cloud.firestore {
              data.stats is map;
     }
 
+    function isValidSystemSettings(data) {
+      let requiredFields = ['whatsappTemplate', 'defaultInterestRate', 'accentColor'];
+      return data.keys().hasAll(requiredFields) &&
+             data.whatsappTemplate is string && data.whatsappTemplate.size() <= 2000 &&
+             data.defaultInterestRate is number &&
+             data.accentColor in ['yellow', 'green', 'blue'];
+    }
+
     // ==========================================
     // Collections
     // ==========================================
@@ -122,9 +130,15 @@ service cloud.firestore {
       allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
       allow list: if (isOwner(userId) || isAdmin());
       allow create: if isOwner(userId) && isValidUser(incoming()) && isValidId(userId);
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) && isValidId(userId) &&
+      allow update: if (isOwner(userId) || isAdmin()) && (isValidUser(incoming()) || isAdmin()) && isValidId(userId) &&
                     incoming().uid == existing().uid &&
-                    incoming().role == existing().role;
+                    (incoming().role == existing().role || isAdmin());
+
+      match /settings/{settingId} {
+        allow get, list: if isOwner(userId) && isValidId(settingId);
+        allow create, update: if isOwner(userId) && isValidSystemSettings(incoming()) && isValidId(settingId);
+        allow delete: if isOwner(userId) && isValidId(settingId);
+      }
     }
 
     match /loans/{loanId} {

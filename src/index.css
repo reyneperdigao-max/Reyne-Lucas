@@ -5,16 +5,18 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-primary: #FFD700; /* More vibrant Gold (Higher contrast) */
+  --color-brand-primary: #FFD700;
   --color-brand-secondary: #ffffff;
-  --color-brand-accent: #E5E7EB; /* Refined Platinum/Silver instead of neon blue */
-  --color-brand-danger: #FF1A1A; /* Sharper Red */
+  --color-brand-accent: #E5E7EB;
+  --color-brand-danger: #FF1A1A;
   --color-brand-warning: #FFBB00;
+  --color-brand-success: #39FF14; /* Neon Green */
   
   --color-surface-950: #000000;
-  --color-surface-900: #050505; /* Deeper black */
-  --color-surface-800: #0f0f0f;
+  --color-surface-900: #0a0a0a; /* Adjusted for subtle contrast */
+  --color-surface-800: #111111;
   --color-surface-700: #1a1a1a;
+  --color-surface-border: #222222;
 
   /* Slate Palette in HEX (To avoid oklch/oklab in html2canvas) */
   --color-slate-50: #f8fafc;
@@ -105,6 +107,11 @@
 .text-neon-red {
   color: #ff3131 !important;
   text-shadow: 0 0 5px rgba(255, 49, 49, 0.8), 0 0 10px rgba(255, 49, 49, 0.5);
+}
+
+.text-neon-green {
+  color: #39FF14 !important;
+  text-shadow: 0 0 5px rgba(57, 255, 20, 0.8), 0 0 10px rgba(57, 255, 20, 0.5);
 }
 
 .printable-content .text-neon-red {
