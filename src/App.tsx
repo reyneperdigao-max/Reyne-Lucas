@@ -35,8 +35,6 @@ import {
   Check,
   BarChart3,
   Menu,
-  Sun,
-  Moon,
   Bell,
   User as UserIcon,
   AlertTriangle,
@@ -204,7 +202,7 @@ interface SystemSettings {
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  whatsappTemplate: 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {valor}.\n\nVencimento: {vencimento}',
+  whatsappTemplate: 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {capital}.\n\nCaso prefira, você pode pagar apenas os juros de R$ {juros} para renovar por mais 30 dias.',
   defaultInterestRate: 0,
   accentColor: 'yellow'
 };
@@ -336,7 +334,7 @@ export default function App() {
   } | null>(null);
   const [isConfirmingPix, setIsConfirmingPix] = useState(false);
   const [pixConfirmed, setPixConfirmed] = useState(false);
-  const [isNativeNotificationsEnabled, setIsNativeNotificationsEnabled] = useState(() => {
+  const [isNativeNotificationsEnabled /*, setIsNativeNotificationsEnabled */] = useState(() => {
     return localStorage.getItem('nexus_native_notifications') === 'true';
   });
   const [sentNativeNotificationIds, setSentNativeNotificationIds] = useState<string[]>(() => {
@@ -357,7 +355,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [lastCheckDate]);
 
-  const requestNotificationPermission = async () => {
+  /* const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
       setError("Este navegador não suporta notificações de sistema.");
       return;
@@ -382,7 +380,7 @@ export default function App() {
     } catch (err) {
       console.error("Erro ao solicitar permissão:", err);
     }
-  };
+  }; */
 
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
@@ -1184,14 +1182,30 @@ export default function App() {
     
     // Use only first name
     const firstName = (loan.clientName || 'Cliente').trim().split(' ')[0];
+    const interestAmount = loan.capital * (loan.interestRate || 0);
+    const capitalFormatted = `R$ ${loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const jurosFormatted = `R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const vencimentoFormatted = format(parseISO(loan.dueDate), 'dd/MM/yyyy');
     
     let message = systemSettings.whatsappTemplate
-      .replace(/{nome}/g, firstName)
-      .replace(/{valor}/g, `R$ ${loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`)
-      .replace(/{vencimento}/g, format(parseISO(loan.dueDate), 'dd/MM/yyyy'));
+      .replace(/{nome}/gi, firstName)
+      .replace(/{valor}/gi, capitalFormatted)
+      .replace(/{capital}/gi, capitalFormatted)
+      .replace(/{valor do capital}/gi, capitalFormatted)
+      .replace(/{valor do captal}/gi, capitalFormatted)
+      .replace(/{juros}/gi, jurosFormatted)
+      .replace(/{valor do juros}/gi, jurosFormatted)
+      .replace(/{vencimento}/gi, vencimentoFormatted);
 
     if (userProfile?.pixKey) {
-      message += `\n\nChave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}`;
+      const pixInfo = `\n\nChave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}`;
+      if (message.toLowerCase().includes('{pix}')) {
+        message = message.replace(/{pix}/gi, pixInfo);
+      } else if (message.toLowerCase().includes('{dados de pagamento}')) {
+        message = message.replace(/{dados de pagamento}/gi, pixInfo);
+      } else if (!message.includes(userProfile.pixKey)) {
+        message += pixInfo;
+      }
     }
 
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
@@ -3793,7 +3807,7 @@ export default function App() {
                       ].map((item) => (
                         <button
                           key={item.id}
-                          onClick={() => setActiveSettingsSection(item.id as any)}
+                          onClick={() => setActiveSettingsSection(item.id as 'menu' | 'perfil' | 'recebimentos' | 'regras' | 'mensagem' | 'aparencia' | 'dados')}
                           className="w-full flex items-center justify-between p-6 rounded-2xl transition-all border border-white/5 bg-black hover:border-[#FFD700]/50 hover:shadow-[0_0_20px_rgba(255,215,0,0.1)] group relative"
                         >
                           <div className="flex items-center gap-5">
@@ -3973,6 +3987,17 @@ export default function App() {
                                 rows={8}
                                 className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-xs leading-relaxed font-medium text-slate-300 focus:border-[#FFD700] focus:outline-none transition-all placeholder:text-slate-800"
                               />
+                              <div className="flex flex-wrap gap-2">
+                                {['{nome}', '{valor do capital}', '{valor do juros}', '{vencimento}', '{pix}'].map(tag => (
+                                  <button 
+                                    key={tag}
+                                    onClick={() => setSystemSettings(prev => ({ ...prev, whatsappTemplate: prev.whatsappTemplate + tag }))}
+                                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 hover:text-[#FFD700] transition-all"
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         )}
@@ -3989,7 +4014,7 @@ export default function App() {
                                 ].map((choice) => (
                                   <button
                                     key={choice.id}
-                                    onClick={() => handleSaveSystemSettings({ ...systemSettings, accentColor: choice.id as any })}
+                                    onClick={() => handleSaveSystemSettings({ ...systemSettings, accentColor: choice.id as 'yellow' | 'green' | 'blue' })}
                                     className={cn(
                                       "flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all active:scale-[0.95]",
                                       systemSettings.accentColor === choice.id 
