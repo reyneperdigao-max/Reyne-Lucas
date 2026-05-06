@@ -256,6 +256,14 @@ export default function App() {
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
   const [viewingContract, setViewingContract] = useState<Loan[] | null>(null);
   const [selectedLoansForUnified, setSelectedLoansForUnified] = useState<string[]>([]);
+  const [viewingClientDetail, setViewingClientDetail] = useState<{ 
+    name: string, 
+    phone: string, 
+    address: string, 
+    totalCapital: number, 
+    loanCount: number, 
+    activeDebt: number 
+  } | null>(null);
 
   useEffect(() => {
     if (viewingClientLoans) {
@@ -1551,7 +1559,15 @@ export default function App() {
   const filteredLoans = useMemo(() => {
     let result = loans;
 
-    if (filterDate) {
+    if (filterDate === 'TODAY') {
+      const today = new Date();
+      result = result.filter(l => {
+        const d = toDate(l.dueDate);
+        return d && d.getDate() === today.getDate() && 
+               d.getMonth() === today.getMonth() && 
+               d.getFullYear() === today.getFullYear();
+      });
+    } else if (filterDate) {
       result = result.filter(l => {
         const d = toDate(l.dueDate);
         const day = d ? d.getDate() : 0;
@@ -1561,11 +1577,8 @@ export default function App() {
 
     if (activeTab === 'Empréstimos') {
       result = result.filter(l => l.status !== 'Pago' && l.status !== 'Agendado');
-      if (!command.trim() && !showOnlyOverdue && !filterDate) {
-        result = [...result]
-          .sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0))
-          .slice(0, 5);
-      }
+      // Always sort by due date in loans tab, and remove the slice to show all loans
+      result = [...result].sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
     } else if (activeTab === 'Agendados') {
       result = result.filter(l => l.status === 'Agendado');
     }
@@ -2707,7 +2720,7 @@ export default function App() {
                     isMini
                     onClick={() => {
                       changeTab('Empréstimos');
-                      setFilterDate(new Date().getDate().toString());
+                      setFilterDate('TODAY');
                       setShowOnlyOverdue(false);
                       setCommand('');
                     }}
@@ -2905,7 +2918,7 @@ export default function App() {
                             return (
                               <React.Fragment key={`client-row-${client.name}-${index}`}>
                                 <tr 
-                                  onClick={() => setExpandedClient(isExpanded ? null : client.name)}
+                                  onClick={() => setViewingClientDetail(client)}
                                   className={cn(
                                     "group transition-all cursor-pointer", 
                                     isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50",
@@ -3999,6 +4012,13 @@ export default function App() {
                                 ))}
                               </div>
                             </div>
+
+                            <button 
+                              onClick={() => handleSaveSystemSettings(systemSettings)}
+                              className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-[10px] uppercase tracking-widest text-[#FFD700] transition-all"
+                            >
+                              Salvar Mensagem
+                            </button>
                           </div>
                         )}
 
@@ -5463,6 +5483,220 @@ export default function App() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes do Cliente */}
+      {viewingClientDetail && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={cn(
+              "w-full max-w-4xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8",
+              isDark ? "bg-surface-900 border border-white/5" : "bg-white"
+            )}
+          >
+            <div className="p-8 sm:p-12 relative">
+              <button 
+                onClick={() => setViewingClientDetail(null)}
+                className="absolute top-8 right-8 p-3 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-8 mb-12">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-20 h-20 rounded-3xl bg-brand-primary/10 flex items-center justify-center border border-brand-primary/20">
+                      <UserIcon className="w-10 h-10 text-brand-primary" />
+                    </div>
+                    <div>
+                      <h2 className={cn("text-3xl font-black tracking-tight", isDark ? "text-white" : "text-slate-900")}>
+                        {viewingClientDetail.name}
+                      </h2>
+                      <div className="flex items-center gap-3">
+                        <StatusBadge status="Pendente" isDark={isDark} />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          {viewingClientDetail.loanCount} Contratos Ativos
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className={cn("p-6 rounded-3xl border transition-all", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Dívida Ativa</span>
+                    <p className="text-xl font-black text-brand-primary">R$ {viewingClientDetail.activeDebt.toLocaleString('pt-BR')}</p>
+                  </div>
+                  <div className={cn("p-6 rounded-3xl border transition-all", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Capital Investido</span>
+                    <p className={cn("text-xl font-black", isDark ? "text-white" : "text-slate-900")}>R$ {viewingClientDetail.totalCapital.toLocaleString('pt-BR')}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-12">
+                <div className="space-y-6">
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                    <Database className="w-4 h-4" />
+                    Dados do Cliente
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Telefone / WhatsApp</span>
+                        <p className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-slate-900")}>
+                          <MessageCircle className="w-4 h-4 text-emerald-500" />
+                          {viewingClientDetail.phone || "Não informado"}
+                        </p>
+                      </div>
+                      <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Endereço Residencial</span>
+                        <p className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>
+                          {viewingClientDetail.address || "Não informado"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                    <Settings2 className="w-4 h-4" />
+                    Ações Rápidas
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button 
+                      onClick={() => {
+                        setViewingClientLoans(viewingClientDetail.name);
+                        setViewingClientDetail(null);
+                      }}
+                      className={cn(
+                        "flex flex-col items-center gap-3 p-6 rounded-3xl border transition-all active:scale-95 group",
+                        isDark ? "bg-white/5 border-white/10 hover:bg-brand-primary/10 hover:border-brand-primary/30" : "bg-white border-slate-200 hover:bg-slate-50 shadow-sm"
+                      )}
+                    >
+                      <History className="w-6 h-6 text-brand-primary group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Histórico</span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setEditingLoanId(null);
+                        setNewLoan({
+                          clientName: viewingClientDetail.name,
+                          clientPhone: viewingClientDetail.phone || '',
+                          clientAddress: viewingClientDetail.address || '',
+                          capital: '',
+                          interestRate: systemSettings.defaultInterestRate > 0 ? (systemSettings.defaultInterestRate * 100).toString() : '',
+                          date: format(new Date(), 'yyyy-MM-dd'),
+                          dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                          status: 'Pendente'
+                        });
+                        setIsAdding(true);
+                        setViewingClientDetail(null);
+                      }}
+                      className={cn(
+                        "flex flex-col items-center gap-3 p-6 rounded-3xl border transition-all active:scale-95 group",
+                        isDark ? "bg-white/5 border-white/10 hover:bg-brand-primary/10 hover:border-brand-primary/30" : "bg-white border-slate-200 hover:bg-slate-50 shadow-sm"
+                      )}
+                    >
+                      <Plus className="w-6 h-6 text-brand-primary group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Novo Loan</span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const activeLoans = loans.filter(l => l.clientName === viewingClientDetail.name && l.status !== 'Pago');
+                        if (activeLoans.length > 0) {
+                          setViewingContract(activeLoans);
+                          setViewingClientDetail(null);
+                        } else {
+                          setError("Este cliente não possui contratos ativos para gerar contrato.");
+                        }
+                      }}
+                      className={cn(
+                        "flex flex-col items-center gap-3 p-6 rounded-3xl border transition-all active:scale-95 group",
+                        isDark ? "bg-white/5 border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/30" : "bg-white border-slate-200 hover:bg-slate-50 shadow-sm"
+                      )}
+                    >
+                      <FileText className="w-6 h-6 text-emerald-500 group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Contrato</span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Excluir Cliente',
+                          message: `Deseja excluir todos os empréstimos de ${viewingClientDetail.name}? Esta ação não pode ser desfeita.`,
+                          onConfirm: async () => {
+                            try {
+                              const clientLoans = loans.filter(l => l.clientName === viewingClientDetail.name);
+                              const batch = writeBatch(db);
+                              clientLoans.forEach(l => {
+                                batch.delete(doc(db, 'users', user?.uid || '', 'loans', l.id));
+                              });
+                              await batch.commit();
+                              setViewingClientDetail(null);
+                            } catch {
+                              setError("Erro ao excluir cliente.");
+                            }
+                          }
+                        });
+                      }}
+                      className={cn(
+                        "flex flex-col items-center gap-3 p-6 rounded-3xl border transition-all active:scale-95 group",
+                        isDark ? "bg-white/5 border-white/10 hover:bg-brand-danger/10 hover:border-brand-danger/30" : "bg-white border-slate-200 hover:bg-slate-50 shadow-sm"
+                      )}
+                    >
+                      <Trash2 className="w-6 h-6 text-brand-danger group-hover:scale-110 transition-transform" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Excluir</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => {
+                    // Logic to edit client (which is basically editing one of their loans or a generic edit)
+                    // For now, let's open the history which has more detail or allow editing most recent
+                    const recentLoan = loans
+                      .filter(l => l.clientName === viewingClientDetail.name)
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+                    if (recentLoan) {
+                      setEditingLoanId(recentLoan.id);
+                      setNewLoan({
+                        clientName: recentLoan.clientName,
+                        clientPhone: recentLoan.clientPhone || '',
+                        clientAddress: recentLoan.clientAddress || '',
+                        capital: recentLoan.capital.toString(),
+                        interestRate: (recentLoan.interestRate * 100).toString(),
+                        date: recentLoan.date,
+                        dueDate: recentLoan.dueDate,
+                        status: (recentLoan.status === 'Pago' || recentLoan.status === 'Atrasado') ? 'Pendente' : recentLoan.status
+                      });
+                      setIsAdding(true);
+                      setViewingClientDetail(null);
+                    }
+                  }}
+                  className="flex-1 py-5 bg-brand-primary text-black rounded-[32px] font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-3"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Editar Cadastro
+                </button>
+                <button 
+                   onClick={() => setViewingClientDetail(null)}
+                   className={cn(
+                     "flex-1 py-5 rounded-[32px] font-black text-xs uppercase tracking-widest transition-all",
+                     isDark ? "bg-white/5 text-white hover:bg-white/10" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                   )}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
 
