@@ -512,6 +512,34 @@ export default function App() {
         }
       };
 
+      const normalizeCanvasForExport = (source: HTMLCanvasElement) => {
+        // Prevent white-image/freeze on mobile by capping total pixels.
+        const maxPixels = 8_500_000;
+        const pixels = source.width * source.height;
+        if (pixels <= maxPixels) return source;
+        const ratio = Math.sqrt(maxPixels / pixels);
+        const targetWidth = Math.max(1, Math.floor(source.width * ratio));
+        const targetHeight = Math.max(1, Math.floor(source.height * ratio));
+        const resized = document.createElement('canvas');
+        resized.width = targetWidth;
+        resized.height = targetHeight;
+        const ctx = resized.getContext('2d');
+        if (!ctx) return source;
+        ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
+        return resized;
+      };
+
+      const canvasToBlob = (source: HTMLCanvasElement, type: string, quality?: number) =>
+        new Promise<Blob>((resolve, reject) => {
+          source.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error('CANVAS_BLOB_FAILED'));
+              return;
+            }
+            resolve(blob);
+          }, type, quality);
+        });
+
       // Wait for fonts to be fully loaded to ensure consistent typography
       await Promise.race([
         document.fonts.ready,
@@ -684,8 +712,10 @@ export default function App() {
 
       const canvas = await Promise.race([capturePromise, timeoutPromise]);
 
+      const exportCanvas = normalizeCanvasForExport(canvas);
+
       if (format === 'image') {
-        const imgData = canvas.toDataURL('image/png', 1.0);
+        const imgData = exportCanvas.toDataURL('image/png', 1.0);
         let fileName = 'comprovante.png';
         let shareTitle = 'Comprovante Nexus Private';
         let shareText = customShareText !== undefined ? customShareText : 'Segue o comprovante de recebimento Nexus Private.';
@@ -704,7 +734,7 @@ export default function App() {
           downloadDataUrl(imgData, fileName);
         } else if (shouldAttemptNativeFileShare) {
           try {
-            const blob = await (await fetch(imgData)).blob();
+            const blob = await canvasToBlob(exportCanvas, 'image/png');
             const file = new File([blob], fileName, { type: 'image/png' });
             if (canShareFile(file)) {
               await navigator.share({
@@ -732,8 +762,8 @@ export default function App() {
           previewOrDownloadImage(imgData, fileName);
         }
       } else {
-        const imgData = canvas.toDataURL('image/png');
-        const imgProps = { width: canvas.width, height: canvas.height };
+        const imgData = exportCanvas.toDataURL('image/jpeg', 0.96);
+        const imgProps = { width: exportCanvas.width, height: exportCanvas.height };
         const pdfWidth = 210;
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
         
