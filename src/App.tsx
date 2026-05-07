@@ -2146,9 +2146,9 @@ export default function App() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               className="flex items-center gap-4"
             >
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-primary to-indigo-600 flex items-center justify-center shadow-2xl shadow-brand-primary/20 p-2.5">
+              <div className="w-12 h-12 rounded-2xl nexus-logo-bg flex items-center justify-center shadow-2xl shadow-brand-primary/20 p-2.5">
                 <div className="w-full h-full border-2 border-white/20 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
+                  <span className="nexus-logo-text font-black text-xl italic tracking-tighter">NP</span>
                 </div>
               </div>
               <div>
@@ -2214,8 +2214,8 @@ export default function App() {
           >
             {/* Mobile Header Branding */}
             <div className="lg:hidden flex flex-col items-center mb-10">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-primary to-indigo-600 p-3.5 shadow-2xl shadow-brand-primary/30 flex items-center justify-center mb-4">
-                <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
+              <div className="w-16 h-16 rounded-2xl nexus-logo-bg p-3.5 shadow-2xl shadow-brand-primary/30 flex items-center justify-center mb-4">
+                <span className="nexus-logo-text font-black text-2xl italic tracking-tighter">NP</span>
               </div>
               <h3 className={cn("text-xl font-black tracking-tight", splashIsDark ? "text-white" : "text-slate-900")}>
                 Nexus Private
@@ -2362,15 +2362,11 @@ export default function App() {
             {userProfile?.profilePicture ? (
               <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
             ) : (
-              <img 
-                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=64&h=64&fit=crop" 
-                className={cn(
-                  "w-10 h-10 rounded-xl object-cover transition-all",
-                  isDark ? "grayscale" : ""
-                )} 
-                alt="Nexus Logo"
-                referrerPolicy="no-referrer"
-              />
+            <div className="w-10 h-10 rounded-xl nexus-logo-bg flex items-center justify-center p-2 shadow-lg shadow-brand-primary/20">
+              <div className="w-full h-full border border-white/20 rounded flex items-center justify-center">
+                <span className="nexus-logo-text font-black text-xs italic tracking-tighter">NP</span>
+              </div>
+            </div>
             )}
           </div>
           {!isSidebarCollapsed && (
@@ -5443,13 +5439,10 @@ export default function App() {
             <div id="printable-contract" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="w-20 h-20 nexus-logo-bg flex items-center justify-center rounded-3xl mb-6 shadow-xl p-4">
+                  <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
+                    <span className="nexus-logo-text font-black text-3xl italic tracking-tighter">NP</span>
+                  </div>
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -5827,13 +5820,10 @@ export default function App() {
             <div id="printable-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative flex-1">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="w-20 h-20 nexus-logo-bg flex items-center justify-center rounded-3xl mb-6 shadow-xl p-4">
+                  <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
+                    <span className="nexus-logo-text font-black text-3xl italic tracking-tighter">NP</span>
+                  </div>
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -5946,13 +5936,10 @@ export default function App() {
             <div id="printable-schedule-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="w-20 h-20 nexus-logo-bg flex items-center justify-center rounded-3xl mb-6 shadow-xl p-4">
+                  <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
+                    <span className="nexus-logo-text font-black text-3xl italic tracking-tighter">NP</span>
+                  </div>
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -6060,8 +6047,10 @@ export default function App() {
         >
           {/* Header */}
           <div className="flex flex-col items-center mb-12">
-            <div className="w-24 h-24 bg-black rounded-[32px] flex items-center justify-center mb-6 shadow-2xl">
-              <QrCode className="w-12 h-12 text-[#6366f1]" />
+            <div className="w-24 h-24 nexus-logo-bg rounded-[32px] flex items-center justify-center mb-6 shadow-2xl p-5">
+              <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
+                <span className="nexus-logo-text font-black text-4xl italic tracking-tighter">NP</span>
+              </div>
             </div>
             <h1 className="text-4xl font-black uppercase tracking-tighter text-black">Pagamento PIX</h1>
             <p className="text-slate-400 font-bold uppercase tracking-[0.4em] text-xs mt-2">Nexus Private</p>
