@@ -467,6 +467,7 @@ export default function App() {
         typeof navigator.share === 'function';
       const shouldAttemptNativeFileShare = isNativeShareAvailable;
       const captureTimeoutMs = 15000;
+      const isReceiptLike = elementId === 'printable-receipt' || elementId === 'printable-schedule-receipt';
 
       const canShareFile = (file: File) => {
         if (!isNativeShareAvailable) return false;
@@ -511,6 +512,84 @@ export default function App() {
           downloadDataUrl(imgData, fileName);
         }
       };
+
+      const shareOrDownloadPdfBlob = async (pdfBlob: Blob, fileName: string, shareTitle: string, shareText: string) => {
+        if (forceDownload) {
+          const url = URL.createObjectURL(pdfBlob);
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = url;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          return;
+        }
+
+        if (shouldAttemptNativeFileShare) {
+          try {
+            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+            if (canShareFile(file)) {
+              await navigator.share({
+                files: [file],
+                title: shareTitle,
+                text: withOptionalShareUrl(shareText)
+              });
+              return;
+            }
+          } catch (shareError: unknown) {
+            const error = shareError as { name?: string; message?: string };
+            const isCancellation =
+              error?.name === 'AbortError' ||
+              error?.message?.includes('cancellation') ||
+              error?.message?.includes('share was cancelled') ||
+              error?.message?.includes('Abort due to cancellation');
+            if (!isCancellation) {
+              console.warn('Native share failed, fallback to preview/download:', shareError);
+            } else {
+              return;
+            }
+          }
+        }
+
+        previewOrDownloadPdf(pdfBlob, fileName);
+      };
+
+      // Stable path for receipt sharing on Vercel/mobile: avoid html2canvas memory spikes.
+      if (isReceiptLike && format === 'pdf') {
+        const directPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        directPdf.setFillColor(0, 0, 0);
+        directPdf.rect(0, 0, 210, 297, 'F');
+        directPdf.setTextColor(250, 204, 21);
+        directPdf.setFont('helvetica', 'bold');
+        directPdf.setFontSize(18);
+        directPdf.text('COMPROVANTE NEXUS PRIVATE', 105, 28, { align: 'center' });
+        directPdf.setFontSize(11);
+        directPdf.setTextColor(255, 255, 255);
+
+        if (elementId === 'printable-receipt' && viewingReceipt) {
+          const amount = `R$ ${viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+          directPdf.text(`Cliente: ${viewingReceipt.clientName}`, 20, 60);
+          directPdf.text(`Valor: ${amount}`, 20, 75);
+          directPdf.text(`Data: ${safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}`, 20, 90);
+          directPdf.text(`Descricao: ${viewingReceipt.description}`, 20, 105, { maxWidth: 170 });
+          directPdf.text(`ID: ${viewingReceipt.id.toUpperCase()}-${new Date(viewingReceipt.date).getTime()}`, 20, 125, { maxWidth: 170 });
+        } else if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
+          const amount = `R$ ${viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+          directPdf.text(`Cliente: ${viewingScheduleReceipt.clientName}`, 20, 60);
+          directPdf.text(`Valor: ${amount}`, 20, 75);
+          directPdf.text(`Liberacao: ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}`, 20, 90);
+          directPdf.text(`Vencimento: ${safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}`, 20, 105);
+          directPdf.text(`ID: SCH-${viewingScheduleReceipt.id.toUpperCase()}-${new Date(viewingScheduleReceipt.createdAt || new Date()).getTime()}`, 20, 125, { maxWidth: 170 });
+        }
+
+        let fileName = elementId === 'printable-schedule-receipt' ? 'comprovante_agendamento.pdf' : 'comprovante.pdf';
+        const shareTitle = elementId === 'printable-schedule-receipt' ? 'Comprovante de Agendamento' : 'Comprovante Nexus Private';
+        const shareText = elementId === 'printable-schedule-receipt'
+          ? 'Segue o comprovante de agendamento Nexus Private.'
+          : 'Segue o comprovante de recebimento Nexus Private.';
+        const blob = directPdf.output('blob');
+        await shareOrDownloadPdfBlob(blob, fileName, shareTitle, shareText);
+        return;
+      }
 
       const normalizeCanvasForExport = (source: HTMLCanvasElement) => {
         // Prevent white-image/freeze on mobile by capping total pixels.
