@@ -255,6 +255,13 @@ export default function App() {
       setActiveTab(newTab);
       setCommand('');
       setFilterDate('');
+      setShowOnlyOverdue(false);
+      setShowOnlyCapital(false);
+      setShowOnlyInterest(false);
+      setViewingClientLoans(null);
+      setPayingLoan(null);
+      setEditingLoanId(null);
+      setIsAdding(false);
     }
   };
   const [reportMonth, setReportMonth] = useState(new Date().getMonth());
@@ -4776,8 +4783,15 @@ export default function App() {
                           ) : (
                             <>
                               <div className="w-20 h-20 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
-                              <h3 className="text-xl font-bold text-white tracking-tight">Monitorando PIX...</h3>
-                              <p className="text-slate-400 text-sm">Verificando recebimento de R$ {pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                              <h3 className="text-xl font-bold text-white tracking-tight">
+                                {pendingPayment.method === 'PIX' ? 'Monitorando PIX...' : 'Registrando...'}
+                              </h3>
+                              <p className="text-slate-400 text-sm">
+                                {pendingPayment.method === 'PIX' 
+                                  ? `Verificando recebimento de R$ ${pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                  : 'Salvando informações no banco de dados...'
+                                }
+                              </p>
                             </>
                           )}
                         </div>
@@ -4927,6 +4941,7 @@ export default function App() {
                                 <button 
                                   onClick={() => {
                                     setIsConfirmingPix(true);
+                                    // Faster flow for cash (no real verification needed)
                                     setTimeout(() => {
                                       setPixConfirmed(true);
                                       setTimeout(() => {
@@ -4938,8 +4953,8 @@ export default function App() {
                                         setPendingPayment(null);
                                         setIsConfirmingPix(false);
                                         setPixConfirmed(false);
-                                      }, 1000);
-                                    }, 1500);
+                                      }, 800);
+                                    }, 1000);
                                   }}
                                   className="w-full py-5 bg-brand-primary text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 active:scale-95"
                                 >
