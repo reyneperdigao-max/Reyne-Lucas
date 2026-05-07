@@ -466,6 +466,7 @@ export default function App() {
       const shouldAttemptNativeFileShare = isNativeShareAvailable && !isVercelHost;
       const shouldUseLightCapture = typeof navigator !== 'undefined' &&
         (isVercelHost || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+      const captureTimeoutMs = shouldUseLightCapture ? 8000 : 15000;
 
       const canShareFile = (file: File) => {
         if (!isNativeShareAvailable) return false;
@@ -534,12 +535,14 @@ export default function App() {
         (el as HTMLElement).style.display = 'none';
       });
 
-      const canvas = await html2canvas(element, {
-        scale: shouldUseLightCapture ? 1.5 : 3,
+      const capturePromise = html2canvas(element, {
+        scale: shouldUseLightCapture ? 1 : 3,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 1200,
+        windowWidth: shouldUseLightCapture ? Math.min(element.scrollWidth || 800, 900) : 1200,
+        windowHeight: shouldUseLightCapture ? Math.min(element.scrollHeight || 1200, 1800) : undefined,
+        imageTimeout: shouldUseLightCapture ? 2500 : 8000,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
@@ -685,6 +688,12 @@ export default function App() {
         }
       });
 
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('CAPTURE_TIMEOUT')), captureTimeoutMs);
+      });
+
+      const canvas = await Promise.race([capturePromise, timeoutPromise]);
+
       // Restore elements
       noPrintElements.forEach((el, i) => {
         (el as HTMLElement).style.display = originalDisplays[i];
@@ -818,6 +827,9 @@ export default function App() {
         err?.message?.includes('Abort due to cancellation');
       
       if (!isCancellation) {
+        if (err?.message?.includes('CAPTURE_TIMEOUT')) {
+          setError('A geração do comprovante excedeu o tempo limite neste dispositivo. Tente novamente em "Imprimir".');
+        }
         console.error('Erro ao gerar PDF:', error);
       }
     } finally {
