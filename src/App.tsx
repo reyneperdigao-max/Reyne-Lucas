@@ -921,6 +921,64 @@ export default function App() {
         err?.message?.includes('Abort due to cancellation');
       
       if (!isCancellation) {
+        const isReceiptLike = elementId === 'printable-receipt' || elementId === 'printable-schedule-receipt';
+        const isOklabParsingError = !!err?.message?.toLowerCase().includes('unsupported color function "oklab"');
+        if (format === 'pdf' && isReceiptLike && isOklabParsingError) {
+          try {
+            const fallbackPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            fallbackPdf.setFillColor(0, 0, 0);
+            fallbackPdf.rect(0, 0, 210, 297, 'F');
+            fallbackPdf.setFont('helvetica', 'bold');
+            fallbackPdf.setTextColor(250, 204, 21);
+            fallbackPdf.setFontSize(18);
+            fallbackPdf.text('COMPROVANTE NEXUS PRIVATE', 105, 28, { align: 'center' });
+            fallbackPdf.setFontSize(11);
+            fallbackPdf.setTextColor(255, 255, 255);
+
+            let fileName = 'comprovante.pdf';
+            let shareTitle = 'Comprovante Nexus Private';
+            let shareText = 'Segue o comprovante de recebimento Nexus Private.';
+
+            if (elementId === 'printable-receipt' && viewingReceipt) {
+              const amount = `R$ ${viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+              fallbackPdf.text(`Cliente: ${viewingReceipt.clientName}`, 20, 60);
+              fallbackPdf.text(`Valor: ${amount}`, 20, 75);
+              fallbackPdf.text(`Data: ${safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}`, 20, 90);
+              fallbackPdf.text(`Descricao: ${viewingReceipt.description}`, 20, 105, { maxWidth: 170 });
+            } else if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
+              fileName = 'comprovante_agendamento.pdf';
+              shareTitle = 'Comprovante de Agendamento';
+              shareText = 'Segue o comprovante de agendamento Nexus Private.';
+              const amount = `R$ ${viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+              fallbackPdf.text(`Cliente: ${viewingScheduleReceipt.clientName}`, 20, 60);
+              fallbackPdf.text(`Valor: ${amount}`, 20, 75);
+              fallbackPdf.text(`Liberacao: ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}`, 20, 90);
+              fallbackPdf.text(`Vencimento: ${safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}`, 20, 105);
+            }
+
+            const blob = fallbackPdf.output('blob');
+            const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+            if (!forceDownload && canShare) {
+              const file = new File([blob], fileName, { type: 'application/pdf' });
+              const canShareFile = typeof navigator.canShare === 'function' ? navigator.canShare({ files: [file] }) : true;
+              if (canShareFile) {
+                await navigator.share({ files: [file], title: shareTitle, text: shareText });
+                return;
+              }
+            }
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = url;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            return;
+          } catch (recoveryError) {
+            console.error('Erro na recuperação de compartilhamento:', recoveryError);
+          }
+        }
+
         if (err?.message?.includes('CAPTURE_TIMEOUT')) {
           setError('A geração do comprovante excedeu o tempo limite neste dispositivo. Tente novamente em "Imprimir".');
         } else {
