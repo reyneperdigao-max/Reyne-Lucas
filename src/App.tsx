@@ -456,17 +456,17 @@ export default function App() {
     const element = document.getElementById(elementId);
     if (!element) return;
 
+    let hiddenElements: HTMLElement[] = [];
+    let originalDisplays: string[] = [];
+    setError(null);
     setIsGeneratingPDF(true);
     try {
       const isNativeShareAvailable = typeof window !== 'undefined' &&
         window.isSecureContext &&
         typeof navigator !== 'undefined' &&
         typeof navigator.share === 'function';
-      const isVercelHost = typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app');
-      const shouldAttemptNativeFileShare = isNativeShareAvailable && !isVercelHost;
-      const shouldUseLightCapture = typeof navigator !== 'undefined' &&
-        (isVercelHost || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
-      const captureTimeoutMs = shouldUseLightCapture ? 8000 : 15000;
+      const shouldAttemptNativeFileShare = isNativeShareAvailable;
+      const captureTimeoutMs = 15000;
 
       const canShareFile = (file: File) => {
         if (!isNativeShareAvailable) return false;
@@ -494,15 +494,6 @@ export default function App() {
       };
 
       const previewOrDownloadPdf = (pdfBlob: Blob, fileName: string) => {
-        if (isVercelHost) {
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = URL.createObjectURL(pdfBlob);
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(link.href), 60000);
-          return;
-        }
-
         const objectUrl = URL.createObjectURL(pdfBlob);
         const previewWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
         if (!previewWindow) {
@@ -515,8 +506,10 @@ export default function App() {
       };
 
       const previewOrDownloadImage = (imgData: string, fileName: string) => {
-        // Opening large data URLs can freeze some browsers on Vercel/mobile.
-        downloadDataUrl(imgData, fileName);
+        const previewWindow = window.open(imgData, '_blank', 'noopener,noreferrer');
+        if (!previewWindow) {
+          downloadDataUrl(imgData, fileName);
+        }
       };
 
       // Wait for fonts to be fully loaded to ensure consistent typography
@@ -524,25 +517,26 @@ export default function App() {
         document.fonts.ready,
         new Promise<void>(resolve => setTimeout(resolve, 1500))
       ]);
+      // Extra delay to ensure style and layout are fully applied.
+      await new Promise<void>(resolve => setTimeout(resolve, 500));
       // Let the browser paint the loading state before heavy capture work.
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       // Hide elements before capture
       const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
-      const originalDisplays: string[] = [];
+      hiddenElements = Array.from(noPrintElements) as HTMLElement[];
       noPrintElements.forEach(el => {
         originalDisplays.push((el as HTMLElement).style.display);
         (el as HTMLElement).style.display = 'none';
       });
 
       const capturePromise = html2canvas(element, {
-        scale: shouldUseLightCapture ? 1 : 3,
+        scale: 3,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: shouldUseLightCapture ? Math.min(element.scrollWidth || 800, 900) : 1200,
-        windowHeight: shouldUseLightCapture ? Math.min(element.scrollHeight || 1200, 1800) : undefined,
-        imageTimeout: shouldUseLightCapture ? 2500 : 8000,
+        backgroundColor: '#000000',
+        windowWidth: 1200,
+        imageTimeout: 8000,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
@@ -574,24 +568,22 @@ export default function App() {
             });
           }
           
-          if (!shouldUseLightCapture) {
-            const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
-            styleTags.forEach(tag => {
-              try {
-                let css = tag.innerHTML;
-                if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
-                  css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
-                  css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
-                    const parts = match.split(':');
-                    return parts.length >= 2 ? `${parts[0]}: #777777` : match;
-                  });
-                  tag.innerHTML = css;
-                }
-              } catch (e) {
-                console.warn('Could not sanitize style tag', e);
+          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
+          styleTags.forEach(tag => {
+            try {
+              let css = tag.innerHTML;
+              if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
+                css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
+                css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
+                  const parts = match.split(':');
+                  return parts.length >= 2 ? `${parts[0]}: #777777` : match;
+                });
+                tag.innerHTML = css;
               }
-            });
-          }
+            } catch (e) {
+              console.warn('Could not sanitize style tag', e);
+            }
+          });
 
           const style = clonedDoc.createElement('style');
           style.innerHTML = `
@@ -643,12 +635,12 @@ export default function App() {
               pointer-events: none !important;
             }
             
-            .bg-white { background-color: #ffffff !important; }
+            .bg-white { background-color: #000000 !important; }
             .bg-slate-900 { background-color: #0f172a !important; }
             .bg-slate-50 { background-color: #f8fafc !important; }
             .bg-black { background-color: #000000 !important; }
             
-            .text-slate-900 { color: #0f172a !important; }
+            .text-slate-900 { color: #facc15 !important; }
             .text-slate-600 { color: #475569 !important; }
             .text-slate-500 { color: #64748b !important; }
             .text-slate-400 { color: #94a3b8 !important; }
@@ -658,33 +650,31 @@ export default function App() {
           `;
           clonedDoc.head.appendChild(style);
 
-          if (!shouldUseLightCapture) {
-            const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
-            styledElements.forEach(el => {
-              const htmlEl = el as HTMLElement;
-              const styleAttr = htmlEl.getAttribute('style');
-              if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
-                htmlEl.setAttribute('style', styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777'));
+          const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
+          styledElements.forEach(el => {
+            const htmlEl = el as HTMLElement;
+            const styleAttr = htmlEl.getAttribute('style');
+            if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
+              htmlEl.setAttribute('style', styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777'));
+            }
+            if (htmlEl.style) {
+              htmlEl.style.boxShadow = 'none';
+              htmlEl.style.textShadow = 'none';
+              htmlEl.style.filter = 'none';
+              htmlEl.style.transition = 'none';
+              htmlEl.style.animation = 'none';
+              
+              if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
+                htmlEl.style.backgroundImage = 'none';
+                htmlEl.style.backgroundColor = '#000000';
               }
-              if (htmlEl.style) {
-                htmlEl.style.boxShadow = 'none';
-                htmlEl.style.textShadow = 'none';
-                htmlEl.style.filter = 'none';
-                htmlEl.style.transition = 'none';
-                htmlEl.style.animation = 'none';
-                
-                if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
-                  htmlEl.style.backgroundImage = 'none';
-                  htmlEl.style.backgroundColor = '#000000';
-                }
 
-                if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
-                  htmlEl.style.backgroundImage = 'none';
-                  htmlEl.style.backgroundColor = '#000000';
-                }
+              if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
+                htmlEl.style.backgroundImage = 'none';
+                htmlEl.style.backgroundColor = '#000000';
               }
-            });
-          }
+            }
+          });
         }
       });
 
@@ -693,11 +683,6 @@ export default function App() {
       });
 
       const canvas = await Promise.race([capturePromise, timeoutPromise]);
-
-      // Restore elements
-      noPrintElements.forEach((el, i) => {
-        (el as HTMLElement).style.display = originalDisplays[i];
-      });
 
       if (format === 'image') {
         const imgData = canvas.toDataURL('image/png', 1.0);
@@ -829,10 +814,15 @@ export default function App() {
       if (!isCancellation) {
         if (err?.message?.includes('CAPTURE_TIMEOUT')) {
           setError('A geração do comprovante excedeu o tempo limite neste dispositivo. Tente novamente em "Imprimir".');
+        } else {
+          setError('Falha ao compartilhar o comprovante. Tente novamente.');
         }
         console.error('Erro ao gerar PDF:', error);
       }
     } finally {
+      hiddenElements.forEach((el, i) => {
+        el.style.display = originalDisplays[i] ?? '';
+      });
       setIsGeneratingPDF(false);
     }
   };
@@ -3787,7 +3777,7 @@ export default function App() {
                                   ) : (
                                     <Share2 className="w-5 h-5" />
                                   )}
-                                  <span>Exportar Relatório Geral</span>
+                                  <span>{isGeneratingPDF ? 'Gerando...' : 'Exportar Relatório Geral'}</span>
                                 </button>
                                 <button
                                   onClick={() => shareAsPDF(true, 'pdf')}
