@@ -443,13 +443,21 @@ export default function App() {
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
     
+    const isElementVisible = (id: string) => {
+      const node = document.getElementById(id);
+      if (!node) return false;
+      const styles = window.getComputedStyle(node);
+      return styles.display !== 'none' && styles.visibility !== 'hidden' && styles.opacity !== '0';
+    };
+
     // Determine the element ID more robustly
     let elementId = customElementId;
     if (!elementId) {
-      if (viewingContract) elementId = 'printable-contract';
-      else if (viewingScheduleReceipt) elementId = 'printable-schedule-receipt';
-      else if (viewingReceipt) elementId = 'printable-receipt';
-      else if (activeTab === 'Relatórios') elementId = 'printable-report';
+      // Always prioritize currently visible receipt modals to avoid wrong export targets.
+      if (viewingReceipt || isElementVisible('printable-receipt')) elementId = 'printable-receipt';
+      else if (viewingScheduleReceipt || isElementVisible('printable-schedule-receipt')) elementId = 'printable-schedule-receipt';
+      else if (viewingContract || isElementVisible('printable-contract')) elementId = 'printable-contract';
+      else if (activeTab === 'Relatórios' || isElementVisible('printable-report')) elementId = 'printable-report';
       else elementId = 'printable-receipt'; // Final fallback
     }
 
