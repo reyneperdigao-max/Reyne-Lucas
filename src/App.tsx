@@ -462,6 +462,8 @@ export default function App() {
         window.isSecureContext &&
         typeof navigator !== 'undefined' &&
         typeof navigator.share === 'function';
+      const isVercelHost = typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app');
+      const shouldAttemptNativeFileShare = isNativeShareAvailable && !isVercelHost;
 
       const canShareFile = (file: File) => {
         if (!isNativeShareAvailable) return false;
@@ -498,6 +500,13 @@ export default function App() {
           link.click();
         }
         setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      };
+
+      const previewOrDownloadImage = (imgData: string, fileName: string) => {
+        const previewWindow = window.open(imgData, '_blank', 'noopener,noreferrer');
+        if (!previewWindow) {
+          downloadDataUrl(imgData, fileName);
+        }
       };
 
       // Wait for fonts to be fully loaded to ensure consistent typography
@@ -681,7 +690,7 @@ export default function App() {
         
         if (forceDownload) {
           downloadDataUrl(imgData, fileName);
-        } else if (isNativeShareAvailable) {
+        } else if (shouldAttemptNativeFileShare) {
           try {
             const blob = await (await fetch(imgData)).blob();
             const file = new File([blob], fileName, { type: 'image/png' });
@@ -703,12 +712,12 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
-              downloadDataUrl(imgData, fileName);
+              console.warn('Native share failed or blocked by host, falling back to preview/download:', shareError);
+              previewOrDownloadImage(imgData, fileName);
             }
           }
         } else {
-          downloadDataUrl(imgData, fileName);
+          previewOrDownloadImage(imgData, fileName);
         }
       } else {
         const imgData = canvas.toDataURL('image/png');
@@ -750,7 +759,7 @@ export default function App() {
 
         if (forceDownload) {
           pdf.save(fileName);
-        } else if (isNativeShareAvailable) {
+        } else if (shouldAttemptNativeFileShare) {
           try {
             const pdfBlob = pdf.output('blob');
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
