@@ -458,6 +458,48 @@ export default function App() {
 
     setIsGeneratingPDF(true);
     try {
+      const isNativeShareAvailable = typeof window !== 'undefined' &&
+        window.isSecureContext &&
+        typeof navigator !== 'undefined' &&
+        typeof navigator.share === 'function';
+
+      const canShareFile = (file: File) => {
+        if (!isNativeShareAvailable) return false;
+        if (typeof navigator.canShare === 'function') {
+          try {
+            return navigator.canShare({ files: [file] });
+          } catch {
+            return false;
+          }
+        }
+        // Some browsers support share without exposing canShare.
+        return true;
+      };
+
+      const withOptionalShareUrl = (baseText: string) => {
+        if (!customShareUrl) return baseText;
+        return `${baseText}\n${customShareUrl}`;
+      };
+
+      const downloadDataUrl = (dataUrl: string, fileName: string) => {
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = dataUrl;
+        link.click();
+      };
+
+      const previewOrDownloadPdf = (pdfBlob: Blob, fileName: string) => {
+        const objectUrl = URL.createObjectURL(pdfBlob);
+        const previewWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+        if (!previewWindow) {
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = objectUrl;
+          link.click();
+        }
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      };
+
       // Wait for fonts to be fully loaded to ensure consistent typography
       await document.fonts.ready;
 
@@ -638,20 +680,20 @@ export default function App() {
         }
         
         if (forceDownload) {
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = imgData;
-          link.click();
-        } else if (navigator.share) {
+          downloadDataUrl(imgData, fileName);
+        } else if (isNativeShareAvailable) {
           try {
             const blob = await (await fetch(imgData)).blob();
             const file = new File([blob], fileName, { type: 'image/png' });
-            await navigator.share({
-              files: [file],
-              title: shareTitle,
-              text: shareText,
-              url: customShareUrl
-            });
+            if (canShareFile(file)) {
+              await navigator.share({
+                files: [file],
+                title: shareTitle,
+                text: withOptionalShareUrl(shareText)
+              });
+            } else {
+              downloadDataUrl(imgData, fileName);
+            }
           } catch (shareError: unknown) {
             const error = shareError as { name?: string; message?: string };
             const isCancellation = 
@@ -662,17 +704,11 @@ export default function App() {
             
             if (!isCancellation) {
               console.warn('Native share failed or blocked by host, falling back to download:', shareError);
-              const link = document.createElement('a');
-              link.download = fileName;
-              link.href = imgData;
-              link.click();
+              downloadDataUrl(imgData, fileName);
             }
           }
         } else {
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = imgData;
-          link.click();
+          downloadDataUrl(imgData, fileName);
         }
       } else {
         const imgData = canvas.toDataURL('image/png');
@@ -714,16 +750,19 @@ export default function App() {
 
         if (forceDownload) {
           pdf.save(fileName);
-        } else if (navigator.share) {
+        } else if (isNativeShareAvailable) {
           try {
             const pdfBlob = pdf.output('blob');
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            await navigator.share({
-              files: [file],
-              title: shareTitle,
-              text: shareText,
-              url: customShareUrl
-            });
+            if (canShareFile(file)) {
+              await navigator.share({
+                files: [file],
+                title: shareTitle,
+                text: withOptionalShareUrl(shareText)
+              });
+            } else {
+              previewOrDownloadPdf(pdfBlob, fileName);
+            }
           } catch (shareError: unknown) {
             const error = shareError as { name?: string; message?: string };
             const isCancellation = 
@@ -733,12 +772,14 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
-              pdf.save(fileName);
+              console.warn('Native share failed or blocked by host, falling back to preview/download:', shareError);
+              const pdfBlob = pdf.output('blob');
+              previewOrDownloadPdf(pdfBlob, fileName);
             }
           }
         } else {
-          pdf.save(fileName);
+          const pdfBlob = pdf.output('blob');
+          previewOrDownloadPdf(pdfBlob, fileName);
         }
       }
     } catch (error: unknown) {
