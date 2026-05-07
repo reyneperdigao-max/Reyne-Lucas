@@ -443,215 +443,38 @@ export default function App() {
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
     
-    const isElementVisible = (id: string) => {
-      const node = document.getElementById(id);
-      if (!node) return false;
-      const styles = window.getComputedStyle(node);
-      return styles.display !== 'none' && styles.visibility !== 'hidden' && styles.opacity !== '0';
-    };
-
     // Determine the element ID more robustly
     let elementId = customElementId;
     if (!elementId) {
-      // Always prioritize currently visible receipt modals to avoid wrong export targets.
-      if (viewingReceipt || isElementVisible('printable-receipt')) elementId = 'printable-receipt';
-      else if (viewingScheduleReceipt || isElementVisible('printable-schedule-receipt')) elementId = 'printable-schedule-receipt';
-      else if (viewingContract || isElementVisible('printable-contract')) elementId = 'printable-contract';
-      else if (activeTab === 'Relatórios' || isElementVisible('printable-report')) elementId = 'printable-report';
+      if (viewingContract) elementId = 'printable-contract';
+      else if (viewingScheduleReceipt) elementId = 'printable-schedule-receipt';
+      else if (viewingReceipt) elementId = 'printable-receipt';
+      else if (activeTab === 'Relatórios') elementId = 'printable-report';
       else elementId = 'printable-receipt'; // Final fallback
     }
 
     const element = document.getElementById(elementId);
     if (!element) return;
 
-    let hiddenElements: HTMLElement[] = [];
-    let originalDisplays: string[] = [];
-    setError(null);
     setIsGeneratingPDF(true);
     try {
-      const isNativeShareAvailable = typeof window !== 'undefined' &&
-        window.isSecureContext &&
-        typeof navigator !== 'undefined' &&
-        typeof navigator.share === 'function';
-      const shouldAttemptNativeFileShare = isNativeShareAvailable;
-      const captureTimeoutMs = 15000;
-      const isReceiptLike = elementId === 'printable-receipt' || elementId === 'printable-schedule-receipt';
-
-      const canShareFile = (file: File) => {
-        if (!isNativeShareAvailable) return false;
-        if (typeof navigator.canShare === 'function') {
-          try {
-            return navigator.canShare({ files: [file] });
-          } catch {
-            return false;
-          }
-        }
-        // Some browsers support share without exposing canShare.
-        return true;
-      };
-
-      const withOptionalShareUrl = (baseText: string) => {
-        if (!customShareUrl) return baseText;
-        return `${baseText}\n${customShareUrl}`;
-      };
-
-      const downloadDataUrl = (dataUrl: string, fileName: string) => {
-        const link = document.createElement('a');
-        link.download = fileName;
-        link.href = dataUrl;
-        link.click();
-      };
-
-      const previewOrDownloadPdf = (pdfBlob: Blob, fileName: string) => {
-        const objectUrl = URL.createObjectURL(pdfBlob);
-        const previewWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-        if (!previewWindow) {
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = objectUrl;
-          link.click();
-        }
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-      };
-
-      const previewOrDownloadImage = (imgData: string, fileName: string) => {
-        const previewWindow = window.open(imgData, '_blank', 'noopener,noreferrer');
-        if (!previewWindow) {
-          downloadDataUrl(imgData, fileName);
-        }
-      };
-
-      const shareOrDownloadPdfBlob = async (pdfBlob: Blob, fileName: string, shareTitle: string, shareText: string) => {
-        if (forceDownload) {
-          const url = URL.createObjectURL(pdfBlob);
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = url;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
-          return;
-        }
-
-        if (shouldAttemptNativeFileShare) {
-          try {
-            const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            if (canShareFile(file)) {
-              await navigator.share({
-                files: [file],
-                title: shareTitle,
-                text: withOptionalShareUrl(shareText)
-              });
-              return;
-            }
-          } catch (shareError: unknown) {
-            const error = shareError as { name?: string; message?: string };
-            const isCancellation =
-              error?.name === 'AbortError' ||
-              error?.message?.includes('cancellation') ||
-              error?.message?.includes('share was cancelled') ||
-              error?.message?.includes('Abort due to cancellation');
-            if (!isCancellation) {
-              console.warn('Native share failed, fallback to preview/download:', shareError);
-            } else {
-              return;
-            }
-          }
-        }
-
-        previewOrDownloadPdf(pdfBlob, fileName);
-      };
-
-      // Stable path for receipt sharing on Vercel/mobile: avoid html2canvas memory spikes.
-      if (isReceiptLike && format === 'pdf') {
-        const directPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        directPdf.setFillColor(0, 0, 0);
-        directPdf.rect(0, 0, 210, 297, 'F');
-        directPdf.setTextColor(250, 204, 21);
-        directPdf.setFont('helvetica', 'bold');
-        directPdf.setFontSize(18);
-        directPdf.text('COMPROVANTE NEXUS PRIVATE', 105, 28, { align: 'center' });
-        directPdf.setFontSize(11);
-        directPdf.setTextColor(255, 255, 255);
-
-        if (elementId === 'printable-receipt' && viewingReceipt) {
-          const amount = `R$ ${viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-          directPdf.text(`Cliente: ${viewingReceipt.clientName}`, 20, 60);
-          directPdf.text(`Valor: ${amount}`, 20, 75);
-          directPdf.text(`Data: ${safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}`, 20, 90);
-          directPdf.text(`Descricao: ${viewingReceipt.description}`, 20, 105, { maxWidth: 170 });
-          directPdf.text(`ID: ${viewingReceipt.id.toUpperCase()}-${new Date(viewingReceipt.date).getTime()}`, 20, 125, { maxWidth: 170 });
-        } else if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
-          const amount = `R$ ${viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-          directPdf.text(`Cliente: ${viewingScheduleReceipt.clientName}`, 20, 60);
-          directPdf.text(`Valor: ${amount}`, 20, 75);
-          directPdf.text(`Liberacao: ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}`, 20, 90);
-          directPdf.text(`Vencimento: ${safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}`, 20, 105);
-          directPdf.text(`ID: SCH-${viewingScheduleReceipt.id.toUpperCase()}-${new Date(viewingScheduleReceipt.createdAt || new Date()).getTime()}`, 20, 125, { maxWidth: 170 });
-        }
-
-        let fileName = elementId === 'printable-schedule-receipt' ? 'comprovante_agendamento.pdf' : 'comprovante.pdf';
-        const shareTitle = elementId === 'printable-schedule-receipt' ? 'Comprovante de Agendamento' : 'Comprovante Nexus Private';
-        const shareText = elementId === 'printable-schedule-receipt'
-          ? 'Segue o comprovante de agendamento Nexus Private.'
-          : 'Segue o comprovante de recebimento Nexus Private.';
-        const blob = directPdf.output('blob');
-        await shareOrDownloadPdfBlob(blob, fileName, shareTitle, shareText);
-        return;
-      }
-
-      const normalizeCanvasForExport = (source: HTMLCanvasElement) => {
-        // Prevent white-image/freeze on mobile by capping total pixels.
-        const maxPixels = 8_500_000;
-        const pixels = source.width * source.height;
-        if (pixels <= maxPixels) return source;
-        const ratio = Math.sqrt(maxPixels / pixels);
-        const targetWidth = Math.max(1, Math.floor(source.width * ratio));
-        const targetHeight = Math.max(1, Math.floor(source.height * ratio));
-        const resized = document.createElement('canvas');
-        resized.width = targetWidth;
-        resized.height = targetHeight;
-        const ctx = resized.getContext('2d');
-        if (!ctx) return source;
-        ctx.drawImage(source, 0, 0, targetWidth, targetHeight);
-        return resized;
-      };
-
-      const canvasToBlob = (source: HTMLCanvasElement, type: string, quality?: number) =>
-        new Promise<Blob>((resolve, reject) => {
-          source.toBlob((blob) => {
-            if (!blob) {
-              reject(new Error('CANVAS_BLOB_FAILED'));
-              return;
-            }
-            resolve(blob);
-          }, type, quality);
-        });
-
       // Wait for fonts to be fully loaded to ensure consistent typography
-      await Promise.race([
-        document.fonts.ready,
-        new Promise<void>(resolve => setTimeout(resolve, 1500))
-      ]);
-      // Extra delay to ensure style and layout are fully applied.
-      await new Promise<void>(resolve => setTimeout(resolve, 500));
-      // Let the browser paint the loading state before heavy capture work.
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      await document.fonts.ready;
 
       // Hide elements before capture
       const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
-      hiddenElements = Array.from(noPrintElements) as HTMLElement[];
+      const originalDisplays: string[] = [];
       noPrintElements.forEach(el => {
         originalDisplays.push((el as HTMLElement).style.display);
         (el as HTMLElement).style.display = 'none';
       });
 
-      const capturePromise = html2canvas(element, {
-        scale: 3,
+      const canvas = await html2canvas(element, {
+        scale: 3, 
         useCORS: true,
         logging: false,
-        backgroundColor: '#000000',
+        backgroundColor: '#ffffff',
         windowWidth: 1200,
-        imageTimeout: 8000,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
@@ -750,12 +573,12 @@ export default function App() {
               pointer-events: none !important;
             }
             
-            .bg-white { background-color: #000000 !important; }
+            .bg-white { background-color: #ffffff !important; }
             .bg-slate-900 { background-color: #0f172a !important; }
             .bg-slate-50 { background-color: #f8fafc !important; }
             .bg-black { background-color: #000000 !important; }
             
-            .text-slate-900 { color: #facc15 !important; }
+            .text-slate-900 { color: #0f172a !important; }
             .text-slate-600 { color: #475569 !important; }
             .text-slate-500 { color: #64748b !important; }
             .text-slate-400 { color: #94a3b8 !important; }
@@ -793,16 +616,13 @@ export default function App() {
         }
       });
 
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('CAPTURE_TIMEOUT')), captureTimeoutMs);
+      // Restore elements
+      noPrintElements.forEach((el, i) => {
+        (el as HTMLElement).style.display = originalDisplays[i];
       });
 
-      const canvas = await Promise.race([capturePromise, timeoutPromise]);
-
-      const exportCanvas = normalizeCanvasForExport(canvas);
-
       if (format === 'image') {
-        const imgData = exportCanvas.toDataURL('image/png', 1.0);
+        const imgData = canvas.toDataURL('image/png', 1.0);
         let fileName = 'comprovante.png';
         let shareTitle = 'Comprovante Nexus Private';
         let shareText = customShareText !== undefined ? customShareText : 'Segue o comprovante de recebimento Nexus Private.';
@@ -818,20 +638,20 @@ export default function App() {
         }
         
         if (forceDownload) {
-          downloadDataUrl(imgData, fileName);
-        } else if (shouldAttemptNativeFileShare) {
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = imgData;
+          link.click();
+        } else if (navigator.share) {
           try {
-            const blob = await canvasToBlob(exportCanvas, 'image/png');
+            const blob = await (await fetch(imgData)).blob();
             const file = new File([blob], fileName, { type: 'image/png' });
-            if (canShareFile(file)) {
-              await navigator.share({
-                files: [file],
-                title: shareTitle,
-                text: withOptionalShareUrl(shareText)
-              });
-            } else {
-              downloadDataUrl(imgData, fileName);
-            }
+            await navigator.share({
+              files: [file],
+              title: shareTitle,
+              text: shareText,
+              url: customShareUrl
+            });
           } catch (shareError: unknown) {
             const error = shareError as { name?: string; message?: string };
             const isCancellation = 
@@ -841,16 +661,22 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.warn('Native share failed or blocked by host, falling back to preview/download:', shareError);
-              previewOrDownloadImage(imgData, fileName);
+              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
+              const link = document.createElement('a');
+              link.download = fileName;
+              link.href = imgData;
+              link.click();
             }
           }
         } else {
-          previewOrDownloadImage(imgData, fileName);
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = imgData;
+          link.click();
         }
       } else {
-        const imgData = exportCanvas.toDataURL('image/jpeg', 0.96);
-        const imgProps = { width: exportCanvas.width, height: exportCanvas.height };
+        const imgData = canvas.toDataURL('image/png');
+        const imgProps = { width: canvas.width, height: canvas.height };
         const pdfWidth = 210;
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
         
@@ -888,19 +714,16 @@ export default function App() {
 
         if (forceDownload) {
           pdf.save(fileName);
-        } else if (shouldAttemptNativeFileShare) {
+        } else if (navigator.share) {
           try {
             const pdfBlob = pdf.output('blob');
             const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-            if (canShareFile(file)) {
-              await navigator.share({
-                files: [file],
-                title: shareTitle,
-                text: withOptionalShareUrl(shareText)
-              });
-            } else {
-              previewOrDownloadPdf(pdfBlob, fileName);
-            }
+            await navigator.share({
+              files: [file],
+              title: shareTitle,
+              text: shareText,
+              url: customShareUrl
+            });
           } catch (shareError: unknown) {
             const error = shareError as { name?: string; message?: string };
             const isCancellation = 
@@ -910,14 +733,12 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.warn('Native share failed or blocked by host, falling back to preview/download:', shareError);
-              const pdfBlob = pdf.output('blob');
-              previewOrDownloadPdf(pdfBlob, fileName);
+              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
+              pdf.save(fileName);
             }
           }
         } else {
-          const pdfBlob = pdf.output('blob');
-          previewOrDownloadPdf(pdfBlob, fileName);
+          pdf.save(fileName);
         }
       }
     } catch (error: unknown) {
@@ -929,75 +750,9 @@ export default function App() {
         err?.message?.includes('Abort due to cancellation');
       
       if (!isCancellation) {
-        const isReceiptLike = elementId === 'printable-receipt' || elementId === 'printable-schedule-receipt';
-        const isOklabParsingError = !!err?.message?.toLowerCase().includes('unsupported color function "oklab"');
-        if (format === 'pdf' && isReceiptLike && isOklabParsingError) {
-          try {
-            const fallbackPdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            fallbackPdf.setFillColor(0, 0, 0);
-            fallbackPdf.rect(0, 0, 210, 297, 'F');
-            fallbackPdf.setFont('helvetica', 'bold');
-            fallbackPdf.setTextColor(250, 204, 21);
-            fallbackPdf.setFontSize(18);
-            fallbackPdf.text('COMPROVANTE NEXUS PRIVATE', 105, 28, { align: 'center' });
-            fallbackPdf.setFontSize(11);
-            fallbackPdf.setTextColor(255, 255, 255);
-
-            let fileName = 'comprovante.pdf';
-            let shareTitle = 'Comprovante Nexus Private';
-            let shareText = 'Segue o comprovante de recebimento Nexus Private.';
-
-            if (elementId === 'printable-receipt' && viewingReceipt) {
-              const amount = `R$ ${viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-              fallbackPdf.text(`Cliente: ${viewingReceipt.clientName}`, 20, 60);
-              fallbackPdf.text(`Valor: ${amount}`, 20, 75);
-              fallbackPdf.text(`Data: ${safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}`, 20, 90);
-              fallbackPdf.text(`Descricao: ${viewingReceipt.description}`, 20, 105, { maxWidth: 170 });
-            } else if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
-              fileName = 'comprovante_agendamento.pdf';
-              shareTitle = 'Comprovante de Agendamento';
-              shareText = 'Segue o comprovante de agendamento Nexus Private.';
-              const amount = `R$ ${viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-              fallbackPdf.text(`Cliente: ${viewingScheduleReceipt.clientName}`, 20, 60);
-              fallbackPdf.text(`Valor: ${amount}`, 20, 75);
-              fallbackPdf.text(`Liberacao: ${safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}`, 20, 90);
-              fallbackPdf.text(`Vencimento: ${safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}`, 20, 105);
-            }
-
-            const blob = fallbackPdf.output('blob');
-            const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-            if (!forceDownload && canShare) {
-              const file = new File([blob], fileName, { type: 'application/pdf' });
-              const canShareFile = typeof navigator.canShare === 'function' ? navigator.canShare({ files: [file] }) : true;
-              if (canShareFile) {
-                await navigator.share({ files: [file], title: shareTitle, text: shareText });
-                return;
-              }
-            }
-
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = fileName;
-            link.href = url;
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
-            return;
-          } catch (recoveryError) {
-            console.error('Erro na recuperação de compartilhamento:', recoveryError);
-          }
-        }
-
-        if (err?.message?.includes('CAPTURE_TIMEOUT')) {
-          setError('A geração do comprovante excedeu o tempo limite neste dispositivo. Tente novamente em "Imprimir".');
-        } else {
-          setError('Falha ao compartilhar o comprovante. Tente novamente.');
-        }
         console.error('Erro ao gerar PDF:', error);
       }
     } finally {
-      hiddenElements.forEach((el, i) => {
-        el.style.display = originalDisplays[i] ?? '';
-      });
       setIsGeneratingPDF(false);
     }
   };
@@ -2391,9 +2146,9 @@ export default function App() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               className="flex items-center gap-4"
             >
-              <div className="w-12 h-12 rounded-2xl nexus-logo-bg flex items-center justify-center shadow-2xl shadow-brand-primary/20 p-2.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-primary to-indigo-600 flex items-center justify-center shadow-2xl shadow-brand-primary/20 p-2.5">
                 <div className="w-full h-full border-2 border-white/20 rounded-lg flex items-center justify-center">
-                  <span className="nexus-logo-text font-black text-xl italic tracking-tighter">NP</span>
+                  <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
                 </div>
               </div>
               <div>
@@ -2459,8 +2214,8 @@ export default function App() {
           >
             {/* Mobile Header Branding */}
             <div className="lg:hidden flex flex-col items-center mb-10">
-              <div className="w-16 h-16 rounded-2xl nexus-logo-bg p-3.5 shadow-2xl shadow-brand-primary/30 flex items-center justify-center mb-4">
-                <span className="nexus-logo-text font-black text-2xl italic tracking-tighter">NP</span>
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-primary to-indigo-600 p-3.5 shadow-2xl shadow-brand-primary/30 flex items-center justify-center mb-4">
+                <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
               </div>
               <h3 className={cn("text-xl font-black tracking-tight", splashIsDark ? "text-white" : "text-slate-900")}>
                 Nexus Private
@@ -2607,11 +2362,15 @@ export default function App() {
             {userProfile?.profilePicture ? (
               <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
             ) : (
-            <div className="w-10 h-10 rounded-xl nexus-logo-bg flex items-center justify-center p-2 shadow-lg shadow-brand-primary/20">
-              <div className="w-full h-full border border-white/20 rounded flex items-center justify-center">
-                <span className="nexus-logo-text font-black text-xs italic tracking-tighter">NP</span>
-              </div>
-            </div>
+              <img 
+                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=64&h=64&fit=crop" 
+                className={cn(
+                  "w-10 h-10 rounded-xl object-cover transition-all",
+                  isDark ? "grayscale" : ""
+                )} 
+                alt="Nexus Logo"
+                referrerPolicy="no-referrer"
+              />
             )}
           </div>
           {!isSidebarCollapsed && (
@@ -3952,7 +3711,7 @@ export default function App() {
                                   ) : (
                                     <Share2 className="w-5 h-5" />
                                   )}
-                                  <span>{isGeneratingPDF ? 'Gerando...' : 'Exportar Relatório Geral'}</span>
+                                  <span>Exportar Relatório Geral</span>
                                 </button>
                                 <button
                                   onClick={() => shareAsPDF(true, 'pdf')}
@@ -5684,10 +5443,13 @@ export default function App() {
             <div id="printable-contract" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 nexus-logo-bg flex items-center justify-center rounded-3xl mb-6 shadow-xl p-4">
-                  <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
-                    <span className="nexus-logo-text font-black text-3xl italic tracking-tighter">NP</span>
-                  </div>
+                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                  <img 
+                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
+                    className="w-full h-full object-cover grayscale brightness-125" 
+                    alt="Nexus Logo"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -6065,10 +5827,13 @@ export default function App() {
             <div id="printable-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative flex-1">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 nexus-logo-bg flex items-center justify-center rounded-3xl mb-6 shadow-xl p-4">
-                  <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
-                    <span className="nexus-logo-text font-black text-3xl italic tracking-tighter">NP</span>
-                  </div>
+                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                  <img 
+                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
+                    className="w-full h-full object-cover grayscale brightness-125" 
+                    alt="Nexus Logo"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -6181,10 +5946,13 @@ export default function App() {
             <div id="printable-schedule-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 nexus-logo-bg flex items-center justify-center rounded-3xl mb-6 shadow-xl p-4">
-                  <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
-                    <span className="nexus-logo-text font-black text-3xl italic tracking-tighter">NP</span>
-                  </div>
+                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                  <img 
+                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
+                    className="w-full h-full object-cover grayscale brightness-125" 
+                    alt="Nexus Logo"
+                    referrerPolicy="no-referrer"
+                  />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -6292,10 +6060,8 @@ export default function App() {
         >
           {/* Header */}
           <div className="flex flex-col items-center mb-12">
-            <div className="w-24 h-24 nexus-logo-bg rounded-[32px] flex items-center justify-center mb-6 shadow-2xl p-5">
-              <div className="w-full h-full border-2 border-white/20 rounded-2xl flex items-center justify-center">
-                <span className="nexus-logo-text font-black text-4xl italic tracking-tighter">NP</span>
-              </div>
+            <div className="w-24 h-24 bg-black rounded-[32px] flex items-center justify-center mb-6 shadow-2xl">
+              <QrCode className="w-12 h-12 text-[#6366f1]" />
             </div>
             <h1 className="text-4xl font-black uppercase tracking-tighter text-black">Pagamento PIX</h1>
             <p className="text-slate-400 font-bold uppercase tracking-[0.4em] text-xs mt-2">Nexus Private</p>

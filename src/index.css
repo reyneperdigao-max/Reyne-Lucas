@@ -307,14 +307,6 @@
   display: block !important;
 }
 
-.nexus-logo-bg {
-  background: linear-gradient(135deg, #FFD700 0%, #4F46E5 100%) !important;
-}
-
-.nexus-logo-text {
-  color: #ffffff !important;
-}
-
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
