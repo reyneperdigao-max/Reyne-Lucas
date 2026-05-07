@@ -119,7 +119,7 @@ service cloud.firestore {
       return data.keys().hasAll(requiredFields) &&
              data.whatsappTemplate is string && data.whatsappTemplate.size() <= 2000 &&
              data.defaultInterestRate is number &&
-             data.accentColor in ['yellow', 'green', 'blue'];
+             data.accentColor in ['yellow', 'green', 'blue', 'violet', 'red'];
     }
 
     // ==========================================

@@ -125,7 +125,7 @@
       "properties": {
         "whatsappTemplate": { "type": "string" },
         "defaultInterestRate": { "type": "number" },
-        "accentColor": { "type": "string", "enum": ["yellow", "green", "blue"] }
+        "accentColor": { "type": "string", "enum": ["yellow", "green", "blue", "violet", "red"] }
       },
       "required": ["whatsappTemplate", "defaultInterestRate", "accentColor"]
     }
