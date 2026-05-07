@@ -243,7 +243,7 @@ export default function App() {
     const saved = localStorage.getItem('nexus_privacy_mode');
     return saved === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações'>('Principal');
+  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações'>('Principal');
   const [activeReportTab, setActiveReportTab] = useState<'mensal' | 'fechamentos'>('mensal');
   const [previousTab, setPreviousTab] = useState<typeof activeTab>('Principal');
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -322,7 +322,6 @@ export default function App() {
   const [newPixName, setNewPixName] = useState('');
   const [newPixBank, setNewPixBank] = useState('');
   const [newProfilePicture, setNewProfilePicture] = useState<string | null>(null);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('nexus_sidebar_collapsed');
@@ -1869,15 +1868,6 @@ export default function App() {
     };
   }, [actions, loans, reportMonth, reportYear]);
 
-  const confirmAction = async (actionId: string) => {
-    try {
-      await updateDoc(doc(db, 'actions', actionId), {
-        confirmed: true
-      });
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `actions/${actionId}`);
-    }
-  };
 
   const notifications = useMemo(() => {
     const list: {
@@ -2336,6 +2326,7 @@ export default function App() {
     { id: 'Clientes', label: 'Clientes', icon: Users },
     { id: 'Transações', label: 'Transações', icon: Wallet },
     { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
+    { id: 'Notificações', label: 'Alertas', icon: Bell },
     { id: 'Relatórios', label: 'Relatórios', icon: FileText },
     { id: 'Configurações', label: 'Configurações', icon: Settings },
   ];
@@ -2621,106 +2612,18 @@ export default function App() {
 
               <div className="relative">
                 <button 
-                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  onClick={() => changeTab('Notificações')}
                   className={cn(
                     "p-2 sm:p-3 hover:bg-brand-primary/10 rounded-xl sm:rounded-2xl transition-all active:scale-90 border border-transparent hover:border-brand-primary/20 relative group",
-                    isNotificationsOpen ? "text-brand-primary bg-brand-primary/10 border-brand-primary/20" : "text-slate-400"
+                    activeTab === 'Notificações' ? "text-brand-primary bg-brand-primary/10 border-brand-primary/20" : "text-slate-400"
                   )}
                   title="Notificações"
                 >
-                  <Bell className={cn("w-4 h-4 sm:w-5 sm:h-5 transition-transform", isNotificationsOpen && "rotate-12")} />
+                  <Bell className={cn("w-4 h-4 sm:w-5 sm:h-5 transition-transform", activeTab === 'Notificações' && "rotate-12")} />
                   {notifications.length > 0 && (
                     <span className="absolute top-2 right-2 w-2 h-2 bg-brand-danger rounded-full border-2 border-white dark:border-black animate-pulse" />
                   )}
                 </button>
-
-                {isNotificationsOpen && (
-                  <>
-                    <div className="fixed inset-0 z-[45]" onClick={() => setIsNotificationsOpen(false)} />
-                    <div className={cn(
-                      "absolute right-0 top-full mt-2 w-72 sm:w-80 max-h-[400px] overflow-y-auto rounded-3xl border shadow-2xl z-[50] animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200",
-                      isDark ? "bg-black border-white/10" : "bg-white border-slate-200"
-                    )}>
-                      <div className="p-5 border-b border-white/5 flex items-center justify-between sticky top-0 bg-inherit z-10">
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Notificações</span>
-                        {notifications.length > 0 && (
-                          <span className="bg-brand-danger text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-lg shadow-brand-danger/20">
-                            {notifications.length} Alertas
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="divide-y divide-white/5 pb-2">
-                        {notifications.length === 0 ? (
-                          <div className="p-10 text-center">
-                            <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                              <Check className="w-6 h-6" />
-                            </div>
-                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Tudo em dia!</p>
-                            <p className="text-[10px] text-slate-500 mt-1">Nenhum alerta pendente no momento.</p>
-                          </div>
-                        ) : (
-                          notifications.map((n) => (
-                            <div key={n.id} className="p-4 hover:bg-white/[0.02] transition-colors relative">
-                              <div className="flex items-start gap-4">
-                                <div className={cn(
-                                  "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-inner",
-                                  n.type === 'overdue' ? "bg-brand-danger/10 text-brand-danger" :
-                                  n.type === 'upcoming' ? "bg-brand-primary/10 text-brand-primary" :
-                                  "bg-brand-accent/10 text-brand-accent"
-                                )}>
-                                  {n.type === 'overdue' ? <AlertCircle className="w-5 h-5" /> :
-                                   n.type === 'upcoming' ? <Clock className="w-4 h-4" /> :
-                                   <History className="w-4 h-4" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start mb-0.5">
-                                    <h4 className={cn("text-[10px] font-black underline decoration-2 decoration-current/10 underline-offset-4 uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{n.title}</h4>
-                                    <span className="text-[8px] text-slate-500 font-bold uppercase">{safeFormatDate(n.date, 'dd/MM')}</span>
-                                  </div>
-                                  <p className="text-[11px] leading-relaxed text-slate-500 mt-1 mb-3">{n.message}</p>
-                                  
-                                  <div className="flex items-center gap-2">
-                                    {n.type === 'pending_payment' ? (
-                                      <button 
-                                        onClick={() => {
-                                          confirmAction(n.item.id);
-                                          markNotificationAsRead(n.id);
-                                          setIsNotificationsOpen(false);
-                                        }}
-                                        className="text-[9px] font-black uppercase tracking-widest bg-brand-accent text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5"
-                                      >
-                                        <Check className="w-3 h-3" /> Confirmar
-                                      </button>
-                                    ) : (
-                                      <button 
-                                        onClick={() => {
-                                          if (n.item.status === 'Agendado') {
-                                            changeTab('Agendados');
-                                            setShowOnlyOverdue(false);
-                                          } else {
-                                            changeTab('Empréstimos');
-                                            if (n.type === 'overdue') setShowOnlyOverdue(true);
-                                          }
-                                          setCommand(n.item.clientName);
-                                          markNotificationAsRead(n.id);
-                                          setIsNotificationsOpen(false);
-                                        }}
-                                        className="text-[9px] font-black uppercase tracking-widest bg-brand-primary text-black px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5"
-                                      >
-                                        Ver Detalhes <ChevronRight className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
             </div>
           </div>
@@ -3893,6 +3796,123 @@ export default function App() {
                     )}
                   </AnimatePresence>
                 </motion.div>
+              ) : activeTab === 'Notificações' ? (
+                <motion.div 
+                  key="tab-notifications"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-8"
+                >
+                  <div className={cn(
+                    "p-8 sm:p-12 rounded-[40px] flex flex-col sm:flex-row items-center justify-between gap-6",
+                    isDark ? "bg-white/5 border border-white/5" : "bg-white shadow-xl shadow-slate-200/50 border border-slate-100"
+                  )}>
+                    <div className="flex items-center gap-6">
+                      <div className="w-16 h-16 rounded-[24px] bg-brand-primary/10 flex items-center justify-center">
+                        <Bell className="w-8 h-8 text-brand-primary" />
+                      </div>
+                      <div>
+                        <h2 className={cn("text-2xl sm:text-3xl font-black tracking-tight", isDark ? "text-white" : "text-slate-900")}>Central de Alertas</h2>
+                        <p className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] mt-1">Nexus Private Intelligence</p>
+                      </div>
+                    </div>
+                    {notifications.length > 0 && (
+                      <button 
+                        onClick={() => {
+                          notifications.forEach(n => markNotificationAsRead(n.id));
+                        }}
+                        className="text-[10px] font-black text-brand-primary uppercase tracking-[0.2em] hover:underline"
+                      >
+                        Arquivar Todas
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid gap-6">
+                    {notifications.length === 0 ? (
+                      <div className={cn(
+                        "p-12 sm:p-20 rounded-[40px] text-center border-2 border-dashed",
+                        isDark ? "border-white/5" : "border-slate-100 bg-white"
+                      )}>
+                        <div className="w-24 h-24 rounded-full border-4 border-dashed border-slate-500/20 mb-8 flex items-center justify-center mx-auto">
+                          <Check className="w-10 h-10 text-emerald-500 opacity-50" />
+                        </div>
+                        <h3 className={cn("text-xl font-bold mb-2", isDark ? "text-white" : "text-slate-900")}>Sistema em Compliance</h3>
+                        <p className="text-slate-500 text-sm max-w-xs mx-auto font-medium">Não há notificações ou atrasos registrados no momento.</p>
+                      </div>
+                    ) : (
+                      notifications.map((n) => (
+                        <motion.div 
+                          layout
+                          key={n.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className={cn(
+                            "group relative p-8 sm:p-10 rounded-[40px] border transition-all",
+                            isDark ? "bg-white/5 border-white/5 hover:bg-white/[0.08]" : "bg-white border-slate-100 hover:shadow-xl hover:shadow-slate-200/50"
+                          )}
+                        >
+                          <div className="flex flex-col sm:flex-row items-start gap-8">
+                            <div className={cn(
+                              "w-16 h-16 rounded-[24px] flex items-center justify-center flex-shrink-0 shadow-lg",
+                              n.type === 'overdue' ? "bg-rose-500/10 text-rose-500 shadow-rose-500/10" : "bg-brand-primary/10 text-brand-primary shadow-brand-primary/10"
+                            )}>
+                              {n.type === 'overdue' ? <AlertTriangle className="w-8 h-8" /> : <Calendar className="w-8 h-8" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
+                                <div className="flex items-center gap-4">
+                                  <h4 className={cn("text-xl font-black tracking-tight uppercase", isDark ? "text-white" : "text-slate-900")}>{n.item.clientName}</h4>
+                                  <span className={cn(
+                                    "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
+                                    n.type === 'overdue' ? "bg-rose-500/20 text-rose-500" : "bg-brand-primary/20 text-brand-primary"
+                                  )}>
+                                    {n.type === 'overdue' ? 'Atrasado' : 'Vencimento'}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-black text-slate-500 bg-white/5 dark:bg-black/10 px-4 py-2 rounded-xl tabular-nums">
+                                  {safeFormatDate(n.date, 'dd/MM/yyyy')}
+                                </span>
+                              </div>
+                              <p className={cn("text-base leading-relaxed mb-8 font-medium", isDark ? "text-slate-400" : "text-slate-600")}>
+                                {n.message}
+                              </p>
+                              
+                              <div className="flex flex-col sm:flex-row items-center gap-4">
+                                <button 
+                                  onClick={() => {
+                                    if (n.item.status === 'Agendado') {
+                                      changeTab('Agendados');
+                                    } else {
+                                      changeTab('Empréstimos');
+                                      if (n.type === 'overdue') setShowOnlyOverdue(true);
+                                    }
+                                    setCommand(n.item.clientName);
+                                    markNotificationAsRead(n.id);
+                                  }}
+                                  className="w-full sm:w-auto px-8 py-4 bg-brand-primary text-black rounded-[24px] text-[12px] font-black uppercase tracking-widest hover:shadow-xl hover:shadow-brand-primary/30 transition-all active:scale-95"
+                                >
+                                  Gerenciar Contrato
+                                </button>
+                                <button 
+                                  onClick={() => markNotificationAsRead(n.id)}
+                                  className={cn(
+                                    "w-full sm:w-auto px-8 py-4 rounded-[24px] text-[12px] font-black uppercase tracking-widest transition-all active:scale-95 border",
+                                    isDark ? "bg-white/5 text-slate-300 border-white/10 hover:bg-white/10 hover:text-white" : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"
+                                  )}
+                                >
+                                  Arquivar Alerta
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
               ) : activeTab === 'Configurações' ? (
                 <motion.div 
                   key="tab-configuracoes"
@@ -4784,12 +4804,12 @@ export default function App() {
                             <>
                               <div className="w-20 h-20 border-4 border-brand-primary/20 border-t-brand-primary rounded-full animate-spin" />
                               <h3 className="text-xl font-bold text-white tracking-tight">
-                                {pendingPayment.method === 'PIX' ? 'Monitorando PIX...' : 'Registrando...'}
+                                {pendingPayment.method === 'PIX' ? 'Monitorando PIX...' : 'Processando Dinheiro...'}
                               </h3>
                               <p className="text-slate-400 text-sm">
                                 {pendingPayment.method === 'PIX' 
                                   ? `Verificando recebimento de R$ ${pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                                  : 'Salvando informações no banco de dados...'
+                                  : `Registrando recebimento físico de R$ ${pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
                                 }
                               </p>
                             </>
