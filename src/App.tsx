@@ -523,6 +523,8 @@ export default function App() {
         document.fonts.ready,
         new Promise<void>(resolve => setTimeout(resolve, 1500))
       ]);
+      // Let the browser paint the loading state before heavy capture work.
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       // Hide elements before capture
       const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
@@ -533,7 +535,7 @@ export default function App() {
       });
 
       const canvas = await html2canvas(element, {
-        scale: shouldUseLightCapture ? 2 : 3, 
+        scale: shouldUseLightCapture ? 1.5 : 3,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -569,22 +571,24 @@ export default function App() {
             });
           }
           
-          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
-          styleTags.forEach(tag => {
-            try {
-              let css = tag.innerHTML;
-              if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
-                css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
-                css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
-                  const parts = match.split(':');
-                  return parts.length >= 2 ? `${parts[0]}: #777777` : match;
-                });
-                tag.innerHTML = css;
+          if (!shouldUseLightCapture) {
+            const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
+            styleTags.forEach(tag => {
+              try {
+                let css = tag.innerHTML;
+                if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
+                  css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
+                  css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
+                    const parts = match.split(':');
+                    return parts.length >= 2 ? `${parts[0]}: #777777` : match;
+                  });
+                  tag.innerHTML = css;
+                }
+              } catch (e) {
+                console.warn('Could not sanitize style tag', e);
               }
-            } catch (e) {
-              console.warn('Could not sanitize style tag', e);
-            }
-          });
+            });
+          }
 
           const style = clonedDoc.createElement('style');
           style.innerHTML = `
@@ -651,31 +655,33 @@ export default function App() {
           `;
           clonedDoc.head.appendChild(style);
 
-          const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
-          styledElements.forEach(el => {
-            const htmlEl = el as HTMLElement;
-            const styleAttr = htmlEl.getAttribute('style');
-            if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
-              htmlEl.setAttribute('style', styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777'));
-            }
-            if (htmlEl.style) {
-              htmlEl.style.boxShadow = 'none';
-              htmlEl.style.textShadow = 'none';
-              htmlEl.style.filter = 'none';
-              htmlEl.style.transition = 'none';
-              htmlEl.style.animation = 'none';
-              
-              if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
-                htmlEl.style.backgroundImage = 'none';
-                htmlEl.style.backgroundColor = '#000000';
+          if (!shouldUseLightCapture) {
+            const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
+            styledElements.forEach(el => {
+              const htmlEl = el as HTMLElement;
+              const styleAttr = htmlEl.getAttribute('style');
+              if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
+                htmlEl.setAttribute('style', styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777'));
               }
+              if (htmlEl.style) {
+                htmlEl.style.boxShadow = 'none';
+                htmlEl.style.textShadow = 'none';
+                htmlEl.style.filter = 'none';
+                htmlEl.style.transition = 'none';
+                htmlEl.style.animation = 'none';
+                
+                if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
+                  htmlEl.style.backgroundImage = 'none';
+                  htmlEl.style.backgroundColor = '#000000';
+                }
 
-              if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
-                htmlEl.style.backgroundImage = 'none';
-                htmlEl.style.backgroundColor = '#000000';
+                if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
+                  htmlEl.style.backgroundImage = 'none';
+                  htmlEl.style.backgroundColor = '#000000';
+                }
               }
-            }
-          });
+            });
+          }
         }
       });
 
