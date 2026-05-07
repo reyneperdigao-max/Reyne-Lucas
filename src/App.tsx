@@ -464,6 +464,8 @@ export default function App() {
         typeof navigator.share === 'function';
       const isVercelHost = typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app');
       const shouldAttemptNativeFileShare = isNativeShareAvailable && !isVercelHost;
+      const shouldUseLightCapture = typeof navigator !== 'undefined' &&
+        (isVercelHost || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
 
       const canShareFile = (file: File) => {
         if (!isNativeShareAvailable) return false;
@@ -491,6 +493,15 @@ export default function App() {
       };
 
       const previewOrDownloadPdf = (pdfBlob: Blob, fileName: string) => {
+        if (isVercelHost) {
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = URL.createObjectURL(pdfBlob);
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+          return;
+        }
+
         const objectUrl = URL.createObjectURL(pdfBlob);
         const previewWindow = window.open(objectUrl, '_blank', 'noopener,noreferrer');
         if (!previewWindow) {
@@ -503,14 +514,15 @@ export default function App() {
       };
 
       const previewOrDownloadImage = (imgData: string, fileName: string) => {
-        const previewWindow = window.open(imgData, '_blank', 'noopener,noreferrer');
-        if (!previewWindow) {
-          downloadDataUrl(imgData, fileName);
-        }
+        // Opening large data URLs can freeze some browsers on Vercel/mobile.
+        downloadDataUrl(imgData, fileName);
       };
 
       // Wait for fonts to be fully loaded to ensure consistent typography
-      await document.fonts.ready;
+      await Promise.race([
+        document.fonts.ready,
+        new Promise<void>(resolve => setTimeout(resolve, 1500))
+      ]);
 
       // Hide elements before capture
       const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
@@ -521,7 +533,7 @@ export default function App() {
       });
 
       const canvas = await html2canvas(element, {
-        scale: 3, 
+        scale: shouldUseLightCapture ? 2 : 3, 
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
