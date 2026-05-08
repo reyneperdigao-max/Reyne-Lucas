@@ -39,7 +39,6 @@ import {
   User as UserIcon,
   AlertTriangle,
   CheckCircle2,
-  Palette,
   Database,
   Download,
   Eye,
@@ -67,7 +66,7 @@ import {
   EmailAuthProvider,
   reauthenticateWithCredential
 } from 'firebase/auth';
-import { format, addMonths, parseISO, startOfDay } from 'date-fns';
+import { format, addMonths, addDays, parseISO, startOfDay, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -279,9 +278,10 @@ export default function App() {
     name: string, 
     phone: string, 
     address: string, 
-    totalCapital: number, 
-    loanCount: number, 
-    activeDebt: number 
+    activeCapital: number, 
+    activeDebt: number, 
+    loanCount: number,
+    totalLoans: number 
   } | null>(null);
 
   useEffect(() => {
@@ -311,10 +311,11 @@ export default function App() {
     profilePicture?: string,
     lastClosureDate?: string | null 
   } | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  const [theme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('nexus_theme');
     return (saved as 'light' | 'dark') || 'dark';
   });
+  const isDark = theme === 'dark';
   const [newDisplayName, setNewDisplayName] = useState('');
   const [pixCopied, setPixCopied] = useState(false);
 
@@ -450,6 +451,7 @@ export default function App() {
       else if (viewingScheduleReceipt) elementId = 'printable-schedule-receipt';
       else if (viewingReceipt) elementId = 'printable-receipt';
       else if (activeTab === 'Relatórios') elementId = 'printable-report';
+      else if (activeTab === 'Pagamento') elementId = 'printable-pix';
       else elementId = 'printable-receipt'; // Final fallback
     }
 
@@ -460,6 +462,9 @@ export default function App() {
     try {
       // Wait for fonts to be fully loaded to ensure consistent typography
       await document.fonts.ready;
+      
+      // Small delay to ensure all layout and styles are stabilized before capture
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       // Hide elements before capture
       const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
@@ -470,11 +475,11 @@ export default function App() {
       });
 
       const canvas = await html2canvas(element, {
-        scale: 3, 
+        scale: 2, 
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 1200,
+        imageTimeout: 15000, // Increase timeout for images
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
@@ -486,15 +491,18 @@ export default function App() {
             clonedElement.style.position = 'relative';
             clonedElement.style.left = '0';
             clonedElement.style.top = '0';
-            clonedElement.style.width = '800px';
+            clonedElement.style.width = '1000px';
             clonedElement.style.padding = '80px'; 
             clonedElement.style.display = 'block';
+            clonedElement.style.backgroundColor = '#ffffff';
+            clonedElement.style.color = '#0f172a';
+            clonedElement.style.borderRadius = '0'; // Flat for capture
             
             // Force bold weights for html2canvas to ensure they are captured
             const boldElements = clonedElement.querySelectorAll('.font-bold, .font-extrabold, .font-black, b, strong');
             boldElements.forEach(el => {
               if (el instanceof HTMLElement) {
-                el.style.fontWeight = '700';
+                el.style.fontWeight = '800';
               }
             });
 
@@ -510,12 +518,39 @@ export default function App() {
           styleTags.forEach(tag => {
             try {
               let css = tag.innerHTML;
+              // Remove ALL oklch and oklab occurrences, mapping known ones first
               if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
-                css = css.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777');
-                css = css.replace(/--[\w-]+\s*:\s*[^;}]+(oklch|oklab)[^;}]*/gi, (match) => {
-                  const parts = match.split(':');
-                  return parts.length >= 2 ? `${parts[0]}: #777777` : match;
+                const colorMap: Record<string, string> = {
+                  'oklch(0.129 0.042 264.695)': '#0f172a',
+                  'oklch(0.208 0.042 265.755)': '#1e293b',
+                  'oklch(0.279 0.041 260.031)': '#334155',
+                  'oklch(0.371 0.027 261.221)': '#475569',
+                  'oklch(0.446 0.03 256.802)': '#64748b',
+                  'oklch(0.614 0.225 25.74)': getAccentColorHex(),
+                  'oklch(0.615 0.165 159.252)': '#059669',
+                  'oklch(0.61 0.25 24.3)': '#ff3131',
+                  'oklch(0.627 0.265 14.5)': '#ff4d4d',
+                  'oklch(0.704 0.191 22.216)': '#fca5a5',
+                  'oklch(1 0 0)': '#ffffff',
+                  'oklch(0 0 0)': '#000000',
+                };
+
+                Object.entries(colorMap).forEach(([oklch, hex]) => {
+                  css = css.replace(new RegExp(oklch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), hex);
                 });
+
+                // Fallback for any remaining oklch/oklab - very thorough regex
+                css = css.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
+                  const matchParts = match.match(/[\d.]+/g);
+                  if (matchParts && matchParts.length > 0) {
+                    const l = parseFloat(matchParts[0]);
+                    const gray = Math.round(Math.min(1, Math.max(0, l)) * 255);
+                    const hexValue = gray.toString(16).padStart(2, '0');
+                    return `#${hexValue}${hexValue}${hexValue}`;
+                  }
+                  return '#000000';
+                });
+                
                 tag.innerHTML = css;
               }
             } catch (e) {
@@ -541,17 +576,20 @@ export default function App() {
               --color-emerald-600: #059669 !important;
               --color-brand-primary: ${getAccentColorHex()} !important;
               --color-brand-danger: #ff4d4d !important;
+              --color-neon-red: #ff3131 !important;
             }
             * {
-              box-shadow: none !important;
-              text-shadow: none !important;
               transition: none !important;
               animation: none !important;
+              border-color: inherit;
               -webkit-font-smoothing: antialiased !important;
+              box-shadow: none !important;
+              text-shadow: none !important;
             }
             body, .printable-content, .printable-content * {
               font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif !important;
               color-scheme: light !important;
+              color: #0f172a !important;
               background-image: none !important;
               visibility: visible !important;
             }
@@ -569,22 +607,55 @@ export default function App() {
               width: 0 !important;
               margin: 0 !important;
               padding: 0 !important;
-              opacity: 0 !important;
-              pointer-events: none !important;
             }
             
             .bg-white { background-color: #ffffff !important; }
             .bg-slate-900 { background-color: #0f172a !important; }
             .bg-slate-50 { background-color: #f8fafc !important; }
             .bg-black { background-color: #000000 !important; }
+            .bg-\\[\\#0a0a0a\\] { background-color: #0a0a0a !important; }
             
             .text-slate-900 { color: #0f172a !important; }
             .text-slate-600 { color: #475569 !important; }
             .text-slate-500 { color: #64748b !important; }
             .text-slate-400 { color: #94a3b8 !important; }
             .text-white { color: #ffffff !important; }
+            .text-slate-100 { color: #f1f5f9 !important; }
             .text-brand-primary { color: ${getAccentColorHex()} !important; }
-            .text-neon-red { color: #ff3131 !important; text-shadow: none !important; }
+            .text-neon-red { color: #ff3131 !important; }
+            .text-emerald-600 { color: #059669 !important; }
+            .bg-emerald-600 { background-color: #059669 !important; }
+            .bg-brand-primary { background-color: ${getAccentColorHex()} !important; }
+            .bg-neon-red { background-color: #ff3131 !important; }
+
+            /* Increase base font sizes for better legibility in high-res exports */
+            .text-\\[6px\\] { font-size: 11px !important; }
+            .text-\\[7px\\] { font-size: 12px !important; }
+            .text-\\[8px\\] { font-size: 16px !important; }
+            .text-\\[9px\\] { font-size: 17px !important; }
+            .text-\\[10px\\] { font-size: 19px !important; }
+            .text-xs { font-size: 20px !important; }
+            .text-sm { font-size: 26px !important; }
+            .text-xl { font-size: 38px !important; }
+            .text-2xl { font-size: 46px !important; }
+            .text-5xl { font-size: 76px !important; }
+            
+            /* Enhanced font weighting and spacing */
+            .font-bold { font-weight: 700 !important; }
+            .font-black { font-weight: 900 !important; }
+            .tracking-widest { letter-spacing: 0.18em !important; }
+            .tracking-\\[0\\.4em\\] { letter-spacing: 0.45em !important; }
+            .tracking-\\[0\\.3em\\] { letter-spacing: 0.35em !important; }
+            .tracking-\\[0\\.2em\\] { letter-spacing: 0.25em !important; }
+            
+            /* Ensure values have enough vertical space */
+            .mb-16 { margin-bottom: 96px !important; }
+            .mb-2 { margin-bottom: 14px !important; }
+            .gap-y-10 { row-gap: 64px !important; }
+            .pt-10 { padding-top: 60px !important; }
+            
+            /* Ensure images/logos are fully opaque and clear */
+            img { opacity: 1 !important; filter: contrast(1.1) !important; }
           `;
           clonedDoc.head.appendChild(style);
 
@@ -592,24 +663,35 @@ export default function App() {
           styledElements.forEach(el => {
             const htmlEl = el as HTMLElement;
             const styleAttr = htmlEl.getAttribute('style');
+            
             if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
-              htmlEl.setAttribute('style', styleAttr.replace(/(oklch|oklab)\s*\([^;}]+\)/gi, '#777777'));
+                let newStyle = styleAttr;
+                newStyle = newStyle.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
+                  const matchParts = match.match(/[\d.]+/g);
+                  if (matchParts && matchParts.length > 0) {
+                    const l = parseFloat(matchParts[0]);
+                    const gray = Math.round(Math.min(1, Math.max(0, l)) * 255);
+                    const hexValue = gray.toString(16).padStart(2, '0');
+                    return `#${hexValue}${hexValue}${hexValue}`;
+                  }
+                  return isDark ? '#ffffff' : '#000000';
+                });
+                htmlEl.setAttribute('style', newStyle);
             }
+
             if (htmlEl.style) {
-              htmlEl.style.boxShadow = 'none';
-              htmlEl.style.textShadow = 'none';
               htmlEl.style.filter = 'none';
               htmlEl.style.transition = 'none';
               htmlEl.style.animation = 'none';
               
               if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
                 htmlEl.style.backgroundImage = 'none';
-                htmlEl.style.backgroundColor = '#000000';
+                htmlEl.style.backgroundColor = isDark ? '#000000' : '#ffffff';
               }
 
               if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
                 htmlEl.style.backgroundImage = 'none';
-                htmlEl.style.backgroundColor = '#000000';
+                htmlEl.style.backgroundColor = isDark ? '#111111' : '#f8fafc';
               }
             }
           });
@@ -644,7 +726,20 @@ export default function App() {
           link.click();
         } else if (navigator.share) {
           try {
-            const blob = await (await fetch(imgData)).blob();
+            // Helper to convert dataURL to Blob
+            const dataURLtoBlob = (dataurl: string) => {
+              const arr = dataurl.split(',');
+              const mime = arr[0].match(/:(.*?);/)?.[1];
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while(n--){
+                u8arr[n] = bstr.charCodeAt(n);
+              }
+              return new Blob([u8arr], {type:mime});
+            };
+
+            const blob = dataURLtoBlob(imgData);
             const file = new File([blob], fileName, { type: 'image/png' });
             await navigator.share({
               files: [file],
@@ -1245,10 +1340,18 @@ export default function App() {
 
   const activateLoan = async (loan: Loan) => {
     try {
+      // Calculate original duration in days to preserve the exact period
+      const oldStartDate = parseISO(loan.date);
+      const oldEndDate = parseISO(loan.dueDate);
+      const daysDiff = Math.max(1, differenceInDays(oldEndDate, oldStartDate) || 30);
+      
+      const newStartDate = new Date();
+      const newEndDate = addDays(newStartDate, daysDiff);
+
       await updateDoc(doc(db, 'loans', loan.id), {
         status: 'Pendente',
-        date: format(new Date(), 'yyyy-MM-dd'),
-        dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+        date: format(newStartDate, 'yyyy-MM-dd'),
+        dueDate: format(newEndDate, 'yyyy-MM-dd'),
       });
       await logAction('loan_updated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
       changeTab('Empréstimos');
@@ -1681,7 +1784,15 @@ export default function App() {
   }, [loans, activeTab, command, showOnlyOverdue, filterDate]);
 
   const fullClients = useMemo(() => {
-    const clientMap = new Map<string, { name: string, phone: string, address: string, totalCapital: number, loanCount: number, activeDebt: number }>();
+    const clientMap = new Map<string, { 
+      name: string, 
+      phone: string, 
+      address: string, 
+      activeCapital: number, 
+      activeDebt: number, 
+      loanCount: number,
+      totalLoans: number 
+    }>();
     
     const sortedLoans = [...loans].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -1690,21 +1801,24 @@ export default function App() {
         name: loan.clientName, 
         phone: loan.clientPhone || '', 
         address: loan.clientAddress || '',
-        totalCapital: 0, 
-        loanCount: 0, 
-        activeDebt: 0 
+        activeCapital: 0, 
+        activeDebt: 0, 
+        loanCount: 0,
+        totalLoans: 0
       };
 
       if (loan.status !== 'Agendado') {
-        existing.totalCapital += loan.capital + (loan.capitalPago || 0);
-        existing.loanCount += 1;
+        existing.totalLoans += 1;
         if (loan.status !== 'Pago') {
-          existing.activeDebt += loan.totalBruto;
+          existing.activeCapital += (loan.capital || 0);
+          existing.activeDebt += (loan.totalBruto || 0);
+          existing.loanCount += 1;
         }
       }
       
-      if (loan.clientPhone) existing.phone = loan.clientPhone;
-      if (loan.clientAddress) existing.address = loan.clientAddress;
+      // Keep most recent contact info
+      if (!existing.phone && loan.clientPhone) existing.phone = loan.clientPhone;
+      if (!existing.address && loan.clientAddress) existing.address = loan.clientAddress;
       
       clientMap.set(loan.clientName, existing);
     });
@@ -2318,8 +2432,6 @@ export default function App() {
     );
   }
 
-  const isDark = theme === 'dark';
-
   const menuItems = [
     { id: 'Principal', label: 'Principal', icon: BarChart3 },
     { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
@@ -2887,7 +2999,7 @@ export default function App() {
                     isMini
                     onClick={() => {
                       changeTab('Empréstimos');
-                      setFilterDate('TODAY');
+                      setFilterDate(format(new Date(), 'yyyy-MM-dd'));
                       setShowOnlyOverdue(false);
                       setCommand('');
                     }}
@@ -2895,115 +3007,158 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
-                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 mb-6 flex items-center gap-3">
-                        <span className="w-2 h-2 bg-brand-primary rounded-full" />
-                        Visão de Ativos
-                      </h3>
-                      <div className="space-y-6">
-                        <div className="flex justify-between items-end border-b border-white/5 pb-4">
-                           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Total de Clientes</span>
-                           <span className={cn("text-xl font-black", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
-                        </div>
-                        <div className="flex justify-between items-end border-b border-white/5 pb-4">
-                           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Contratos Ativos</span>
-                           <span className={cn("text-xl font-black", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago').length}</span>
-                        </div>
-                        <div className="flex justify-between items-end">
-                           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Taxa de Inadimplência</span>
-                           <span className={cn("text-xl font-black text-brand-danger")}>
-                             {((loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago').length || 1)) * 100).toFixed(1)}%
-                           </span>
-                        </div>
-                      </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
+                <div className={cn(
+                  "p-8 rounded-[40px] border transition-all relative overflow-hidden group", 
+                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                )}>
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/5 rounded-full blur-3xl group-hover:bg-brand-primary/10 transition-colors" />
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8 flex items-center gap-3 relative z-10">
+                    <span className="w-2 h-2 bg-brand-primary rounded-full shadow-[0_0_8px_var(--color-brand-primary)]" />
+                    Visão de Ativos
+                  </h3>
+                  <div className="space-y-8 relative z-10">
+                    <div className="flex justify-between items-end pb-4 border-b border-white/[0.03]">
+                       <div className="flex flex-col">
+                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Base Ativa</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
+                       </div>
+                       <span className={cn("text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
                     </div>
-
-                    <div className={cn("p-8 rounded-[32px] border transition-all relative overflow-hidden", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
-                      <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <AlertTriangle className="w-16 h-16 text-brand-danger" />
-                      </div>
-                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-brand-danger mb-6 flex items-center gap-3">
-                        <span className="w-2 h-2 bg-brand-danger rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-                        Contratos Atrasados
-                      </h3>
-                      <div className="space-y-4">
-                        {loans
-                          .filter(l => l.status !== 'Pago' && isOverdue(l))
-                          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                          .slice(0, 4)
-                          .map(loan => (
-                            <div key={`overdue-dash-${loan.id}`} className="flex items-center justify-between p-3 rounded-2xl hover:bg-brand-danger/5 transition-colors group">
-                              <div className="flex flex-col">
-                                <span className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                                <span className="text-[9px] text-brand-danger font-black uppercase tracking-tighter">
-                                  {Math.abs(getDaysDiff(loan.dueDate))} dias de atraso
-                                </span>
-                              </div>
-                              <span className="text-xs font-black text-brand-danger">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
-                            </div>
-                          ))}
-                        {loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length === 0 && (
-                          <div className="text-center py-10 text-emerald-500 text-[10px] font-bold uppercase tracking-widest flex flex-col items-center gap-2">
-                             <CheckCircle2 className="w-5 h-5" />
-                             Nenhum atraso detectado
-                          </div>
-                        )}
-                      </div>
+                    <div className="flex justify-between items-end pb-4 border-b border-white/[0.03]">
+                       <div className="flex flex-col">
+                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Capilaridade</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
+                       </div>
+                       <span className={cn("text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago').length}</span>
                     </div>
-
-                    <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
-                      <h3 className="text-xs font-black uppercase tracking-[0.3em] text-amber-500 mb-6 flex items-center gap-3">
-                        <span className="w-2 h-2 bg-amber-500 rounded-full" />
-                        Próximos Vencimentos
-                      </h3>
-                      <div className="space-y-4">
-                        {loans
-                          .filter(l => l.status === 'Pendente' && !isOverdue(l))
-                          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                          .slice(0, 4)
-                          .map(loan => (
-                            <div key={`upcoming-dash-${loan.id}`} className="flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 transition-colors group">
-                              <div className="flex flex-col">
-                                <span className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                                <span className="text-[9px] text-slate-500 font-medium uppercase">{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
-                              </div>
-                              <span className="text-xs font-black text-brand-primary">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
-                            </div>
-                          ))}
-                        {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
-                          <div className="text-center py-10 text-slate-500 text-[10px] font-bold uppercase">Nenhum vencimento próximo</div>
-                        )}
-                      </div>
+                    <div className="flex justify-between items-end pb-1">
+                       <div className="flex flex-col">
+                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Score de Risco</span>
+                         <span className="text-[10px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
+                       </div>
+                       <span className={cn("text-2xl font-black tracking-tighter text-brand-danger")}>
+                         {((loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago').length || 1)) * 100).toFixed(1)}%
+                       </span>
                     </div>
                   </div>
+                </div>
 
-                  <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-surface-900 border-surface-border" : "bg-white border-slate-200 shadow-xl")}>
-                     <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-500 flex items-center gap-3">
-                          <span className="w-2 h-2 bg-emerald-500 rounded-full" />
-                          Atividade Recente
-                        </h3>
-
-                     </div>
-                     <div className="space-y-4">
-                        {actions.slice(0, 5).map(action => (
-                          <div key={action.id} className="flex items-center justify-between py-2">
-                            <div className="flex items-center gap-4">
-                              <div className={cn(
-                                "w-2 h-2 rounded-full",
-                                action.type === 'payment_received' ? "bg-emerald-500" : "bg-brand-primary"
-                              )} />
-                              <div className="flex flex-col">
-                                <span className={cn("text-xs font-bold transition-colors", isDark ? "text-white" : "text-slate-900")}>{action.clientName}</span>
-                                <span className="text-[9px] text-slate-500 font-medium uppercase">{action.description}</span>
-                              </div>
-                            </div>
-                            <span className="text-[9px] text-slate-600 font-bold uppercase">{safeFormatDate(action.date, 'dd/MM HH:mm')}</span>
+                <div className={cn(
+                  "p-8 rounded-[40px] border transition-all relative overflow-hidden group", 
+                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                )}>
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-danger/5 rounded-full blur-3xl group-hover:bg-brand-danger/10 transition-colors" />
+                  <div className="absolute -top-4 -right-4 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
+                    <AlertTriangle className="w-24 h-24 text-brand-danger" />
+                  </div>
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-danger mb-8 flex items-center gap-3 relative z-10">
+                    <span className="w-2 h-2 bg-brand-danger rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+                    Alerta de Atrasos
+                  </h3>
+                  <div className="space-y-4 relative z-10">
+                    {loans
+                      .filter(l => l.status !== 'Pago' && isOverdue(l))
+                      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                      .slice(0, 4)
+                      .map(loan => (
+                        <div key={`overdue-dash-${loan.id}`} className={cn(
+                          "flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
+                          isDark ? "" : "hover:bg-slate-50"
+                        )}>
+                          <div className="flex flex-col">
+                            <span className={cn("text-xs font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                            <span className="text-[9px] text-brand-danger font-black uppercase tracking-widest mt-1">
+                              EXPIRADO HÁ {Math.abs(getDaysDiff(loan.dueDate))} DIAS
+                            </span>
                           </div>
-                        ))}
+                          <span className="text-sm font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                        </div>
+                      ))}
+                    {loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-4 text-center opacity-40">
+                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                           <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                         </div>
+                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Portfólio 100% Adimplente</p>
                       </div>
-                 </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "p-8 rounded-[40px] border transition-all relative overflow-hidden group", 
+                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                )}>
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors" />
+                  <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-500 mb-8 flex items-center gap-3 relative z-10">
+                    <span className="w-2 h-2 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.4)]" />
+                    Próximas Liquidações
+                  </h3>
+                  <div className="space-y-4 relative z-10">
+                    {loans
+                      .filter(l => l.status === 'Pendente' && !isOverdue(l))
+                      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                      .slice(0, 4)
+                      .map(loan => (
+                        <div key={`upcoming-dash-${loan.id}`} className={cn(
+                          "flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
+                          isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
+                        )}>
+                          <div className="flex flex-col">
+                            <span className={cn("text-xs font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">VENCE EM {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                          </div>
+                          <span className={cn("text-sm font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                        </div>
+                      ))}
+                    {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-12 gap-4 text-center opacity-40">
+                         <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+                           <Calendar className="w-6 h-6 text-slate-500" />
+                         </div>
+                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos no Ciclo</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className={cn(
+                "p-10 rounded-[40px] border transition-all relative overflow-hidden group mb-10", 
+                isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+              )}>
+                  <div className="absolute -top-20 -left-20 w-80 h-80 bg-emerald-500/[0.03] rounded-full blur-3xl group-hover:bg-emerald-500/[0.05] transition-colors" />
+                  <div className="flex items-center justify-between mb-10 pb-4 border-b border-white/[0.03] relative z-10">
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 flex items-center gap-4">
+                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
+                        Linha do Tempo de Atividades
+                      </h3>
+                      <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Últimas Operações</span>
+                  </div>
+                  <div className="space-y-2 relative z-10">
+                      {actions.slice(0, 6).map((action) => (
+                        <div key={action.id} className={cn(
+                          "flex items-center justify-between p-4 rounded-2xl transition-all group/item border border-transparent",
+                          isDark ? "hover:bg-white/[0.02] hover:border-white/[0.03]" : "hover:bg-slate-50 hover:border-slate-100"
+                        )}>
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col">
+                              <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{action.clientName}</span>
+                              <span className={cn("text-[10px] font-bold uppercase tracking-tight mt-1", isDark ? "text-slate-500" : "text-slate-400")}>{action.description}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] font-black text-slate-400 block mb-1 font-mono uppercase tracking-tighter">{safeFormatDate(action.date, 'dd/MM HH:mm')}</span>
+                            <div className="flex items-center justify-end gap-1 opacity-20">
+                              <div className="w-1 h-1 rounded-full bg-slate-500" />
+                              <div className="w-1 h-1 rounded-full bg-slate-500" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+              </div>
               </motion.div>
             ) : (
               <motion.div 
@@ -3028,16 +3183,22 @@ export default function App() {
                                : "bg-slate-50 text-slate-900 placeholder:text-slate-400 focus:bg-white border-slate-200"
                            ) || ""}
                            value={command || ""}
-                           onChange={(e) => setCommand(e.target.value)}
+                           onChange={(e) => {
+                             setCommand(e.target.value);
+                             if (e.target.value) setFilterDate('');
+                           }}
                          />
                        </div>
                        <div className="flex items-center gap-3">
-                         <div className={cn("flex items-center gap-2 border rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                         <div className={cn("flex items-center gap-2 border rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors", isDark ? "bg-transparent border-white/10" : "bg-transparent border-slate-200")}>
                            <Calendar className="w-3.5 h-3.5 text-slate-500" />
                            <select 
                              className={cn("bg-transparent text-xs font-black uppercase tracking-widest focus:outline-none cursor-pointer", isDark ? "text-white" : "text-slate-900")}
                              value={filterDate || ""}
-                             onChange={(e) => setFilterDate(e.target.value)}
+                             onChange={(e) => {
+                               setFilterDate(e.target.value);
+                               if (e.target.value) setCommand('');
+                             }}
                            >
                              <option value="">Dia</option>
                              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
@@ -3060,93 +3221,145 @@ export default function App() {
                            className="space-y-4"
                          >
                            {/* Desktop Table */}
-                  <div className="hidden lg:block overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className={cn("border-b transition-colors", isDark ? "bg-white/[0.01] border-white/[0.03]" : "bg-slate-50 border-slate-100")}>
-                          <th className="px-8 py-6">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</span>
-                              <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em]">Total: {stats.totalClients}</span>
-                            </div>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className={cn("divide-y transition-colors", isDark ? "divide-white/[0.05]" : "divide-slate-100")}>
-                        {clients.length === 0 ? (
-                          <tr>
-                            <td colSpan={2} className="px-8 py-20 text-center text-slate-500 font-medium">
-                              {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
-                            </td>
-                          </tr>
-                        ) : (
-                          clients.map((client, index) => {
-                            return (
-                              <React.Fragment key={`client-row-${client.name}-${index}`}>
-                                <tr 
-                                  onClick={() => setViewingClientDetail(client)}
-                                  className={cn(
-                                    "group transition-all cursor-pointer", 
-                                    isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
-                                  )}
-                                >
-                                  <td className="px-8 py-6">
-                                    <div className="flex items-center justify-between">
-                                      <span className={cn("font-black tracking-tight text-base transition-colors", isDark ? "text-white" : "text-slate-900")}>
-                                        {client.name}
-                                      </span>
-                                      <div className="flex items-center gap-4">
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                          {client.loanCount} {client.loanCount === 1 ? 'Contrato' : 'Contratos'}
-                                        </span>
-                                        <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-brand-primary group-hover:translate-x-1 transition-all" />
-                                      </div>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </React.Fragment>
-                            );
-                          })
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                   <div className="hidden lg:block overflow-hidden rounded-[32px] border border-white/[0.05] bg-white/[0.01]">
+                     <table className="w-full text-left border-collapse">
+                       <thead>
+                         <tr className={cn("border-b transition-colors", isDark ? "bg-white/[0.02] border-white/[0.05]" : "bg-slate-50 border-slate-100")}>
+                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
+                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Contratos Ativos</th>
+                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Capital em Aberto</th>
+                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Total a Receber</th>
+                           <th className="px-8 py-6 text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] text-right">Total Clientes: {stats.totalClients}</th>
+                         </tr>
+                       </thead>
+                       <tbody className={cn("divide-y transition-colors", isDark ? "divide-white/[0.05]" : "divide-slate-100")}>
+                         {clients.length === 0 ? (
+                           <tr>
+                             <td colSpan={5} className="px-8 py-20 text-center text-slate-500 font-medium font-mono uppercase tracking-widest text-[10px]">
+                               {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
+                             </td>
+                           </tr>
+                         ) : (
+                           clients.map((client, index) => (
+                             <tr 
+                               key={`client-row-${client.name}-${index}`}
+                               onClick={() => setViewingClientDetail(client)}
+                               className={cn(
+                                 "group transition-all cursor-pointer", 
+                                 isDark ? "hover:bg-brand-primary/[0.03]" : "hover:bg-slate-50"
+                               )}
+                             >
+                               <td className="px-8 py-6">
+                                 <div className="flex items-center gap-4">
+                                   <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary font-black uppercase text-xs border border-brand-primary/20">
+                                     {client.name.charAt(0)}
+                                   </div>
+                                   <span className={cn("font-black tracking-tight text-sm uppercase transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                     {client.name}
+                                   </span>
+                                 </div>
+                               </td>
+                               <td className="px-8 py-6">
+                                 <div className="flex items-center gap-2">
+                                   <span className={cn(
+                                     "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                                     client.loanCount > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-slate-500/10 text-slate-500"
+                                   )}>
+                                     {client.loanCount} Ativo{client.loanCount !== 1 ? 's' : ''}
+                                   </span>
+                                   {client.totalLoans > client.loanCount && (
+                                     <span className="text-[10px] font-bold text-slate-600">
+                                       / {client.totalLoans} total
+                                     </span>
+                                   )}
+                                 </div>
+                               </td>
+                               <td className="px-8 py-6">
+                                 <span className={cn("text-xs font-bold font-mono", isDark ? "text-slate-300" : "text-slate-600")}>
+                                   R$ {client.activeCapital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                 </span>
+                               </td>
+                               <td className="px-8 py-6">
+                                 <span className="text-xs font-black text-brand-primary font-mono">
+                                   R$ {client.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                 </span>
+                               </td>
+                               <td className="px-8 py-6 text-right">
+                                 <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-brand-primary group-hover:translate-x-1 transition-all ml-auto" />
+                               </td>
+                             </tr>
+                           ))
+                         )}
+                       </tbody>
+                     </table>
+                   </div>
 
                   {/* Mobile Cards */}
-                  {activeTab === 'Clientes' && (
-                    <div className="lg:hidden flex items-center justify-between px-6 py-4 bg-brand-primary/5 border border-brand-primary/10 rounded-2xl mb-4">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Quantidade de Clientes</span>
+                  <div className="lg:hidden space-y-4 px-2">
+                    <div className="flex items-center justify-between px-6 py-4 bg-brand-primary/5 border border-brand-primary/10 rounded-2xl">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Clientes na Base</span>
                       <span className="text-sm font-black text-brand-primary">{stats.totalClients}</span>
                     </div>
-                  )}
-                  <div className="lg:hidden grid grid-cols-1 divide-y transition-colors overflow-hidden rounded-2xl border border-white/5">
-                    {clients.length === 0 ? (
-                      <div className="py-20 text-center text-slate-500 font-medium glass-card">
-                        {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
-                      </div>
-                    ) : (
-                      clients.map((client, index) => (
-                        <div 
-                          key={`client-mobile-${client.name}-${index}`} 
-                          onClick={() => setViewingClientDetail(client)}
-                          className={cn("p-6 flex justify-between items-center cursor-pointer transition-all active:scale-[0.98]", isDark ? "bg-white/[0.01] hover:bg-white/[0.03]" : "bg-white hover:bg-slate-50")}
-                        >
-                          <div className="flex flex-col">
-                            <h3 className={cn("font-black text-base uppercase tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{client.name}</h3>
-                            <div className="flex items-center gap-3 mt-1">
-                              <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest leading-none">
-                                {client.loanCount} {client.loanCount === 1 ? 'Contrato' : 'Contratos'}
-                              </p>
-                              <span className="w-1 h-1 bg-slate-700 rounded-full" />
-                              <p className="text-[9px] text-brand-primary font-black uppercase tracking-widest leading-none">
-                                R$ {client.activeDebt.toLocaleString('pt-BR')}
-                              </p>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      {clients.length === 0 ? (
+                        <div className="py-20 text-center text-slate-500 font-medium font-mono uppercase tracking-widest text-[10px] rounded-[32px] border border-white/5 bg-white/[0.01]">
+                          {command.trim() ? 'Nenhum cliente encontrado.' : 'Nenhum cliente cadastrado.'}
+                        </div>
+                      ) : (
+                        clients.map((client, index) => (
+                          <div 
+                            key={`client-mobile-${client.name}-${index}`} 
+                            onClick={() => setViewingClientDetail(client)}
+                            className={cn(
+                              "relative overflow-hidden p-6 rounded-[32px] border transition-all active:scale-[0.98]", 
+                              isDark ? "bg-white/[0.02] border-white/5 hover:bg-white/[0.04]" : "bg-white border-slate-200 shadow-xl"
+                            )}
+                          >
+                            {/* Decorative line */}
+                            <div className="absolute top-0 left-0 w-1.5 h-full bg-brand-primary/20" />
+                            
+                            <div className="flex justify-between items-start mb-6">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-brand-primary/10 flex items-center justify-center text-brand-primary font-black uppercase text-sm border border-brand-primary/20">
+                                  {client.name.charAt(0)}
+                                </div>
+                                <div className="flex flex-col">
+                                  <h3 className={cn("font-black text-sm uppercase tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{client.name}</h3>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={cn(
+                                      "px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest w-fit",
+                                      client.loanCount > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-slate-500/10 text-slate-500"
+                                    )}>
+                                      {client.loanCount} Ativo{client.loanCount !== 1 ? 's' : ''}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">
+                                      {client.totalLoans} Total
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <ChevronRight className="w-6 h-6 text-slate-600" />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className={cn("p-4 rounded-2xl border transition-colors", isDark ? "bg-white/[0.03] border-white/[0.05]" : "bg-slate-50 border-slate-100")}>
+                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-1">Capital Ativo</span>
+                                <p className={cn("text-xs font-bold leading-none font-mono", isDark ? "text-white" : "text-slate-900")}>
+                                  R$ {client.activeCapital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                              </div>
+                              <div className={cn("p-4 rounded-2xl border transition-colors", isDark ? "bg-brand-primary/5 border-brand-primary/10" : "bg-brand-primary/[0.03] border-brand-primary/10")}>
+                                <span className="text-[8px] font-black text-brand-primary uppercase tracking-widest block mb-1">Total a Receber</span>
+                                <p className="text-xs font-black text-brand-primary leading-none font-mono">
+                                  R$ {client.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                          <ChevronRight className="w-6 h-6 text-slate-400 group-hover:text-brand-primary group-hover:translate-x-1 transition-all" />
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
                          </motion.div>
                        ) : activeTab === 'Transações' ? (
@@ -3596,29 +3809,29 @@ export default function App() {
                         className="space-y-8"
                       >
                         <div id="printable-report" className="space-y-8 printable-content">
-                          <div className="report-page bg-white text-black font-sans shadow-none border-none">
+                          <div className="report-page font-sans shadow-none border-none p-10 rounded-[40px] bg-white text-black">
                             {/* Clean Professional Header */}
-                            <div className="flex justify-between items-start border-b border-slate-200 pb-10 mb-12">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-10 mb-12 gap-8 border-slate-200">
                               <div className="space-y-1">
-                                <h1 className="text-2xl font-black text-slate-900 tracking-tight uppercase leading-none">{userProfile?.displayName || 'Nexus Private'}</h1>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.4em] mt-2">Relatório Mensal de Performance</p>
+                                <h1 className="text-2xl font-black tracking-tight uppercase leading-none text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.4em] mt-2 text-slate-400">Relatório Mensal de Performance</p>
                               </div>
-                              <div className="text-right flex flex-col items-end">
-                                 <div className="text-[10px] font-black text-slate-900 bg-slate-50 px-4 py-2 rounded-xl mb-3 uppercase tracking-widest border border-slate-100">
+                              <div className="text-left sm:text-right flex flex-col items-start sm:items-end w-full sm:w-auto">
+                                 <div className="text-[10px] font-black px-4 py-2 rounded-xl mb-3 uppercase tracking-widest border w-full sm:w-auto text-center bg-slate-50 text-slate-900 border-slate-100">
                                    Ref: {ptBrMonths[reportMonth]} / {reportYear}
                                  </div>
-                                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Emissão: {safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy')}</p>
+                                 <p className="text-[8px] font-bold uppercase tracking-widest text-slate-400">Emissão: {safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy')}</p>
                               </div>
                             </div>
 
                             {/* Executive Summary */}
                             <div className="mb-14">
-                              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-slate-900 mb-6 flex items-center gap-3">
+                              <h3 className="text-xs font-black uppercase tracking-[0.3em] mb-6 flex items-center gap-3 text-slate-900">
                                 <span className="w-2 h-2 bg-brand-primary rounded-full" />
                                 Sumário Executivo
                               </h3>
-                              <div className="bg-slate-50 border-l-4 border-brand-primary p-8 rounded-tr-3xl rounded-br-3xl">
-                                <p className="text-sm leading-relaxed text-slate-700 font-medium">
+                              <div className="border-l-4 border-brand-primary p-6 sm:p-8 rounded-tr-3xl rounded-br-3xl bg-slate-50">
+                                <p className="text-xs sm:text-sm leading-relaxed font-medium text-slate-700">
                                   Este documento oficial apresenta a consolidação das operações financeiras de <b>{userProfile?.displayName || 'Nexus Private'}</b> referente ao ciclo de <b>{ptBrMonths[reportMonth]} de {reportYear}</b>. 
                                   Os dados aqui contidos refletem o movimento de capital liberado, as amortizações processadas e a colheita de rendimentos ativos sob gestão institucional. Esta análise visa fornecer transparência total sobre a liquidez e rentabilidade do portfólio no período.
                                 </p>
@@ -3626,15 +3839,15 @@ export default function App() {
                             </div>
 
                             {/* Clean Stats Grid */}
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-14">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-14">
                               {[
                                 { label: 'Capital Liberado', value: monthlyReportStats.totalLent, sub: `${monthlyReportStats.loanCount} Contratos`, color: 'slate-900' },
                                 { label: 'Total Recebido', value: monthlyReportStats.totalPayments, sub: `${monthlyReportStats.paymentCount} Transações`, color: 'emerald-600' },
                                 { label: 'Lucro (Juros)', value: monthlyReportStats.interestPayments, sub: 'Rendimentos Reais', color: 'emerald-600' },
                                 { label: 'Saldo Ativo', value: monthlyReportStats.currentOutstanding, sub: 'Em Aberto', color: 'slate-900' }
                               ].map((stat, i) => (
-                                <div key={i} className="bg-white border border-slate-100 p-6 rounded-xl flex flex-col justify-between items-center text-center">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">{stat.label}</span>
+                                <div key={i} className="border p-6 rounded-xl flex flex-col justify-between items-center text-center bg-white border-slate-100">
+                                  <span className="text-[9px] font-black uppercase tracking-widest mb-3 text-slate-400">{stat.label}</span>
                                   <div>
                                     <div className={cn(
                                       "text-xl font-black tracking-tight", 
@@ -3642,32 +3855,32 @@ export default function App() {
                                     )}>
                                       R$ {stat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                     </div>
-                                    <span className="text-[8px] text-slate-300 font-bold uppercase tracking-wider mt-1">{stat.sub}</span>
+                                    <span className={cn("text-[8px] font-bold uppercase tracking-wider mt-1", isDark ? "text-white/20" : "text-slate-300")}>{stat.sub}</span>
                                   </div>
                                 </div>
                               ))}
                             </div>
 
                             {/* Simplified Progress Section */}
-                            <div className="mb-14 flex-grow w-full border border-slate-100 p-10 rounded-[32px]">
+                            <div className={cn("mb-14 flex-grow w-full border p-10 rounded-[32px]", isDark ? "border-white/5" : "border-slate-100")}>
                               <div className="w-full">
-                                 <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8 pb-4 border-b border-slate-100">Distribuição de Receita</h3>
+                                 <h3 className={cn("text-[10px] font-black uppercase tracking-[0.2em] mb-8 pb-4 border-b", isDark ? "text-slate-500 border-white/5" : "text-slate-400 border-slate-100")}>Distribuição de Receita</h3>
                                  <div className="space-y-10">
                                    <div className="space-y-4">
                                      <div className="flex justify-between items-end">
-                                       <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.1em]">Amortização de Capital</span>
-                                       <span className="text-xs font-black text-slate-900">{(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
+                                       <span className={cn("text-[10px] font-black uppercase tracking-[0.1em]", isDark ? "text-white" : "text-slate-900")}>Amortização de Capital</span>
+                                       <span className={cn("text-xs font-black", isDark ? "text-white" : "text-slate-900")}>{(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
                                      </div>
-                                     <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                                       <div className="h-full bg-slate-900 rounded-full" style={{ width: `${(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
+                                     <div className={cn("h-1 rounded-full overflow-hidden", isDark ? "bg-white/5" : "bg-slate-100")}>
+                                       <div className={cn("h-full rounded-full", isDark ? "bg-white/40" : "bg-slate-900")} style={{ width: `${(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
                                      </div>
                                    </div>
                                    <div className="space-y-4">
                                      <div className="flex justify-between items-end">
-                                       <span className="text-[10px] font-black text-slate-900 uppercase tracking-[0.1em]">Rendimento de Juros</span>
+                                       <span className={cn("text-[10px] font-black uppercase tracking-[0.1em]", isDark ? "text-white" : "text-slate-900")}>Rendimento de Juros</span>
                                        <span className="text-xs font-black text-brand-primary">{(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
                                      </div>
-                                     <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                                     <div className={cn("h-1 rounded-full overflow-hidden", isDark ? "bg-white/5" : "bg-slate-100")}>
                                        <div className="h-full bg-brand-primary rounded-full" style={{ width: `${(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
                                      </div>
                                    </div>
@@ -3676,14 +3889,14 @@ export default function App() {
                             </div>
 
                             {/* Professional Sign-off & Footer */}
-                            <div className="mt-auto grid grid-cols-2 lg:grid-cols-4 gap-12 pt-12 border-t border-slate-200">
+                            <div className={cn("mt-auto grid grid-cols-2 lg:grid-cols-4 gap-12 pt-12 border-t", isDark ? "border-white/5" : "border-slate-200")}>
                               <div className="col-span-1 lg:col-span-3">
                                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-10">
-                                   <div className="w-24 h-24 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center p-3">
-                                     <QrCode className="w-full h-full text-slate-200" />
+                                   <div className={cn("w-24 h-24 border rounded-2xl flex items-center justify-center p-3", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-100")}>
+                                     <QrCode className={cn("w-full h-full", isDark ? "text-white/10" : "text-slate-200")} />
                                    </div>
                                    <div className="w-full">
-                                    <p className="text-[9px] font-black text-slate-900 uppercase tracking-widest">Controle de Autenticidade</p>
+                                    <p className={cn("text-[9px] font-black uppercase tracking-widest", isDark ? "text-white" : "text-slate-900")}>Controle de Autenticidade</p>
                                     <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter w-full">REF-{reportYear}{String(reportMonth + 1).padStart(2, '0')}-0229384-NXB-SECURE</p>
                                     <p className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] pt-2">Nexus Private Asset Management <br/> Divisão de Controle Interno</p>
                                   </div>
@@ -3890,6 +4103,7 @@ export default function App() {
                                       if (n.type === 'overdue') setShowOnlyOverdue(true);
                                     }
                                     setCommand(n.item.clientName);
+                                    setFilterDate('');
                                     markNotificationAsRead(n.id);
                                   }}
                                   className="w-full sm:w-auto px-8 py-4 bg-brand-primary text-black rounded-[24px] text-[12px] font-black uppercase tracking-widest hover:shadow-xl hover:shadow-brand-primary/30 transition-all active:scale-95"
@@ -3927,9 +4141,7 @@ export default function App() {
                       {[
                         { id: 'perfil', title: 'Perfil', subtitle: 'Identidade e Branding', icon: <UserIcon className="w-5 h-5" /> },
                         { id: 'recebimentos', title: 'Financeiro', subtitle: 'PIX e Instituição', icon: <Wallet className="w-5 h-5" /> },
-                        { id: 'regras', title: 'Operação', subtitle: 'Taxas e Prazos', icon: <Settings2 className="w-5 h-5" /> },
                         { id: 'mensagem', title: 'Cobrança', subtitle: 'Template WhatsApp', icon: <MessageCircle className="w-5 h-5" /> },
-                        { id: 'aparencia', title: 'Personalizar', subtitle: 'Tema e Cores', icon: <Palette className="w-5 h-5" /> },
                         { id: 'dados', title: 'Ecossistema', subtitle: 'Backup e Segurança', icon: <Database className="w-5 h-5" /> },
                       ].map((item) => (
                         <button
@@ -4056,24 +4268,6 @@ export default function App() {
 
                           </div>
                         )}
-                        {activeSettingsSection === 'regras' && (
-                          <div className="space-y-6">
-                            <div className="space-y-4">
-                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Taxa de Juros Padrão (%)</label>
-                              <div className="relative group">
-                                <input 
-                                  type="number"
-                                  value={systemSettings.defaultInterestRate * 100}
-                                  onChange={(e) => setSystemSettings(prev => ({ ...prev, defaultInterestRate: Number(e.target.value) / 100 }))}
-                                  className="w-full bg-transparent border-b-2 border-white/10 py-4 text-4xl font-black text-white focus:border-[#FFD700] focus:outline-none transition-all"
-                                  placeholder="0.00"
-                                />
-                                <span className="absolute right-0 bottom-4 text-slate-700 font-black text-xl group-focus-within:text-[#FFD700] transition-colors">%</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
                         {activeSettingsSection === 'mensagem' && (
                           <div className="space-y-6">
                             <div className="space-y-4">
@@ -4095,60 +4289,6 @@ export default function App() {
                                   </button>
                                 ))}
                               </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {activeSettingsSection === 'aparencia' && (
-                          <div className="space-y-10">
-                            <div className="space-y-6">
-                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Cor de Destaque</label>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                {[
-                                  { id: 'yellow', color: '#FFD700' },
-                                  { id: 'green', color: '#39FF14' },
-                                  { id: 'blue', color: '#00F0FF' },
-                                  { id: 'violet', color: '#8B5CF6' },
-                                  { id: 'red', color: '#EF4444' },
-                                ].map((choice) => (
-                                  <button
-                                    key={choice.id}
-                                    onClick={() => handleSaveSystemSettings({ ...systemSettings, accentColor: choice.id as SystemSettings['accentColor'] })}
-                                    className={cn(
-                                      "flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all active:scale-[0.95]",
-                                      systemSettings.accentColor === choice.id 
-                                        ? "bg-white/10 border-brand-primary" 
-                                        : "bg-white/5 border-transparent hover:border-white/10"
-                                    )}
-                                  >
-                                    <div className="w-8 h-8 rounded-full shadow-lg" style={{ backgroundColor: choice.color }} />
-                                    <span className="text-[8px] font-black uppercase text-white tracking-widest">{choice.id}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between p-7 rounded-2xl bg-white/5 border border-white/5">
-                              <div>
-                                <span className="text-[10px] font-black text-white uppercase tracking-widest">Interface Premium</span>
-                                <p className="text-[8px] text-slate-600 uppercase font-bold mt-1 tracking-wider">Dashboard em Modo Nexo Dark</p>
-                              </div>
-                              <button 
-                                onClick={() => {
-                                  const newVal = theme === 'dark' ? 'light' : 'dark';
-                                  setTheme(newVal);
-                                  localStorage.setItem('nexus_theme', newVal);
-                                }}
-                                className={cn(
-                                  "w-12 h-6 rounded-full relative transition-all",
-                                  isDark ? "bg-[#FFD700]" : "bg-slate-800"
-                                )}
-                              >
-                                <div className={cn(
-                                  "absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-md",
-                                  isDark ? "left-7" : "left-1"
-                                )} />
-                              </button>
                             </div>
                           </div>
                         )}
@@ -4284,7 +4424,7 @@ export default function App() {
                                     <div className="flex items-center gap-1.5">
                                       <Clock className="w-3.5 h-3.5 text-slate-500" />
                                       <span className="text-brand-primary font-black">
-                                        {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                        {safeFormatDate(loan.date, 'dd/MM/yyyy')}
                                       </span>
                                     </div>
                                   </td>
@@ -4439,7 +4579,7 @@ export default function App() {
                                 </div>
                                 <div className="text-right">
                                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Data Efetuar</span>
-                                  <div className={cn("font-black text-xs tracking-tight text-brand-primary")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</div>
+                                  <div className={cn("font-black text-xs tracking-tight text-brand-primary")}>{safeFormatDate(loan.date, 'dd/MM/yyyy')}</div>
                                 </div>
                               </>
                             ) : (
@@ -4692,37 +4832,49 @@ export default function App() {
                       }}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Vencimento</label>
-                    <input 
-                      required
-                      type="date"
-                      className="w-full glass-input py-3 sm:py-4"
-                      value={newLoan.dueDate || ""}
-                      onChange={(e) => setNewLoan({...newLoan, dueDate: e.target.value})}
-                    />
-                  </div>
-
-                  {newLoan.status === 'Agendado' && (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Data Programada para Efetuar</label>
+                  {newLoan.status === 'Agendado' ? (
+                    <>
+                      <div className="space-y-2 md:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Data para Efetivar</label>
+                        <input 
+                          required
+                          type="date"
+                          className="w-full glass-input py-3 sm:py-4 border-brand-primary/30"
+                          value={newLoan.date || ""}
+                          onChange={(e) => {
+                            const newDate = e.target.value;
+                            setNewLoan({
+                              ...newLoan, 
+                              date: newDate,
+                              dueDate: format(addMonths(toDate(newDate) || new Date(), 1), 'yyyy-MM-dd')
+                            });
+                          }}
+                        />
+                        <p className="text-[9px] text-brand-primary font-bold uppercase tracking-wider ml-1 mt-1">
+                          O sistema notificará você 3 dias antes desta data.
+                        </p>
+                      </div>
+                      <div className="space-y-2 md:col-span-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Previsão de Vencimento</label>
+                        <input 
+                          required
+                          type="date"
+                          className="w-full glass-input py-3 sm:py-4"
+                          value={newLoan.dueDate || ""}
+                          onChange={(e) => setNewLoan({...newLoan, dueDate: e.target.value})}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Vencimento</label>
                       <input 
                         required
                         type="date"
-                        className="w-full glass-input py-3 sm:py-4 border-brand-primary/30"
-                        value={newLoan.date || ""}
-                        onChange={(e) => {
-                          const newDate = e.target.value;
-                          setNewLoan({
-                            ...newLoan, 
-                            date: newDate,
-                            dueDate: format(addMonths(toDate(newDate) || new Date(), 1), 'yyyy-MM-dd')
-                          });
-                        }}
+                        className="w-full glass-input py-3 sm:py-4"
+                        value={newLoan.dueDate || ""}
+                        onChange={(e) => setNewLoan({...newLoan, dueDate: e.target.value})}
                       />
-                      <p className="text-[9px] text-brand-primary font-bold uppercase tracking-wider ml-1 mt-1">
-                        O sistema notificará você 3 dias antes desta data.
-                      </p>
                     </div>
                   )}
                 </div>
@@ -5439,11 +5591,14 @@ export default function App() {
         )}
       {viewingContract && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
-            <div id="printable-contract" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
+          <div className={cn(
+            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative",
+            isDark ? "bg-[#0a0a0a]" : "bg-white"
+          )}>
+            <div id="printable-contract" className="p-10 sm:p-20 printable-content relative bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
                     className="w-full h-full object-cover grayscale brightness-125" 
@@ -5453,12 +5608,12 @@ export default function App() {
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Operação</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-slate-400">Comprovante de Operação</p>
               </div>
 
               {/* Main Amount - Elegant Focus */}
               <div className="text-center mb-16 relative z-10">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Total da Operação</p>
+                <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total da Operação</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
                   {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -5466,31 +5621,31 @@ export default function App() {
               </div>
 
               {/* Essential Details Grid */}
-              <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
-                <div className="col-span-2 pb-6 border-b border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Cliente Beneficiário</span>
-                  <p className="text-xl font-black text-slate-900 uppercase tracking-tight">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 sm:gap-x-12 mb-16 relative z-10 border-t pt-10 border-slate-100">
+                <div className="col-span-1 sm:col-span-2 pb-6 border-b border-slate-50">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Cliente Beneficiário</span>
+                  <p className="text-xl font-black uppercase tracking-tight text-slate-900">
                     {viewingContract[0].clientName}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Capital Emprestado</span>
-                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Capital Emprestado</span>
+                  <p className="font-black uppercase text-sm leading-tight text-slate-900">
                     R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Valor dos Juros</span>
+                <div className="sm:text-right">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Valor dos Juros</span>
                   <p className="font-black text-brand-primary uppercase text-sm leading-tight">
                     R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
-                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy HH:mm')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Data e Hora</span>
+                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy HH:mm')}</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Vencimento Principal</span>
+                <div className="sm:text-right">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Vencimento Principal</span>
                   <p className="font-black text-neon-red uppercase text-sm leading-tight">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</p>
                 </div>
               </div>
@@ -5498,25 +5653,25 @@ export default function App() {
               {/* Individual Contracts Breakdown */}
               {viewingContract.length > 1 && (
                 <div className="mb-16 relative z-10">
-                  <p className="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-6 pb-2 border-b border-slate-50">Detalhamento Individual</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest mb-6 pb-2 border-b border-slate-50 text-slate-400">Detalhamento Individual</p>
                   <div className="space-y-6">
                     {viewingContract.map((loan, index) => (
-                      <div key={loan.id} className="flex justify-between items-start py-2 group">
+                      <div key={loan.id} className="flex flex-col sm:flex-row justify-between items-start gap-4 sm:gap-0 py-2 group">
                         <div className="flex gap-4">
-                          <span className="text-[9px] font-black text-slate-300 mt-1">0{index + 1}</span>
+                          <span className="text-[9px] font-black mt-1 text-slate-300">0{index + 1}</span>
                           <div>
-                            <p className="text-[9px] font-black text-slate-900 uppercase tracking-wider">Contrato {loan.id.slice(0, 8)}</p>
-                            <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">Venc. {safeFormatDate(loan.dueDate, 'dd/MM/y')}</p>
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-900">Contrato {loan.id.slice(0, 8)}</p>
+                            <p className="text-[8px] font-bold text-slate-500 uppercase mt-1">Venc. {safeFormatDate(loan.dueDate, 'dd/MM/y')}</p>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="sm:text-right w-full sm:w-auto">
                           <div className="flex flex-col gap-1">
                             <p className="text-[9px] font-bold text-slate-900">
-                              <span className="text-slate-300 mr-2">CAPITAL</span>
+                              <span className="mr-2 text-slate-300">CAPITAL</span>
                               R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
                             <p className="text-[9px] font-bold text-brand-primary">
-                              <span className="text-slate-300 mr-2">JUROS</span>
+                              <span className="mr-2 text-slate-300">JUROS</span>
                               R$ {(loan.totalBruto - loan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
                           </div>
@@ -5528,19 +5683,19 @@ export default function App() {
               )}
 
               {/* Minimalist Authentication */}
-              <div className="pt-10 border-t border-slate-100 relative z-10 flex justify-between items-center">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 p-2">
+              <div className="pt-10 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-8 border-slate-100">
+                <div className="flex items-center gap-6 w-full sm:w-auto">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
-                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
-                    <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">{viewingContract[0].id.toUpperCase()}-{new Date().getTime()}</p>
+                    <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Autenticação Digital</p>
+                    <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">{viewingContract[0].id.toUpperCase()}-{new Date().getTime()}</p>
                   </div>
                 </div>
-                <div className="text-right opacity-40">
+                <div className="text-center sm:text-right opacity-40 w-full sm:w-auto">
                   <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
-                  <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Asset Management</p>
+                  <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Asset Management</p>
                 </div>
               </div>
 
@@ -5606,13 +5761,18 @@ export default function App() {
                       <UserIcon className="w-10 h-10 text-brand-primary" />
                     </div>
                     <div>
-                      <h2 className={cn("text-3xl font-black tracking-tight", isDark ? "text-white" : "text-slate-900")}>
+                      <h2 className={cn("text-3xl font-black tracking-tight uppercase", isDark ? "text-white" : "text-slate-900")}>
                         {viewingClientDetail.name}
                       </h2>
                       <div className="flex items-center gap-3">
-                        <StatusBadge status="Pendente" isDark={isDark} />
+                        <span className={cn(
+                          "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                          viewingClientDetail.loanCount > 0 ? "bg-emerald-500/10 text-emerald-500" : "bg-slate-500/10 text-slate-500"
+                        )}>
+                          {viewingClientDetail.loanCount} Ativos
+                        </span>
                         <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                          {viewingClientDetail.loanCount} Contratos Ativos
+                          / {viewingClientDetail.totalLoans} Contratos no Total
                         </span>
                       </div>
                     </div>
@@ -5622,11 +5782,11 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className={cn("p-6 rounded-3xl border transition-all", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Dívida Ativa</span>
-                    <p className="text-xl font-black text-brand-primary">R$ {viewingClientDetail.activeDebt.toLocaleString('pt-BR')}</p>
+                    <p className="text-xl font-black text-brand-primary font-mono">R$ {viewingClientDetail.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
                   <div className={cn("p-6 rounded-3xl border transition-all", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Capital Investido</span>
-                    <p className={cn("text-xl font-black", isDark ? "text-white" : "text-slate-900")}>R$ {viewingClientDetail.totalCapital.toLocaleString('pt-BR')}</p>
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Capital em Aberto</span>
+                    <p className={cn("text-xl font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {viewingClientDetail.activeCapital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                   </div>
                 </div>
               </div>
@@ -5823,11 +5983,14 @@ export default function App() {
 
       {viewingReceipt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative flex flex-col">
-            <div id="printable-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative flex-1">
+          <div className={cn(
+            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative flex flex-col",
+            isDark ? "bg-[#0a0a0a]" : "bg-white"
+          )}>
+            <div id="printable-receipt" className="p-10 sm:p-20 printable-content relative flex-1 bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
                     className="w-full h-full object-cover grayscale brightness-125" 
@@ -5837,18 +6000,18 @@ export default function App() {
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Recebimento</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-slate-400">Comprovante de Recebimento</p>
               </div>
 
               {/* Amount Centerpiece */}
               <div className="text-center mb-16 relative z-10">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Total Recebido</p>
+                <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total Recebido</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
                   {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
                 <div className="mt-6 flex items-center justify-center gap-2 text-emerald-600">
-                  <div className="w-6 h-6 bg-emerald-100 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center bg-emerald-100">
                     <Check className="w-4 h-4" />
                   </div>
                   <span className="text-[10px] font-black uppercase tracking-[0.2em]">Efetivado com Sucesso</span>
@@ -5856,20 +6019,20 @@ export default function App() {
               </div>
 
               {/* Essential Details Grid */}
-              <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
-                <div className="col-span-2 pb-6 border-b border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Pagador</span>
-                  <p className="text-xl font-black text-slate-900 uppercase tracking-tight">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 sm:gap-x-12 mb-16 relative z-10 border-t pt-10 border-slate-100">
+                <div className="col-span-1 sm:col-span-2 pb-6 border-b border-slate-50">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Pagador</span>
+                  <p className="text-xl font-black uppercase tracking-tight text-slate-900">
                     {viewingReceipt.clientName}
                   </p>
                 </div>
                 
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data e Hora</span>
-                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Data e Hora</span>
+                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Operação</span>
+                <div className="sm:text-right">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Operação</span>
                   <p className="font-black text-brand-primary uppercase text-sm leading-tight">
                     {viewingReceipt.description.toLowerCase().includes('juros') ? 'Rendimentos' : 
                      viewingReceipt.description.toLowerCase().includes('capital') ? 'Amortização' : 
@@ -5877,30 +6040,30 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="col-span-2 pt-6 border-t border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Descrição Detalhada</span>
-                  <p className="text-xs text-slate-600 leading-relaxed font-medium uppercase tracking-tight">
+                <div className="col-span-1 sm:col-span-2 pt-6 border-t border-slate-50">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Descrição Detalhada</span>
+                  <p className="text-xs leading-relaxed font-medium uppercase tracking-tight text-slate-600">
                     {viewingReceipt.description}
                   </p>
                 </div>
               </div>
 
               {/* Footer Authentication */}
-              <div className="pt-10 border-t border-slate-100 relative z-10 flex justify-between items-center">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 p-2">
+              <div className="pt-10 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-8 border-slate-100">
+                <div className="flex items-center gap-6 w-full sm:w-auto">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
-                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Autenticação Digital</p>
-                    <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">
+                    <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Autenticação Digital</p>
+                    <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">
                       {viewingReceipt.id.toUpperCase()}-{new Date(viewingReceipt.date).getTime()}
                     </p>
                   </div>
                 </div>
-                <div className="text-right opacity-40">
+                <div className="text-center sm:text-right opacity-40 w-full sm:w-auto">
                   <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
-                  <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Digital Auth</p>
+                  <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Digital Auth</p>
                 </div>
               </div>
 
@@ -5942,11 +6105,14 @@ export default function App() {
 
       {viewingScheduleReceipt && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative">
-            <div id="printable-schedule-receipt" className="p-10 sm:p-20 bg-white text-slate-900 printable-content relative">
+          <div className={cn(
+            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative",
+            isDark ? "bg-[#0a0a0a]" : "bg-white"
+          )}>
+            <div id="printable-schedule-receipt" className="p-10 sm:p-20 printable-content relative bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-16 relative z-10">
-                <div className="w-20 h-20 bg-slate-900 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden">
+                <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
                     className="w-full h-full object-cover grayscale brightness-125" 
@@ -5956,12 +6122,12 @@ export default function App() {
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.4em]">Comprovante de Agendamento</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-slate-400">Comprovante de Agendamento</p>
               </div>
 
               {/* Amount Centerpiece */}
               <div className="text-center mb-16 relative z-10">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-4">Valor Total Agendado</p>
+                <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total Agendado</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
                   {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -5969,47 +6135,47 @@ export default function App() {
               </div>
 
               {/* Essential Details Grid */}
-              <div className="grid grid-cols-2 gap-y-10 gap-x-12 mb-16 relative z-10 border-t border-slate-100 pt-10">
-                <div className="col-span-2 pb-6 border-b border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Cliente Beneficiário</span>
-                  <p className="text-xl font-black text-slate-900 uppercase tracking-tight">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 sm:gap-x-12 mb-16 relative z-10 border-t pt-10 border-slate-100">
+                <div className="col-span-1 sm:col-span-2 pb-6 border-b border-slate-50">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Cliente Beneficiário</span>
+                  <p className="text-xl font-black uppercase tracking-tight text-slate-900">
                     {viewingScheduleReceipt.clientName}
                   </p>
                 </div>
                 
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Data para Liberação</span>
-                  <p className="font-black text-slate-900 uppercase text-sm leading-tight">{safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Data para Liberação</span>
+                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Previsão de Vencimento</span>
+                <div className="sm:text-right">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Previsão de Vencimento</span>
                   <p className="font-black text-neon-red uppercase text-sm leading-tight">{safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}</p>
                 </div>
 
-                <div className="col-span-2 pt-6 border-t border-slate-50">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mb-2">Observações do Agendamento</span>
-                  <p className="text-xs text-slate-600 leading-relaxed font-medium uppercase tracking-tight">
+                <div className="col-span-1 sm:col-span-2 pt-6 border-t border-slate-50">
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Observações do Agendamento</span>
+                  <p className="text-xs leading-relaxed font-medium uppercase tracking-tight text-slate-600">
                     O crédito de R$ {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} está programado no sistema para processamento na data indicada. A ativação ocorrerá automaticamente após a validação do lastro financeiro.
                   </p>
                 </div>
               </div>
 
               {/* Footer Authentication */}
-              <div className="pt-10 border-t border-slate-100 relative z-10 flex justify-between items-center">
-                <div className="flex items-center gap-6">
-                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 p-2">
+              <div className="pt-10 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-8 border-slate-100">
+                <div className="flex items-center gap-6 w-full sm:w-auto">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
-                    <p className="text-[8px] font-black uppercase text-slate-900 mb-1">Controle de Agendamento</p>
-                    <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">
+                    <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Controle de Agendamento</p>
+                    <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">
                       SCH-{viewingScheduleReceipt.id.toUpperCase()}-{new Date(viewingScheduleReceipt.createdAt || new Date()).getTime()}
                     </p>
                   </div>
                 </div>
-                <div className="text-right opacity-40">
+                <div className="text-center sm:text-right opacity-40 w-full sm:w-auto">
                   <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
-                  <p className="text-[6px] font-bold text-slate-400 uppercase mt-1 tracking-widest">Reserve System</p>
+                  <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Reserve System</p>
                 </div>
               </div>
 

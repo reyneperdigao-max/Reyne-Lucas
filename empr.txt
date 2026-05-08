@@ -1,0 +1,22 @@
+245:  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações'>('Principal');
+1291:        await logAction('loan_updated', `Empréstimo atualizado para ${loanData.clientName}`, loanData.clientName, editingLoanId, loanData.capital);
+1348:      await logAction('loan_updated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
+1349:      changeTab('Empréstimos');
+1605:      title: 'Excluir Empréstimo',
+1635:            await logAction('loan_deleted', `Empréstimo excluído - ${loanToDelete.clientName}`, loanToDelete.clientName, id, loanToDelete.capital);
+1755:    if (activeTab === 'Empréstimos') {
+2429:    { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
+2858:            {activeTab === 'Empréstimos' && (
+2901:                    Novo Empréstimo
+2978:                      changeTab('Empréstimos');
+2993:                      changeTab('Empr�                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
+3168:                {(activeTab === 'Clientes' || activeTab === 'Empréstimos') && (
+4092:                                      changeTab('Empréstimos');
+4382:                                  {filterDate ? 'Nenhum Empréstimo Encontrado' : 
+4538:                         {filterDate ? 'Nenhum Empréstimo Encontrado' : 
+4694:                    {editingLoanId ? 'Editar Empréstimo' : 
+4695:                     newLoan.status === 'Agendado' ? 'Agendar Empréstimo' : 'Novo Empréstimo'}
+5171:                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo do Empréstimo</h3>
+5253:                            <span className="text-sm">Quitar Empréstimo</span>
+5415:                    Novo Empréstimo
+5609:                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Capital Emprestado</span>
