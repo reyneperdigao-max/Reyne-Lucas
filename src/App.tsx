@@ -360,7 +360,7 @@ export default function App() {
   } | null>(null);
   const [isConfirmingPix, setIsConfirmingPix] = useState(false);
   const [pixConfirmed, setPixConfirmed] = useState(false);
-  const [isNativeNotificationsEnabled /*, setIsNativeNotificationsEnabled */] = useState(() => {
+  const [isNativeNotificationsEnabled, setIsNativeNotificationsEnabled] = useState(() => {
     return localStorage.getItem('nexus_native_notifications') === 'true';
   });
   const [sentNativeNotificationIds, setSentNativeNotificationIds] = useState<string[]>(() => {
@@ -414,7 +414,7 @@ export default function App() {
     `;
   }, [systemSettings.accentColor]);
 
-  /* const requestNotificationPermission = async () => {
+  const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
       setError("Este navegador não suporta notificações de sistema.");
       return;
@@ -439,7 +439,7 @@ export default function App() {
     } catch (err) {
       console.error("Erro ao solicitar permissão:", err);
     }
-  }; */
+  };
 
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
@@ -4310,6 +4310,33 @@ export default function App() {
                               <div className="flex items-center gap-4">
                                 <Download className="w-5 h-5 text-[#FFD700]" />
                                 <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Backup System</span>
+                              </div>
+                              <ChevronRight className="w-4 h-4 text-slate-700" />
+                            </button>
+
+                            <button 
+                              onClick={requestNotificationPermission}
+                              className={cn(
+                                "w-full flex items-center justify-between p-6 rounded-2xl border transition-all",
+                                isNativeNotificationsEnabled 
+                                  ? "bg-emerald-500/10 border-emerald-500/30" 
+                                  : "bg-white/5 border-white/10 hover:bg-white/10"
+                              )}
+                            >
+                              <div className="flex items-center gap-4">
+                                <Bell className={cn("w-5 h-5", isNativeNotificationsEnabled ? "text-emerald-500" : "text-slate-400")} />
+                                <div className="text-left">
+                                  <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Notificações de Sistema</span>
+                                  <p className="text-[7px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-0.5">
+                                    {isNativeNotificationsEnabled ? 'Ativadas neste dispositivo' : 'Desativadas'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className={cn(
+                                "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
+                                isNativeNotificationsEnabled ? "bg-emerald-500/20 text-emerald-500" : "bg-white/10 text-slate-500"
+                              )}>
+                                {isNativeNotificationsEnabled ? 'Ativo' : 'Ativar'}
                               </div>
                             </button>
                           </div>
