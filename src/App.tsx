@@ -1749,14 +1749,11 @@ export default function App() {
                d.getFullYear() === today.getFullYear();
       });
     } else if (filterDate) {
-      const today = new Date();
       const dateInt = parseInt(filterDate);
       result = result.filter(l => {
         const d = toDate(l.dueDate);
-        // Compare day, and assume current month/year for consistency
-        return d && d.getDate() === dateInt && 
-               d.getMonth() === today.getMonth() && 
-               d.getFullYear() === today.getFullYear();
+        // Filtra todos os empréstimos (Pendentes/Atrasados) que vencem no dia X de qualquer mês
+        return d && d.getDate() === dateInt;
       });
     }
 
@@ -1842,15 +1839,12 @@ export default function App() {
         })
       );
     } else if (filterDate) {
-      const today = new Date();
       const dateInt = parseInt(filterDate);
       result = result.filter(c => 
         loans.some(l => {
           const d = toDate(l.dueDate);
           return l.clientName === c.name && 
                  d && d.getDate() === dateInt && 
-                 d.getMonth() === today.getMonth() && 
-                 d.getFullYear() === today.getFullYear() &&
                  l.status !== 'Pago' && l.status !== 'Agendado';
         })
       );
@@ -2999,7 +2993,7 @@ export default function App() {
                     isMini
                     onClick={() => {
                       changeTab('Empréstimos');
-                      setFilterDate(format(new Date(), 'yyyy-MM-dd'));
+                      setFilterDate('TODAY');
                       setShowOnlyOverdue(false);
                       setCommand('');
                     }}
