@@ -43,6 +43,9 @@ import {
   Download,
   Eye,
   EyeOff,
+  LayoutGrid,
+  ShieldCheck,
+  Target,
 } from 'lucide-react';
 import { 
   collection, 
@@ -247,6 +250,7 @@ export default function App() {
   const [previousTab, setPreviousTab] = useState<typeof activeTab>('Principal');
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+  const currentDateText = useMemo(() => format(new Date(), "dd 'de' MMMM", { locale: ptBR }), []);
 
   const changeTab = (newTab: typeof activeTab) => {
     if (newTab !== activeTab) {
@@ -448,7 +452,17 @@ export default function App() {
 
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
-      setError("Este navegador não suporta notificações de sistema.");
+      const isIframe = window.self !== window.top;
+      setError(
+        isIframe 
+          ? "O preview bloqueia notificações. Clique no botão de 'Abrir em nova aba' no topo para ativar." 
+          : "Este navegador ou ambiente não suporta notificações de sistema."
+      );
+      return;
+    }
+
+    if (Notification.permission === "denied") {
+      setError("Notificações bloqueadas pelo navegador. Por favor, ative-as no ícone de cadeado na barra de endereços (ao lado do link).");
       return;
     }
 
@@ -457,21 +471,40 @@ export default function App() {
       if (permission === "granted") {
         setIsNativeNotificationsEnabled(true);
         localStorage.setItem('nexus_native_notifications', 'true');
+        setAddSuccess("Notificações ativadas com sucesso!");
+        
         new Notification("Nexus Private: Sistema de Alertas", {
           body: "As notificações de segurança e lembretes bancários foram ativadas com sucesso.",
           icon: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop'
         });
+
+        // Auto hide success message
+        setTimeout(() => setAddSuccess(null), 5000);
       } else {
         setIsNativeNotificationsEnabled(false);
         localStorage.setItem('nexus_native_notifications', 'false');
         if (permission === "denied") {
-          setError("Permissão de notificação negada no navegador.");
+          setError("Você negou a permissão. Para ativar, clique no cadeado da barra de endereços e altere para 'Permitir'.");
         }
       }
     } catch (err) {
       console.error("Erro ao solicitar permissão:", err);
+      setError("O navegador impediu a solicitação. Tente abrir o sistema em uma aba fora do preview ou limpe os cookies.");
     }
   };
+
+  // Sincronizar permissão nativa com estado real do navegador
+  useEffect(() => {
+    if ("Notification" in window) {
+      if (Notification.permission === "granted") {
+        if (localStorage.getItem('nexus_native_notifications') === 'true') {
+          setIsNativeNotificationsEnabled(true);
+        }
+      } else {
+        setIsNativeNotificationsEnabled(false);
+      }
+    }
+  }, []);
 
   const shareAsPDF = async (forceDownload = false, format: 'pdf' | 'image' = 'pdf', customElementId?: string, customShareText?: string, customShareUrl?: string) => {
     if (isGeneratingPDF) return;
@@ -2536,16 +2569,28 @@ export default function App() {
                   setShowOnlyOverdue(false);
                 }}
                 className={cn(
-                  "w-full flex items-center transition-all group",
+                  "w-full flex items-center transition-all duration-300 group relative overflow-hidden",
                   isSidebarCollapsed ? "justify-center p-3.5 rounded-xl" : "gap-4 px-4 py-3.5 rounded-2xl",
                   isActive 
-                    ? "bg-brand-primary text-black shadow-lg shadow-brand-primary/20" 
-                    : cn("text-slate-500", isDark ? "hover:text-white hover:bg-surface-800" : "hover:text-slate-900 hover:bg-slate-100")
+                    ? "bg-brand-primary text-black shadow-xl shadow-brand-primary/20 scale-[1.02]" 
+                    : cn("text-slate-500", isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-900 hover:bg-slate-100")
                 )}
                 title={isSidebarCollapsed ? item.label : ""}
               >
-                <Icon className={cn("w-5 h-5 shrink-0", isActive ? "text-black" : "group-hover:text-brand-primary")} />
-                {!isSidebarCollapsed && <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap animate-in fade-in slide-in-from-left-2 duration-300">{item.label}</span>}
+                <Icon className={cn(
+                  "w-5 h-5 shrink-0 transition-transform duration-500", 
+                  isActive ? "text-black scale-110" : "group-hover:text-brand-primary group-hover:scale-110"
+                )} />
+                {!isSidebarCollapsed && (
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap animate-in fade-in slide-in-from-left-2 duration-300">
+                    {item.label}
+                  </span>
+                )}
+                {!isActive && !isSidebarCollapsed && (
+                  <div className="absolute right-4 transform translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300">
+                    <ChevronRight className="w-3 h-3 opacity-50" />
+                  </div>
+                )}
               </button>
             );
           })}
@@ -2703,39 +2748,56 @@ export default function App() {
               <h1 className={cn("text-xs font-black tracking-[0.2em] uppercase ml-1", isDark ? "text-white" : "text-slate-900")}>Nexus</h1>
             </div>
 
-            <div className="hidden lg:flex items-center gap-4">
+            <div className="hidden lg:flex items-center gap-6">
               <button 
                 onClick={() => {
                   const newValue = !isSidebarCollapsed;
                   setIsSidebarCollapsed(newValue);
                   localStorage.setItem('nexus_sidebar_collapsed', String(newValue));
                 }}
-                className="p-2 text-slate-400 hover:text-brand-primary transition-all active:scale-95"
+                className="p-3 bg-white/[0.03] border border-white/[0.05] text-slate-400 hover:text-brand-primary hover:border-brand-primary/20 transition-all active:scale-95 rounded-2xl group"
                 title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
               >
-                <Menu className="w-5 h-5" />
+                <LayoutGrid className={cn("w-5 h-5 transition-transform duration-500", !isSidebarCollapsed ? "rotate-90" : "rotate-0")} />
               </button>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-brand-primary/10 rounded-xl">
-                   <BarChart3 className="w-5 h-5 text-brand-primary" />
+              <div className="flex items-center gap-4 py-2 px-4 bg-white/[0.02] border border-white/[0.05] rounded-3xl backdrop-blur-xl">
+                <div className="p-2.5 bg-brand-primary/20 rounded-xl shadow-[0_0_15px_rgba(212,175,55,0.1)]">
+                   <Target className="w-5 h-5 text-brand-primary animate-pulse" />
                 </div>
-                <div>
-                  <h2 className={cn("text-sm font-black uppercase tracking-widest", isDark ? "text-white" : "text-slate-900")}>
-                    {activeTab === 'Principal' ? 'Dashboard Geral' : activeTab}
-                  </h2>
-                  <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">Terminal de Gestão Nexus Private</p>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <h2 className={cn("text-[11px] font-black uppercase tracking-[0.2em]", isDark ? "text-white" : "text-slate-900")}>
+                      {activeTab === 'Principal' ? 'ESTATÍSTICAS GERAIS' : activeTab.toUpperCase()}
+                    </h2>
+                    <span className="w-1 h-3 bg-slate-700/50 rounded-full" />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{currentDateText}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.05em]">Nexus Managed Node <span className="opacity-40">#PX-041</span></p>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-6">
-            <div className="hidden lg:flex flex-col items-end">
-              <span className={cn(
-                "text-sm font-bold transition-colors",
-                isDark ? "text-white" : "text-slate-900"
-              )}>{user.displayName}</span>
-              <span className="text-xs text-slate-500 font-medium">{user.email}</span>
-            </div>
+              <div className="hidden lg:flex items-center gap-4 py-2 px-3 bg-white/[0.03] border border-white/[0.05] rounded-2xl hover:bg-white/[0.06] transition-all cursor-default group">
+                <div className="flex flex-col items-end">
+                  <span className={cn(
+                    "text-[10px] font-black uppercase tracking-widest transition-colors",
+                    isDark ? "text-white" : "text-slate-900"
+                  )}>{user.displayName || 'Administrador'}</span>
+                  <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{user.email?.toLowerCase()}</span>
+                </div>
+                <div className="relative">
+                  <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center font-black text-black text-xs shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                    {user.displayName?.charAt(0) || 'A'}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-black rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] flex items-center justify-center">
+                    <ShieldCheck className="w-2 h-2 text-white" />
+                  </div>
+                </div>
+              </div>
             <div className={cn(
               "h-8 w-px hidden lg:block",
               isDark ? "bg-white/10" : "bg-slate-200"
@@ -3039,121 +3101,136 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 mb-10">
-                <div className={cn(
-                  "p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group", 
-                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
-                )}>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-10 mb-12">
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className={cn(
+                    "p-8 sm:p-10 rounded-[40px] sm:rounded-[48px] border transition-all relative overflow-hidden group", 
+                    isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/40"
+                  )}
+                >
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/5 rounded-full blur-3xl group-hover:bg-brand-primary/10 transition-colors" />
-                  <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-500 mb-6 sm:mb-8 flex items-center gap-3 relative z-10">
-                    <span className="w-2 h-2 bg-brand-primary rounded-full shadow-[0_0_8px_var(--color-brand-primary)]" />
+                  <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-slate-500 mb-8 sm:mb-10 flex items-center gap-3 relative z-10">
+                    <span className="w-2.5 h-2.5 bg-brand-primary rounded-full shadow-[0_0_10px_var(--color-brand-primary)]" />
                     Visão de Ativos
                   </h3>
-                  <div className="space-y-6 sm:space-y-8 relative z-10">
-                    <div className="flex justify-between items-end pb-3 sm:pb-4 border-b border-white/[0.03]">
+                  <div className="space-y-8 sm:space-y-10 relative z-10">
+                    <div className="flex justify-between items-end pb-4 sm:pb-5 border-b border-white/[0.03]">
                        <div className="flex flex-col">
-                         <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Base Ativa</span>
-                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
+                         <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Base Ativa</span>
+                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
                        </div>
-                       <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
+                       <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
                     </div>
-                    <div className="flex justify-between items-end pb-3 sm:pb-4 border-b border-white/[0.03]">
+                    <div className="flex justify-between items-end pb-4 sm:pb-5 border-b border-white/[0.03]">
                        <div className="flex flex-col">
-                         <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Capilaridade</span>
-                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
+                         <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Capilaridade</span>
+                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
                        </div>
-                       <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
+                       <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
                     </div>
-                    <div className="flex justify-between items-end pb-1">
-                       <div className="flex flex-col">
-                         <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Score de Risco</span>
-                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
+                    <div className="flex justify-between items-end pb-1 text-right">
+                       <div className="flex flex-col text-left">
+                         <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Score de Risco</span>
+                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
                        </div>
-                       <span className={cn("text-xl sm:text-2xl font-black tracking-tighter text-brand-danger")}>
+                       <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter text-brand-danger")}>
                          {((loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago' || l.capital > 0).length || 1)) * 100).toFixed(1)}%
                        </span>
                     </div>
                   </div>
-                </div>
+                </motion.div>
 
-                <div className={cn(
-                  "p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group", 
-                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
-                )}>
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className={cn(
+                    "p-8 sm:p-10 rounded-[40px] sm:rounded-[48px] border transition-all relative overflow-hidden group", 
+                    isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/40"
+                  )}
+                >
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-danger/5 rounded-full blur-3xl group-hover:bg-brand-danger/10 transition-colors" />
                   <div className="absolute -top-4 -right-4 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
                     <AlertTriangle className="w-24 h-24 text-brand-danger" />
                   </div>
-                  <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-brand-danger mb-6 sm:mb-8 flex items-center gap-3 relative z-10">
-                    <span className="w-2 h-2 bg-brand-danger rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+                  <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-brand-danger mb-8 sm:mb-10 flex items-center gap-3 relative z-10">
+                    <span className="w-2.5 h-2.5 bg-brand-danger rounded-full animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]" />
                     Alerta de Atrasos
                   </h3>
-                  <div className="space-y-3 sm:space-y-4 relative z-10">
+                  <div className="space-y-4 sm:space-y-5 relative z-10">
                     {loans
                       .filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l))
                       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                       .slice(0, 4)
                       .map(loan => (
                         <div key={`overdue-dash-${loan.id}`} className={cn(
-                          "flex items-center justify-between p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
+                          "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
                           isDark ? "" : "hover:bg-slate-50"
                         )}>
                           <div className="flex flex-col">
-                            <span className={cn("text-xs font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                            <span className="text-[8px] sm:text-[9px] text-brand-danger font-black uppercase tracking-widest mt-1">
+                            <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                            <span className="text-[9px] sm:text-[10px] text-brand-danger font-black uppercase tracking-widest mt-1.5 line-clamp-1">
                               EXPIRADO {Math.abs(getDaysDiff(loan.dueDate))} DIAS
                             </span>
                           </div>
-                          <span className="text-xs sm:text-sm font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                          <span className="text-sm sm:text-base font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                         </div>
                       ))}
                     {loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-10 sm:py-12 gap-4 text-center opacity-40">
-                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-                           <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-500" />
+                      <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
+                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-emerald-500/10 flex items-center justify-center">
+                           <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-500" />
                          </div>
-                         <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Portfólio 100% Adimplente</p>
+                         <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-emerald-500 max-w-[200px]">Portfólio em Conformidade</p>
                       </div>
                     )}
                   </div>
-                </div>
+                </motion.div>
 
-                <div className={cn(
-                  "p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group", 
-                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
-                )}>
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                  className={cn(
+                    "p-8 sm:p-10 rounded-[40px] sm:rounded-[48px] border transition-all relative overflow-hidden group", 
+                    isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/40"
+                  )}
+                >
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors" />
-                  <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-amber-500 mb-6 sm:mb-8 flex items-center gap-3 relative z-10">
-                    <span className="w-2 h-2 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.4)]" />
+                  <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-amber-500 mb-8 sm:mb-10 flex items-center gap-3 relative z-10">
+                    <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.4)]" />
                     Próximas Liquidações
                   </h3>
-                  <div className="space-y-3 sm:space-y-4 relative z-10">
+                  <div className="space-y-4 sm:space-y-5 relative z-10">
                     {loans
                       .filter(l => l.status === 'Pendente' && !isOverdue(l))
                       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                       .slice(0, 4)
                       .map(loan => (
                         <div key={`upcoming-dash-${loan.id}`} className={cn(
-                          "flex items-center justify-between p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
+                          "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
                           isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
                         )}>
                           <div className="flex flex-col">
-                            <span className={cn("text-xs font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                            <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">VENCE {safeFormatDate(loan.dueDate, 'dd/MM')}</span>
+                            <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">VENCE {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
                           </div>
-                          <span className={cn("text-xs sm:text-sm font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                          <span className={cn("text-sm sm:text-base font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                         </div>
                       ))}
                     {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-10 sm:py-12 gap-4 text-center opacity-40">
-                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-white/5 flex items-center justify-center">
-                           <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500" />
+                      <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
+                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-white/5 flex items-center justify-center">
+                           <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-slate-500" />
                          </div>
-                         <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos no Ciclo</p>
+                         <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos Imediatos</p>
                       </div>
                     )}
                   </div>
-                </div>
+                </motion.div>
               </div>
 
               <div className={cn(
@@ -4355,7 +4432,7 @@ export default function App() {
                             <button 
                               onClick={requestNotificationPermission}
                               className={cn(
-                                "w-full flex items-center justify-between p-6 rounded-2xl border transition-all",
+                                "w-full flex items-center justify-between p-6 rounded-2xl border transition-all active:scale-[0.98] lg:hover:scale-[1.01]",
                                 isNativeNotificationsEnabled 
                                   ? "bg-emerald-500/10 border-emerald-500/30" 
                                   : "bg-white/5 border-white/10 hover:bg-white/10"
@@ -4366,13 +4443,14 @@ export default function App() {
                                 <div className="text-left">
                                   <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Notificações de Sistema</span>
                                   <p className="text-[7px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-0.5">
-                                    {isNativeNotificationsEnabled ? 'Ativadas neste dispositivo' : 'Desativadas'}
+                                    {isNativeNotificationsEnabled ? 'Ativadas neste dispositivo' : 
+                                     !("Notification" in window) ? (window.self !== window.top ? 'Restrito no Preview' : 'Não compatível') : 'Desativadas'}
                                   </p>
                                 </div>
                               </div>
                               <div className={cn(
-                                "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
-                                isNativeNotificationsEnabled ? "bg-emerald-500/20 text-emerald-500" : "bg-white/10 text-slate-500"
+                                "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all",
+                                isNativeNotificationsEnabled ? "bg-emerald-500/20 text-emerald-500" : "bg-white/10 text-slate-400 group-hover:text-slate-300"
                               )}>
                                 {isNativeNotificationsEnabled ? 'Ativo' : 'Ativar'}
                               </div>
@@ -6430,12 +6508,16 @@ function StatCard({ title, value, icon, color, trend, onClick, isDark, isMini }:
       className={cn(
         "glass-card group relative overflow-hidden transition-all duration-500 flex flex-col justify-between",
         isMini ? "p-4 sm:p-5 h-full" : "p-5 sm:p-7 space-y-4 sm:space-y-5",
-        isDark ? "bg-surface-900 border-surface-border shadow-2xl" : "bg-white border-slate-200 shadow-xl",
-        onClick && "cursor-pointer active:scale-[0.98] lg:hover:scale-[1.02]"
+        isDark ? "bg-black border-white/5 shadow-2xl" : "bg-white border-slate-200 shadow-xl shadow-slate-200/50",
+        onClick && "cursor-pointer active:scale-[0.98] lg:hover:scale-[1.02] lg:hover:border-brand-primary/30 lg:hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)]"
       )}
     >
       <div className={cn(
-        "absolute top-0 right-0 w-24 sm:w-32 h-24 sm:h-32 bg-brand-primary/5 -mr-12 sm:-mr-16 -mt-12 sm:-mt-16 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700",
+        "absolute -inset-1 bg-gradient-to-tr from-brand-primary/0 via-brand-primary/0 to-brand-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none",
+      )} />
+      
+      <div className={cn(
+        "absolute top-0 right-0 w-24 sm:w-32 h-24 sm:h-32 bg-brand-primary/5 -mr-12 sm:-mr-16 -mt-12 sm:-mt-16 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700 blur-3xl",
         !isDark && "bg-brand-primary/10"
       )} />
       
