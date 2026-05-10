@@ -381,6 +381,38 @@ export default function App() {
     return () => clearInterval(interval);
   }, [lastCheckDate]);
 
+  // --- Auto Reset Status ---
+  useEffect(() => {
+    if (!user || loans.length === 0) return;
+    
+    // Reset status from 'Pago' to 'Pendente' when the next month starts
+    const today = startOfDay(new Date());
+    const loansToReset = loans.filter(l => {
+      if (l.status !== 'Pago' || l.capital <= 0) return false;
+      const dueDate = toDate(l.dueDate);
+      if (!dueDate) return false;
+      
+      // If we've reached the month of the due date (or beyond), it should be pending payment for THIS month
+      const monthStart = startOfDay(new Date(dueDate.getFullYear(), dueDate.getMonth(), 1));
+      return today >= monthStart;
+    });
+
+    if (loansToReset.length > 0) {
+      const resetLoans = async () => {
+        try {
+          const batch = writeBatch(db);
+          loansToReset.forEach(l => {
+            batch.update(doc(db, 'loans', l.id), { status: 'Pendente' });
+          });
+          await batch.commit();
+        } catch (err) {
+          console.error("Error auto-resetting loans status:", err);
+        }
+      };
+      resetLoans();
+    }
+  }, [loans, user, lastCheckDate]);
+
   const getAccentColorHex = () => {
     switch (systemSettings.accentColor) {
       case 'yellow': return '#FFD700';
@@ -1487,7 +1519,8 @@ export default function App() {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
         date: format(today, 'yyyy-MM-dd'),
         dueDate: format(newDueDate, 'yyyy-MM-dd'),
-        jurosPagos: newJurosPagos
+        jurosPagos: newJurosPagos,
+        status: 'Pago'
       });
 
       const methodText = method ? ` via ${method}` : '';
@@ -1547,7 +1580,7 @@ export default function App() {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
         date: format(today, 'yyyy-MM-dd'),
         dueDate: format(newDueDate, 'yyyy-MM-dd'),
-        status: 'Pendente',
+        status: 'Pago',
         jurosPagos: newJurosPagos
       });
 
@@ -1758,7 +1791,7 @@ export default function App() {
     }
 
     if (activeTab === 'Empréstimos') {
-      result = result.filter(l => l.status !== 'Pago' && l.status !== 'Agendado');
+      result = result.filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado');
       // Always sort by due date in loans tab, and remove the slice to show all loans
       result = [...result].sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
     } else if (activeTab === 'Agendados') {
@@ -1890,7 +1923,7 @@ export default function App() {
   }, [filteredActions, showOnlyCapital, showOnlyInterest]);
 
   const stats = useMemo(() => {
-    const activeLoans = loans.filter(l => l.status !== 'Pago' && l.status !== 'Agendado');
+    const activeLoans = loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado');
     
     const capitalLiberado = activeLoans
       .reduce((acc, curr) => acc + curr.capital, 0);
@@ -1962,7 +1995,7 @@ export default function App() {
 
     // Outstanding balance is everything not paid yet as of now
     const currentOutstanding = loans
-      .filter(l => l.status !== 'Pago')
+      .filter(l => l.status !== 'Pago' || l.capital > 0)
       .reduce((acc, curr) => acc + (curr.totalBruto - (curr.capitalPago || 0)), 0);
 
     return {
@@ -2452,14 +2485,14 @@ export default function App() {
   return (
     <div 
       className={cn(
-        "min-h-screen flex font-sans selection:bg-brand-primary/20 overflow-x-hidden transition-colors duration-500",
+        "h-dvh flex font-sans selection:bg-brand-primary/20 overflow-x-hidden transition-colors duration-500",
         isDark ? "bg-black text-slate-300" : "bg-slate-50 text-slate-700"
       )}
       style={{ '--color-brand-primary': getAccentColorHex() } as React.CSSProperties}
     >
       {/* Sidebar - Desktop */}
       <aside className={cn(
-        "hidden lg:flex flex-col shrink-0 sticky top-0 h-screen border-r transition-all duration-300 z-50 overflow-hidden",
+        "hidden lg:flex flex-col shrink-0 sticky top-0 h-dvh border-r transition-all duration-300 z-50 overflow-hidden",
         isSidebarCollapsed ? "w-20" : "w-72",
         isDark ? "bg-black border-surface-border" : "bg-white border-slate-200"
       )}>
@@ -2633,7 +2666,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 max-h-screen overflow-y-auto">
+      <div className="flex-1 flex flex-col min-w-0 h-dvh overflow-y-auto pb-24 lg:pb-0 relative custom-scrollbar">
       {/* Background Glows */}
       {!isDark && (
         <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -2650,19 +2683,24 @@ export default function App() {
 
         {/* Header */}
         <header className={cn(
-          "sticky top-0 z-40 border-b transition-colors",
-          isDark ? "bg-black/95 backdrop-blur-md border-surface-border" : "bg-white/80 backdrop-blur-md border-slate-200"
+          "sticky top-0 z-40 border-b transition-colors pt-[env(safe-area-inset-top)]",
+          isDark ? "bg-black/95 backdrop-blur-md border-surface-border" : "bg-white/95 backdrop-blur-md border-slate-200"
         )}>
-          <div className="w-full px-4 sm:px-6 h-20 sm:h-24 flex items-center justify-between">
+          <div className="w-full px-4 sm:px-6 h-16 sm:h-24 flex items-center justify-between">
             {/* Mobile Sidebar Toggle */}
             <div className="flex lg:hidden items-center gap-2">
               <button 
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="p-2 text-slate-400 hover:text-brand-primary"
+                className="p-2.5 text-slate-400 hover:text-brand-primary active:scale-90 transition-all"
               >
-                <Menu className="w-6 h-6" />
+                <div className="grid grid-cols-2 gap-0.5">
+                  <div className="w-2 h-2 rounded-sm bg-current" />
+                  <div className="w-2 h-2 rounded-sm bg-current opacity-50" />
+                  <div className="w-2 h-2 rounded-sm bg-current opacity-50" />
+                  <div className="w-2 h-2 rounded-sm bg-current opacity-20" />
+                </div>
               </button>
-              <h1 className={cn("text-sm font-bold tracking-[0.05em]", isDark ? "text-white" : "text-slate-900")}>Nexus</h1>
+              <h1 className={cn("text-xs font-black tracking-[0.2em] uppercase ml-1", isDark ? "text-white" : "text-slate-900")}>Nexus</h1>
             </div>
 
             <div className="hidden lg:flex items-center gap-4">
@@ -2967,7 +3005,7 @@ export default function App() {
                   }}
                 />
                 
-                <div className="md:col-span-3 xl:col-span-1 grid grid-cols-2 gap-4 sm:gap-6">
+                <div className="md:col-span-3 xl:col-span-1 grid grid-cols-2 gap-3 sm:gap-6">
                   <StatCard 
                     title="Atrasados" 
                     value={privacyMode ? "••" : stats.atrasadosCount.toString()} 
@@ -3001,117 +3039,117 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8 mb-10">
                 <div className={cn(
-                  "p-8 rounded-[40px] border transition-all relative overflow-hidden group", 
-                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                  "p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group", 
+                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
                 )}>
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/5 rounded-full blur-3xl group-hover:bg-brand-primary/10 transition-colors" />
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 mb-8 flex items-center gap-3 relative z-10">
+                  <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-slate-500 mb-6 sm:mb-8 flex items-center gap-3 relative z-10">
                     <span className="w-2 h-2 bg-brand-primary rounded-full shadow-[0_0_8px_var(--color-brand-primary)]" />
                     Visão de Ativos
                   </h3>
-                  <div className="space-y-8 relative z-10">
-                    <div className="flex justify-between items-end pb-4 border-b border-white/[0.03]">
+                  <div className="space-y-6 sm:space-y-8 relative z-10">
+                    <div className="flex justify-between items-end pb-3 sm:pb-4 border-b border-white/[0.03]">
                        <div className="flex flex-col">
-                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Base Ativa</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
+                         <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Base Ativa</span>
+                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
                        </div>
-                       <span className={cn("text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
+                       <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
                     </div>
-                    <div className="flex justify-between items-end pb-4 border-b border-white/[0.03]">
+                    <div className="flex justify-between items-end pb-3 sm:pb-4 border-b border-white/[0.03]">
                        <div className="flex flex-col">
-                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Capilaridade</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
+                         <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Capilaridade</span>
+                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
                        </div>
-                       <span className={cn("text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago').length}</span>
+                       <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
                     </div>
                     <div className="flex justify-between items-end pb-1">
                        <div className="flex flex-col">
-                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Score de Risco</span>
-                         <span className="text-[10px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
+                         <span className="text-[8px] sm:text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Score de Risco</span>
+                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
                        </div>
-                       <span className={cn("text-2xl font-black tracking-tighter text-brand-danger")}>
-                         {((loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago').length || 1)) * 100).toFixed(1)}%
+                       <span className={cn("text-xl sm:text-2xl font-black tracking-tighter text-brand-danger")}>
+                         {((loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago' || l.capital > 0).length || 1)) * 100).toFixed(1)}%
                        </span>
                     </div>
                   </div>
                 </div>
 
                 <div className={cn(
-                  "p-8 rounded-[40px] border transition-all relative overflow-hidden group", 
-                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                  "p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group", 
+                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
                 )}>
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-danger/5 rounded-full blur-3xl group-hover:bg-brand-danger/10 transition-colors" />
                   <div className="absolute -top-4 -right-4 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
                     <AlertTriangle className="w-24 h-24 text-brand-danger" />
                   </div>
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-brand-danger mb-8 flex items-center gap-3 relative z-10">
+                  <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-brand-danger mb-6 sm:mb-8 flex items-center gap-3 relative z-10">
                     <span className="w-2 h-2 bg-brand-danger rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
                     Alerta de Atrasos
                   </h3>
-                  <div className="space-y-4 relative z-10">
+                  <div className="space-y-3 sm:space-y-4 relative z-10">
                     {loans
-                      .filter(l => l.status !== 'Pago' && isOverdue(l))
+                      .filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l))
                       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                       .slice(0, 4)
                       .map(loan => (
                         <div key={`overdue-dash-${loan.id}`} className={cn(
-                          "flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
+                          "flex items-center justify-between p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
                           isDark ? "" : "hover:bg-slate-50"
                         )}>
                           <div className="flex flex-col">
                             <span className={cn("text-xs font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                            <span className="text-[9px] text-brand-danger font-black uppercase tracking-widest mt-1">
-                              EXPIRADO HÁ {Math.abs(getDaysDiff(loan.dueDate))} DIAS
+                            <span className="text-[8px] sm:text-[9px] text-brand-danger font-black uppercase tracking-widest mt-1">
+                              EXPIRADO {Math.abs(getDaysDiff(loan.dueDate))} DIAS
                             </span>
                           </div>
-                          <span className="text-sm font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                          <span className="text-xs sm:text-sm font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                         </div>
                       ))}
-                    {loans.filter(l => l.status !== 'Pago' && isOverdue(l)).length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-12 gap-4 text-center opacity-40">
-                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-                           <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                    {loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-10 sm:py-12 gap-4 text-center opacity-40">
+                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                           <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-500" />
                          </div>
-                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Portfólio 100% Adimplente</p>
+                         <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Portfólio 100% Adimplente</p>
                       </div>
                     )}
                   </div>
                 </div>
 
                 <div className={cn(
-                  "p-8 rounded-[40px] border transition-all relative overflow-hidden group", 
-                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                  "p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group", 
+                  isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
                 )}>
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors" />
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-500 mb-8 flex items-center gap-3 relative z-10">
+                  <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.3em] text-amber-500 mb-6 sm:mb-8 flex items-center gap-3 relative z-10">
                     <span className="w-2 h-2 bg-amber-500 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.4)]" />
                     Próximas Liquidações
                   </h3>
-                  <div className="space-y-4 relative z-10">
+                  <div className="space-y-3 sm:space-y-4 relative z-10">
                     {loans
                       .filter(l => l.status === 'Pendente' && !isOverdue(l))
                       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                       .slice(0, 4)
                       .map(loan => (
                         <div key={`upcoming-dash-${loan.id}`} className={cn(
-                          "flex items-center justify-between p-4 rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
+                          "flex items-center justify-between p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
                           isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
                         )}>
                           <div className="flex flex-col">
                             <span className={cn("text-xs font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">VENCE EM {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                            <span className="text-[8px] sm:text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">VENCE {safeFormatDate(loan.dueDate, 'dd/MM')}</span>
                           </div>
-                          <span className={cn("text-sm font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                          <span className={cn("text-xs sm:text-sm font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                         </div>
                       ))}
                     {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-12 gap-4 text-center opacity-40">
-                         <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
-                           <Calendar className="w-6 h-6 text-slate-500" />
+                      <div className="flex flex-col items-center justify-center py-10 sm:py-12 gap-4 text-center opacity-40">
+                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-white/5 flex items-center justify-center">
+                           <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-slate-500" />
                          </div>
-                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos no Ciclo</p>
+                         <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos no Ciclo</p>
                       </div>
                     )}
                   </div>
@@ -3119,16 +3157,16 @@ export default function App() {
               </div>
 
               <div className={cn(
-                "p-10 rounded-[40px] border transition-all relative overflow-hidden group mb-10", 
-                isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-2xl shadow-slate-200/50"
+                "p-6 sm:p-10 rounded-[32px] sm:rounded-[40px] border transition-all relative overflow-hidden group mb-10", 
+                isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/50"
               )}>
                   <div className="absolute -top-20 -left-20 w-80 h-80 bg-emerald-500/[0.03] rounded-full blur-3xl group-hover:bg-emerald-500/[0.05] transition-colors" />
-                  <div className="flex items-center justify-between mb-10 pb-4 border-b border-white/[0.03] relative z-10">
-                      <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 flex items-center gap-4">
-                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
-                        Linha do Tempo de Atividades
+                  <div className="flex items-center justify-between mb-8 sm:mb-10 pb-4 border-b border-white/[0.03] relative z-10">
+                      <h3 className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] sm:tracking-[0.4em] text-slate-500 flex items-center gap-3 sm:gap-4">
+                        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]" />
+                        Linha do Tempo
                       </h3>
-                      <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Últimas Operações</span>
+                      <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest hidden sm:block">Últimas Operações</span>
                   </div>
                   <div className="space-y-2 relative z-10">
                       {actions.slice(0, 6).map((action) => (
@@ -5901,7 +5939,7 @@ export default function App() {
                     </button>
                     <button 
                       onClick={() => {
-                        const activeLoans = loans.filter(l => l.clientName === viewingClientDetail.name && l.status !== 'Pago');
+                        const activeLoans = loans.filter(l => l.clientName === viewingClientDetail.name && (l.status !== 'Pago' || l.capital > 0));
                         if (activeLoans.length > 0) {
                           setViewingContract(activeLoans);
                           setViewingClientDetail(null);
@@ -6304,6 +6342,72 @@ export default function App() {
       )}
 
       {/* Modal de Confirmação de PIX */}
+      </div>
+
+      {/* Floating Action Button - Mobile */}
+      {['Principal', 'Empréstimos', 'Clientes'].includes(activeTab) && (
+        <button 
+          onClick={() => setIsAdding(true)}
+          className={cn(
+            "fixed bottom-24 right-6 lg:hidden z-[85] p-5 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all active:scale-90 animate-in zoom-in slide-in-from-bottom-10 duration-500",
+            isDark ? "bg-brand-primary text-black" : "bg-slate-900 text-white"
+          )}
+        >
+          <Plus className="w-6 h-6 stroke-[3]" />
+        </button>
+      )}
+
+      {/* Bottom Navigation - Mobile only */}
+      <div className={cn(
+        "fixed bottom-0 left-0 right-0 lg:hidden z-[90] border-t backdrop-blur-xl transition-colors pb-[env(safe-area-inset-bottom)] px-2",
+        isDark ? "bg-black/90 border-white/5" : "bg-white/90 border-slate-200"
+      )}>
+        <div className="flex items-center justify-around h-16">
+          {menuItems.slice(0, 5).map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={`bottom-nav-${item.id}`}
+                onClick={() => changeTab(item.id as typeof activeTab)}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
+                  isActive ? "text-brand-primary" : "text-slate-500"
+                )}
+              >
+                <div className={cn(
+                  "p-1.5 rounded-xl transition-colors",
+                  isActive ? "bg-brand-primary/10" : ""
+                )}>
+                  <Icon className={cn("w-5 h-5", isActive ? "text-brand-primary" : "text-slate-400")} />
+                </div>
+                <span className={cn("text-[8px] font-black uppercase tracking-widest", isActive ? "opacity-100" : "opacity-50")}>
+                  {item.label === 'Principal' ? 'Início' : 
+                   item.label === 'Empréstimos' ? 'Giro' :
+                   item.label === 'Clientes' ? 'Base' : 
+                   item.label === 'Transações' ? 'Fluxo' : item.label}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => changeTab('Configurações')}
+            className={cn(
+              "flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
+              activeTab === 'Configurações' ? "text-brand-primary" : "text-slate-500"
+            )}
+          >
+            <div className={cn(
+              "p-1.5 rounded-xl transition-colors",
+              activeTab === 'Configurações' ? "bg-brand-primary/10" : ""
+            )}>
+              <Settings className={cn("w-5 h-5", activeTab === 'Configurações' ? "text-brand-primary" : "text-slate-400")} />
+            </div>
+            <span className={cn("text-[8px] font-black uppercase tracking-widest", activeTab === 'Configurações' ? "opacity-100" : "opacity-50")}>
+              Ajustes
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );
