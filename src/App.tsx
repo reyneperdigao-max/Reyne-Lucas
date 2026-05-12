@@ -452,7 +452,7 @@ export default function App() {
 
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
-      const isIframe = window.self !== window.top;
+      const isIframe = window !== window.parent;
       setError(
         isIframe 
           ? "O preview bloqueia notificações. Clique no botão de 'Abrir em nova aba' no topo para ativar." 
@@ -948,6 +948,15 @@ export default function App() {
   const [command, setCommand] = useState('');
 
   // --- Helpers ---
+  const formatCurrency = (amount: number) => {
+    return (amount || 0).toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   const parseLocaleNumber = (str: string) => {
     if (!str) return 0;
     // Remove dots (thousands) and replace comma (decimal) with dot
@@ -1343,9 +1352,9 @@ export default function App() {
       clientAddress: newLoan.clientAddress,
       date: newLoan.date,
       dueDate: newLoan.dueDate,
-      capital: capitalNum,
+      capital: Math.round(capitalNum * 100) / 100,
       interestRate: interestRateNum,
-      totalBruto: capitalNum * (1 + interestRateNum),
+      totalBruto: Math.round(capitalNum * (1 + interestRateNum) * 100) / 100,
       uid: user.uid,
     };
 
@@ -1436,9 +1445,9 @@ export default function App() {
     
     // Use only first name
     const firstName = (loan.clientName || 'Cliente').trim().split(' ')[0];
-    const interestAmount = loan.capital * (loan.interestRate || 0);
-    const capitalFormatted = `R$ ${loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-    const jurosFormatted = `R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    const interestAmount = Math.round(loan.capital * (loan.interestRate || 0) * 100) / 100;
+    const capitalFormatted = formatCurrency(loan.capital);
+    const jurosFormatted = formatCurrency(interestAmount);
     const vencimentoFormatted = format(parseISO(loan.dueDate), 'dd/MM/yyyy');
     
     let message = systemSettings.whatsappTemplate
@@ -1485,9 +1494,9 @@ export default function App() {
     const amount = parseFloat(amortizationAmount);
     if (isNaN(amount) || amount <= 0) return;
 
-    const newCapital = Math.max(0, payingLoan.capital - amount);
-    const newTotalBruto = newCapital * (1 + payingLoan.interestRate);
-    const newCapitalPago = (payingLoan.capitalPago || 0) + amount;
+    const newCapital = Math.round(Math.max(0, payingLoan.capital - amount) * 100) / 100;
+    const newTotalBruto = Math.round(newCapital * (1 + payingLoan.interestRate) * 100) / 100;
+    const newCapitalPago = Math.round(((payingLoan.capitalPago || 0) + amount) * 100) / 100;
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
@@ -1498,7 +1507,7 @@ export default function App() {
       });
       
       const methodText = method ? ` via ${method}` : '';
-      const description = `Amortização de capital: R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText}`;
+      const description = `Amortização de capital: ${formatCurrency(amount)}${methodText}`;
       let action: SystemAction | null = null;
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
@@ -1544,8 +1553,8 @@ export default function App() {
       }
     }
 
-    const interestAmount = payingLoan.totalBruto - payingLoan.capital;
-    const newJurosPagos = (payingLoan.jurosPagos || 0) + interestAmount;
+    const interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
     
     // Reset the issue date to today and move due date forward
     try {
@@ -1557,7 +1566,7 @@ export default function App() {
       });
 
       const methodText = method ? ` via ${method}` : '';
-      const description = `Pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText}`;
+      const description = `Pagamento de juros: ${formatCurrency(interestAmount)}${methodText}`;
       let action: SystemAction | null = null;
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
@@ -1606,8 +1615,8 @@ export default function App() {
       }
     }
     
-    const interestAmount = payingLoan.totalBruto - payingLoan.capital;
-    const newJurosPagos = (payingLoan.jurosPagos || 0) + interestAmount;
+    const interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
@@ -1618,7 +1627,7 @@ export default function App() {
       });
 
       const methodText = method ? ` via ${method}` : '';
-      const description = `Renovação com pagamento de juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText}`;
+      const description = `Renovação com pagamento de juros: ${formatCurrency(interestAmount)}${methodText}`;
       let action: SystemAction | null = null;
 
       if (lastAction && lastAction.loanId === payingLoan.id) {
@@ -1646,21 +1655,21 @@ export default function App() {
   const handlePayoffLoan = async (method?: 'DINHEIRO' | 'PIX') => {
     if (!payingLoan) return;
     
-    const payoffAmount = payingLoan.totalBruto;
-    const interestAmount = payingLoan.totalBruto - payingLoan.capital;
-    const capitalAmount = payingLoan.capital;
+    const payoffAmount = Math.round(payingLoan.totalBruto * 100) / 100;
+    const interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    const capitalAmount = Math.round(payingLoan.capital * 100) / 100;
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
         status: 'Pago',
         capital: 0,
         totalBruto: 0,
-        capitalPago: (payingLoan.capitalPago || 0) + capitalAmount,
-        jurosPagos: (payingLoan.jurosPagos || 0) + interestAmount
+        capitalPago: Math.round(((payingLoan.capitalPago || 0) + capitalAmount) * 100) / 100,
+        jurosPagos: Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100
       });
 
       const methodText = method ? ` via ${method}` : '';
-      const description = `Quitação Total: R$ ${payoffAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (Capital: R$ ${capitalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Juros: R$ ${interestAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${methodText})`;
+      const description = `Quitação Total: ${formatCurrency(payoffAmount)} (Capital: ${formatCurrency(capitalAmount)} + Juros: ${formatCurrency(interestAmount)}${methodText})`;
       
       const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount, capitalAmount, interestAmount, method);
 
@@ -1970,14 +1979,14 @@ export default function App() {
       return d > closureDate;
     });
 
-    const capitalRecebido = periodActions
-      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0);
+    const capitalRecebido = Math.round(periodActions
+      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
     
-    const jurosRealizados = periodActions
-      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0);
+    const jurosRealizados = Math.round(periodActions
+      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
     
     const overdueLoans = activeLoans.filter(l => l.status === 'Atrasado' || isOverdue(l));
-    const atrasado = overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0);
+    const atrasado = Math.round(overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0) * 100) / 100;
     const atrasadosCount = overdueLoans.length;
 
     // Calculate due today
@@ -2012,24 +2021,24 @@ export default function App() {
       return d && d.getMonth() === reportMonth && d.getFullYear() === reportYear && l.status !== 'Agendado';
     });
 
-    const totalLent = loansCreatedInPeriod.reduce((acc, curr) => acc + curr.capital, 0);
+    const totalLent = Math.round(loansCreatedInPeriod.reduce((acc, curr) => acc + curr.capital, 0) * 100) / 100;
     
-    const totalPayments = periodActions
+    const totalPayments = Math.round(periodActions
       .filter(a => a.type === 'payment_received')
-      .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+      .reduce((acc, curr) => acc + (curr.amount || 0), 0) * 100) / 100;
 
-    const capitalPayments = periodActions
+    const capitalPayments = Math.round(periodActions
       .filter(a => a.type === 'payment_received')
-      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0);
+      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
 
-    const interestPayments = periodActions
+    const interestPayments = Math.round(periodActions
       .filter(a => a.type === 'payment_received')
-      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0);
+      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
 
     // Outstanding balance is everything not paid yet as of now
-    const currentOutstanding = loans
+    const currentOutstanding = Math.round(loans
       .filter(l => l.status !== 'Pago' || l.capital > 0)
-      .reduce((acc, curr) => acc + (curr.totalBruto - (curr.capitalPago || 0)), 0);
+      .reduce((acc, curr) => acc + (curr.totalBruto - (curr.capitalPago || 0)), 0) * 100) / 100;
 
     return {
       totalLent,
@@ -3028,7 +3037,7 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
                 <StatCard 
                   title="Capital Liberado" 
-                  value={privacyMode ? "R$ ••••••••" : `R$ ${stats.capitalLiberado.toLocaleString('pt-BR')}`} 
+                  value={privacyMode ? "R$ ••••••••" : formatCurrency(stats.capitalLiberado)} 
                   icon={<DollarSign className="w-5 h-5" />}
                   color="primary"
                   trend="Ativo"
@@ -3036,7 +3045,7 @@ export default function App() {
                 />
                 <StatCard 
                   title="Capital Recebido" 
-                  value={privacyMode ? "R$ ••••••••" : `R$ ${stats.capitalRecebido.toLocaleString('pt-BR')}`} 
+                  value={privacyMode ? "R$ ••••••••" : formatCurrency(stats.capitalRecebido)} 
                   icon={<Wallet className="w-5 h-5" />}
                   color="success"
                   trend="Liquidado"
@@ -3052,9 +3061,9 @@ export default function App() {
                 />
                 <StatCard 
                   title="Juros Realizados" 
-                  value={privacyMode ? "R$ ••••••••" : `R$ ${stats.jurosRealizados.toLocaleString('pt-BR')}`} 
+                  value={privacyMode ? "R$ ••••••••" : formatCurrency(stats.jurosRealizados)} 
                   icon={<TrendingUp className="w-5 h-5" />}
-                  color="success"
+                  color="primary"
                   trend="Lucro"
                   isDark={isDark}
                   onClick={() => {
@@ -3493,22 +3502,22 @@ export default function App() {
                                  </div>
                                </div>
                                <p className="text-2xl font-black text-brand-primary">
-                                 R$ {(stats.capitalRecebido + stats.jurosRealizados).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                 {formatCurrency(stats.capitalRecebido + stats.jurosRealizados)}
                                </p>
                              </div>
 
                              <div className={cn("p-8 rounded-[32px] border transition-all", isDark ? "bg-white/[0.02] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
                                <div className="flex items-center gap-4 mb-4">
-                                 <div className="p-3 bg-emerald-500/10 rounded-2xl">
-                                   <TrendingUp className="w-5 h-5 text-emerald-500" />
+                                 <div className="p-3 bg-brand-primary/10 rounded-2xl">
+                                   <TrendingUp className="w-5 h-5 text-brand-primary" />
                                  </div>
                                  <div>
                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Juros Realizados</p>
                                    <h4 className={cn("text-lg font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>Lucro Líquido</h4>
                                  </div>
                                </div>
-                               <p className="text-2xl font-black text-emerald-500">
-                                 R$ {stats.jurosRealizados.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                               <p className="text-2xl font-black text-brand-primary">
+                                 {formatCurrency(stats.jurosRealizados)}
                                </p>
                              </div>
 
@@ -3523,7 +3532,7 @@ export default function App() {
                                  </div>
                                </div>
                                <p className={cn("text-2xl font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>
-                                 R$ {stats.capitalRecebido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                 {formatCurrency(stats.capitalRecebido)}
                                </p>
                              </div>
                            </div>
@@ -3962,7 +3971,7 @@ export default function App() {
                                       "text-xl font-black tracking-tight", 
                                       stat.color === 'emerald-600' ? "text-emerald-600" : "text-slate-900"
                                     )}>
-                                      R$ {stat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                      {formatCurrency(stat.value)}
                                     </div>
                                     <span className={cn("text-[8px] font-bold uppercase tracking-wider mt-1", isDark ? "text-white/20" : "text-slate-300")}>{stat.sub}</span>
                                   </div>
@@ -4444,7 +4453,7 @@ export default function App() {
                                   <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Notificações de Sistema</span>
                                   <p className="text-[7px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-0.5">
                                     {isNativeNotificationsEnabled ? 'Ativadas neste dispositivo' : 
-                                     !("Notification" in window) ? (window.self !== window.top ? 'Restrito no Preview' : 'Não compatível') : 'Desativadas'}
+                                     !("Notification" in window) ? (window !== window.parent ? 'Restrito no Preview' : 'Não compatível') : 'Desativadas'}
                                   </p>
                                 </div>
                               </div>
@@ -5019,11 +5028,11 @@ export default function App() {
                 <div className="bg-brand-primary/5 border border-brand-primary/10 p-5 sm:p-6 rounded-2xl sm:rounded-[28px] space-y-2 sm:space-y-3">
                   <div className="flex justify-between text-[9px] sm:text-[10px] font-bold uppercase tracking-widest">
                     <span className="text-slate-500">Juros Calculados</span>
-                    <span className="text-brand-primary">R$ {(parseLocaleNumber(newLoan.capital || '0') * (parseLocaleNumber(newLoan.interestRate || '0') / 100)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span className="text-brand-primary">{formatCurrency(parseLocaleNumber(newLoan.capital || '0') * (parseLocaleNumber(newLoan.interestRate || '0') / 100))}</span>
                   </div>
                   <div className="flex justify-between text-base sm:text-lg font-bold text-white tracking-tight">
                     <span>Total Bruto</span>
-                    <span className="">R$ {(parseLocaleNumber(newLoan.capital || '0') * (1 + parseLocaleNumber(newLoan.interestRate || '0') / 100)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <span className="">{formatCurrency(parseLocaleNumber(newLoan.capital || '0') * (1 + parseLocaleNumber(newLoan.interestRate || '0') / 100))}</span>
                   </div>
                 </div>
 
@@ -5097,8 +5106,8 @@ export default function App() {
                               </h3>
                               <p className="text-slate-400 text-sm">
                                 {pendingPayment.method === 'PIX' 
-                                  ? `Verificando recebimento de R$ ${pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                                  : `Registrando recebimento físico de R$ ${pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                                  ? `Verificando recebimento de ${formatCurrency(pendingPayment.amount)}`
+                                  : `Registrando recebimento físico de ${formatCurrency(pendingPayment.amount)}`
                                 }
                               </p>
                             </>
@@ -5108,7 +5117,7 @@ export default function App() {
                         <div className="space-y-6">
                            <div className="glass-card bg-brand-primary/5 border-brand-primary/20 p-4">
                               <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest block mb-1">Total a Receber</span>
-                              <div className="text-2xl font-black text-white">R$ {pendingPayment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                              <div className="text-2xl font-black text-white">{formatCurrency(pendingPayment.amount)}</div>
                               <div className="text-[9px] font-bold text-slate-500 uppercase mt-1">Ref: {pendingPayment.label}</div>
                            </div>
 
@@ -5334,11 +5343,11 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Capital Atual</span>
-                          <div className="text-sm font-bold text-white">R$ {payingLoan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                          <div className="text-sm font-bold text-white">{formatCurrency(payingLoan.capital)}</div>
                         </div>
                         <div className="space-y-1 text-right">
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Juros ({(payingLoan.interestRate * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)</span>
-                          <div className="text-sm font-bold text-brand-accent">R$ {(payingLoan.totalBruto - payingLoan.capital).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                          <div className="text-sm font-bold text-brand-accent">{formatCurrency(payingLoan.totalBruto - payingLoan.capital)}</div>
                         </div>
                         <div className="space-y-1">
                           <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Vencimento</span>
@@ -5753,7 +5762,7 @@ export default function App() {
                 <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total da Operação</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
-                  {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  {viewingContract.reduce((acc, l) => acc + l.totalBruto, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </h2>
               </div>
 
@@ -5768,13 +5777,13 @@ export default function App() {
                 <div>
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Capital Emprestado</span>
                   <p className="font-black uppercase text-sm leading-tight text-slate-900">
-                    R$ {viewingContract.reduce((acc, l) => acc + l.capital, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatCurrency(viewingContract.reduce((acc, l) => acc + l.capital, 0))}
                   </p>
                 </div>
                 <div className="sm:text-right">
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Valor dos Juros</span>
                   <p className="font-black text-brand-primary uppercase text-sm leading-tight">
-                    R$ {viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatCurrency(viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0))}
                   </p>
                 </div>
                 <div>
