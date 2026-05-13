@@ -34,7 +34,6 @@ import {
   Copy,
   Check,
   BarChart3,
-  Menu,
   Bell,
   User as UserIcon,
   AlertTriangle,
@@ -452,7 +451,8 @@ export default function App() {
 
   const requestNotificationPermission = async () => {
     if (!("Notification" in window)) {
-      const isIframe = window !== window.parent;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isIframe = (window as any) !== (window as any).parent;
       setError(
         isIframe 
           ? "O preview bloqueia notificações. Clique no botão de 'Abrir em nova aba' no topo para ativar." 
@@ -2976,7 +2976,7 @@ export default function App() {
                         clientPhone: '',
                         clientAddress: '',
                         capital: '',
-                        interestRate: systemSettings.defaultInterestRate > 0 ? systemSettings.defaultInterestRate.toString() : '',
+                        interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
                         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
                         status: 'Agendado'
@@ -2999,7 +2999,7 @@ export default function App() {
                         clientPhone: '',
                         clientAddress: '',
                         capital: '',
-                        interestRate: systemSettings.defaultInterestRate > 0 ? systemSettings.defaultInterestRate.toString() : '',
+                        interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
                         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
                         status: 'Pendente'
@@ -4453,7 +4453,8 @@ export default function App() {
                                   <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Notificações de Sistema</span>
                                   <p className="text-[7px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-0.5">
                                     {isNativeNotificationsEnabled ? 'Ativadas neste dispositivo' : 
-                                     !("Notification" in window) ? (window !== window.parent ? 'Restrito no Preview' : 'Não compatível') : 'Desativadas'}
+                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                     !("Notification" in window) ? ((window as any) !== (window as any).parent ? 'Restrito no Preview' : 'Não compatível') : 'Desativadas'}
                                   </p>
                                 </div>
                               </div>
@@ -6008,7 +6009,7 @@ export default function App() {
                           clientPhone: viewingClientDetail.phone || '',
                           clientAddress: viewingClientDetail.address || '',
                           capital: '',
-                          interestRate: systemSettings.defaultInterestRate > 0 ? (systemSettings.defaultInterestRate * 100).toString() : '',
+                          interestRate: '',
                           date: format(new Date(), 'yyyy-MM-dd'),
                           dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
                           status: 'Pendente'
