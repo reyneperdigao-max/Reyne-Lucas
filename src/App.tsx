@@ -1833,7 +1833,7 @@ export default function App() {
     }
 
     if (activeTab === 'Empréstimos') {
-      result = result.filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado');
+      result = result.filter(l => l.status !== 'Agendado');
       // Always sort by due date in loans tab, and remove the slice to show all loans
       result = [...result].sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
     } else if (activeTab === 'Agendados') {
@@ -4639,16 +4639,15 @@ export default function App() {
                                       >
                                         <FileText className="w-4 h-4" />
                                       </button>
-                                      <button 
-                                        onClick={() => sendWhatsAppCollection(loan)}
-                                        className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl border border-emerald-500/20"
-                                        title="Cobrança WhatsApp"
-                                      >
-                                        <MessageCircle className="w-4 h-4" />
-                                      </button>
-                                    </>
-                                  )}
-                                  {loan.status !== 'Pago' && (
+                                        <button 
+                                          onClick={() => sendWhatsAppCollection(loan)}
+                                          className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl border border-emerald-500/20"
+                                          title="Cobrança WhatsApp"
+                                        >
+                                          <MessageCircle className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
                                     <button 
                                       onClick={() => {
                                         if (loan.status === 'Agendado') {
@@ -4672,7 +4671,6 @@ export default function App() {
                                         </>
                                       )}
                                     </button>
-                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -4796,7 +4794,6 @@ export default function App() {
                                   </button>
                                 </>
                               )}
-                              {loan.status !== 'Pago' && (
                                 <button 
                                   onClick={() => {
                                     if (loan.status === 'Agendado') {
@@ -4820,7 +4817,6 @@ export default function App() {
                                     </>
                                   )}
                                 </button>
-                              )}
                           </div>
                         </div>
                       ))
@@ -5378,7 +5374,7 @@ export default function App() {
                         <button 
                           onClick={() => {
                             const amount = parseFloat(amortizationAmount);
-                            if (amount > 0 && amount <= payingLoan.capital) {
+                            if (amount > 0) {
                               setPendingPayment({ amount, type: 'amortization', label: 'Amortização', method: 'PIX' });
                             }
                           }}
@@ -5595,12 +5591,12 @@ export default function App() {
                         <input 
                           type="checkbox"
                           checked={
-                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago').length > 0 &&
-                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago').every(l => selectedLoansForUnified.includes(l.id))
+                            loans.filter(l => l.clientName === viewingClientLoans).length > 0 &&
+                            loans.filter(l => l.clientName === viewingClientLoans).every(l => selectedLoansForUnified.includes(l.id))
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
-                              const active = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago').map(l => l.id);
+                              const active = loans.filter(l => l.clientName === viewingClientLoans).map(l => l.id);
                               setSelectedLoansForUnified(active);
                             } else {
                               setSelectedLoansForUnified([]);
@@ -5626,22 +5622,18 @@ export default function App() {
                           selectedLoansForUnified.includes(loan.id) && "bg-brand-primary/5"
                         )}>
                           <td className="px-6 py-4">
-                            {loan.status !== 'Pago' ? (
-                              <input 
-                                type="checkbox"
-                                checked={selectedLoansForUnified.includes(loan.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedLoansForUnified(prev => [...prev, loan.id]);
-                                  } else {
-                                    setSelectedLoansForUnified(prev => prev.filter(id => id !== loan.id));
-                                  }
-                                }}
-                                className="w-4 h-4 bg-white/5 border-white/10 rounded focus:ring-brand-primary text-brand-primary cursor-pointer"
-                              />
-                            ) : (
-                              <div className="w-4 h-4 bg-white/5 border-white/10 rounded opacity-20" />
-                            )}
+                            <input 
+                              type="checkbox"
+                              checked={selectedLoansForUnified.includes(loan.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedLoansForUnified(prev => [...prev, loan.id]);
+                                } else {
+                                  setSelectedLoansForUnified(prev => prev.filter(id => id !== loan.id));
+                                }
+                              }}
+                              className="w-4 h-4 bg-white/5 border-white/10 rounded focus:ring-brand-primary text-brand-primary cursor-pointer"
+                            />
                           </td>
                           <td className="px-6 py-4 text-white text-xs">
                             R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -5674,28 +5666,24 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {loan.status !== 'Pago' && (
-                                <button 
-                                  onClick={() => {
-                                    setViewingClientLoans(null);
-                                    setPayingLoan(loan);
-                                    setLastAction(null);
-                                  }}
-                                  className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
-                                  title="Pagamento"
-                                >
-                                  <DollarSign className="w-4 h-4" />
-                                </button>
-                              )}
-                              {loan.status !== 'Pago' && (
-                                <button 
-                                  onClick={() => sendWhatsAppCollection(loan)}
-                                  className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
-                                  title="Cobrança WhatsApp"
-                                >
-                                  <MessageCircle className="w-4 h-4" />
-                                </button>
-                              )}
+                              <button 
+                                onClick={() => {
+                                  setViewingClientLoans(null);
+                                  setPayingLoan(loan);
+                                  setLastAction(null);
+                                }}
+                                className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
+                                title="Pagamento"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => sendWhatsAppCollection(loan)}
+                                className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
+                                title="Cobrança WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
