@@ -90,7 +90,7 @@ service cloud.firestore {
     function isValidAction(data) {
       let requiredFields = ['type', 'description', 'clientName', 'loanId', 'date', 'uid'];
       return data.keys().hasAll(requiredFields) &&
-             data.type in ['loan_created', 'payment_received', 'loan_deleted', 'loan_updated'] &&
+             data.type in ['loan_created', 'payment_received', 'loan_deleted', 'loan_updated', 'loan_scheduled', 'loan_activated', 'loan_renewed'] &&
              data.description is string && data.description.size() <= 500 &&
              data.clientName is string && data.clientName.size() <= 100 &&
              data.loanId is string && data.loanId.size() <= 128 &&

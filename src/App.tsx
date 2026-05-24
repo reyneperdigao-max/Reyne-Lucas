@@ -1751,6 +1751,47 @@ export default function App() {
     });
   };
 
+  const cancelScheduledLoan = async (id: string) => {
+    setConfirmPassword('');
+    setConfirmError(null);
+    setConfirmModal({
+      isOpen: true,
+      requiresPassword: false,
+      title: 'Cancelar Agendamento',
+      message: 'Tem certeza que deseja cancelar e excluir este agendamento?',
+      onConfirm: async () => {
+        if (!user) return;
+        setIsVerifyingPassword(true);
+        setConfirmError(null);
+
+        try {
+          const loanToDelete = loans.find(l => l.id === id);
+          await deleteDoc(doc(db, 'loans', id));
+          
+          // Delete associated actions
+          const q = query(
+            collection(db, 'actions'), 
+            where('loanId', '==', id),
+            where('uid', '==', user.uid)
+          );
+          const snapshot = await getDocs(q);
+          const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
+          await Promise.all(actionDeletions);
+
+          if (loanToDelete) {
+            await logAction('loan_deleted', `Agendamento cancelado - ${loanToDelete.clientName}`, loanToDelete.clientName, id, loanToDelete.capital);
+          }
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: unknown) {
+          console.error("Cancel Schedule Error:", err);
+          setConfirmError("Erro ao cancelar o agendamento.");
+        } finally {
+          setIsVerifyingPassword(false);
+        }
+      }
+    });
+  };
+
   const deletePaidLoans = async () => {
     const paidLoans = loans.filter(l => l.status === 'Pago' && l.capital <= 0);
     if (paidLoans.length === 0) return;
@@ -3107,18 +3148,20 @@ export default function App() {
                         interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
                         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
-                        status: 'Agendado'
+                        status: 'Pendente'
                       });
                       setIsAdding(true);
                     }}
-                    className={cn(
-                      "px-6 py-3 rounded-2xl font-bold transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] hover:-translate-y-0.5 active:translate-y-0",
-                      isDark ? "bg-white/5 text-slate-300 border border-white/10 hover:bg-white/10" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-                    )}
+                    className="bg-brand-primary text-slate-950 px-6 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
                   >
-                    <Clock className="w-4 h-4 text-brand-primary" />
-                    Agendar
+                    <Plus className="w-5 h-5" />
+                    Novo Empréstimo
                   </button>
+                </div>
+              )}
+
+            {activeTab === 'Agendados' && (
+                <div className="flex gap-2 sm:gap-3">
                   <button 
                     onClick={() => {
                       setEditingLoanId(null);
@@ -3130,14 +3173,14 @@ export default function App() {
                         interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
                         dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
-                        status: 'Pendente'
+                        status: 'Agendado'
                       });
                       setIsAdding(true);
                     }}
                     className="bg-brand-primary text-slate-950 px-6 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
                   >
-                    <Plus className="w-5 h-5" />
-                    Novo Empréstimo
+                    <Clock className="w-5 h-5 text-slate-950" />
+                    Agendar Empréstimo
                   </button>
                 </div>
               )}
@@ -5107,13 +5150,22 @@ export default function App() {
                                     </button>
                                   )}
                                   {loan.status === 'Agendado' && (
-                                    <button 
-                                      onClick={() => setViewingScheduleReceipt(loan)}
-                                      className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl border border-amber-500/20"
-                                      title="Gerar Comprovante de Agendamento"
-                                    >
-                                      <Printer className="w-4 h-4" />
-                                    </button>
+                                    <>
+                                      <button 
+                                        onClick={() => setViewingScheduleReceipt(loan)}
+                                        className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl border border-amber-500/20"
+                                        title="Gerar Comprovante de Agendamento"
+                                      >
+                                        <Printer className="w-4 h-4" />
+                                      </button>
+                                      <button 
+                                        onClick={() => cancelScheduledLoan(loan.id)}
+                                        className="p-2 bg-brand-danger/10 text-brand-danger hover:bg-brand-danger hover:text-white rounded-xl border border-brand-danger/20 transition-all active:scale-95"
+                                        title="Cancelar Agendamento"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </>
                                   )}
                                   {loan.status !== 'Agendado' && (
                                     <>
@@ -5280,13 +5332,22 @@ export default function App() {
                                 </button>
                              )}
                               {loan.status === 'Agendado' && (
-                                <button 
-                                  onClick={() => setViewingScheduleReceipt(loan)}
-                                  className="p-3.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 active:scale-95 transition-all"
-                                  title="Comprovante de Agendamento"
-                                >
-                                  <Printer className="w-5 h-5" />
-                                </button>
+                                <>
+                                  <button 
+                                    onClick={() => setViewingScheduleReceipt(loan)}
+                                    className="p-3.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 active:scale-95 transition-all"
+                                    title="Comprovante de Agendamento"
+                                  >
+                                    <Printer className="w-5 h-5" />
+                                  </button>
+                                  <button 
+                                    onClick={() => cancelScheduledLoan(loan.id)}
+                                    className="p-3.5 bg-brand-danger/10 text-brand-danger rounded-xl border border-brand-danger/20 active:scale-95 transition-all"
+                                    title="Cancelar Agendamento"
+                                  >
+                                    <Trash2 className="w-5 h-5" />
+                                  </button>
+                                </>
                               )}
                               {loan.status !== 'Agendado' && (
                                 <>
