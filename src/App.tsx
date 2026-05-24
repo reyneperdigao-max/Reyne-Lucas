@@ -2133,6 +2133,51 @@ export default function App() {
     };
   }, [actions, loans, reportMonth, reportYear]);
 
+  const monthlyPerformanceHistory = useMemo(() => {
+    const data = [];
+    const monthsNameShort = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    
+    // Generate last 6 months ending at selected reportMonth/reportYear
+    for (let i = 5; i >= 0; i--) {
+      let m = reportMonth - i;
+      let y = reportYear;
+      while (m < 0) {
+        m += 12;
+        y -= 1;
+      }
+      
+      const monthActions = actions.filter(a => {
+        const d = toDate(a.date);
+        return d && d.getMonth() === m && d.getFullYear() === y;
+      });
+      
+      const released = monthActions.filter(a => 
+        (a.type === 'loan_created' && !a.description.includes('Agendamento')) || 
+        a.type === 'loan_activated'
+      );
+      const payments = monthActions.filter(a => a.type === 'payment_received' || a.type === 'loan_renewed');
+      
+      const totalLent = Math.round(released.reduce((acc, curr) => acc + (curr.amount || 0), 0) * 100) / 100;
+      
+      const interestPayments = Math.round(payments
+        .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
+        
+      const capitalPayments = Math.round(payments
+        .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
+
+      data.push({
+        monthName: monthsNameShort[m],
+        m,
+        y,
+        interestPayments,
+        capitalPayments,
+        totalLent,
+        totalReceived: interestPayments + capitalPayments
+      });
+    }
+    return data;
+  }, [actions, reportMonth, reportYear]);
+
 
   const notifications = useMemo(() => {
     const list: {
@@ -4178,32 +4223,233 @@ export default function App() {
                               ))}
                             </div>
 
-                            {/* Simplified Progress Section */}
-                            <div className={cn("mb-14 flex-grow w-full border p-10 rounded-[32px]", isDark ? "border-white/5" : "border-slate-100")}>
-                              <div className="w-full">
-                                 <h3 className={cn("text-[10px] font-black uppercase tracking-[0.2em] mb-8 pb-4 border-b", isDark ? "text-slate-500 border-white/5" : "text-slate-400 border-slate-100")}>Distribuição de Receita</h3>
-                                 <div className="space-y-10">
-                                   <div className="space-y-4">
-                                     <div className="flex justify-between items-end">
-                                       <span className={cn("text-[10px] font-black uppercase tracking-[0.1em]", isDark ? "text-white" : "text-slate-900")}>Amortização de Capital</span>
-                                       <span className={cn("text-xs font-black", isDark ? "text-white" : "text-slate-900")}>{(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
-                                     </div>
-                                     <div className={cn("h-1 rounded-full overflow-hidden", isDark ? "bg-white/5" : "bg-slate-100")}>
-                                       <div className={cn("h-full rounded-full", isDark ? "bg-white/40" : "bg-slate-900")} style={{ width: `${(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
+                             {/* Performance Chart & Distribution Section */}
+                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-14">
+                               {/* Performance Chart */}
+                               <div className="lg:col-span-8 border p-8 rounded-[32px] border-slate-100 bg-white flex flex-col justify-between">
+                                 <div className="w-full">
+                                   <div className="flex justify-between items-center mb-6 border-b pb-4 border-slate-100">
+                                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Evolução de Performance (Últimos 6 Meses)</h3>
+                                     <div className="flex gap-4">
+                                       <div className="flex items-center gap-1.5">
+                                         <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                         <span className="text-[8px] font-black uppercase tracking-wider text-slate-500">Total Recebido</span>
+                                       </div>
+                                       <div className="flex items-center gap-1.5">
+                                         <div className="w-2 h-2 rounded-full bg-slate-900" />
+                                         <span className="text-[8px] font-black uppercase tracking-wider text-slate-500">Capital Liberado</span>
+                                       </div>
                                      </div>
                                    </div>
-                                   <div className="space-y-4">
-                                     <div className="flex justify-between items-end">
-                                       <span className={cn("text-[10px] font-black uppercase tracking-[0.1em]", isDark ? "text-white" : "text-slate-900")}>Rendimento de Juros</span>
-                                       <span className="text-xs font-black text-brand-primary">{(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
+                                   
+                                   {/* Render vector chart */}
+                                   {(() => {
+                                     const maxVal = Math.max(...monthlyPerformanceHistory.map(d => Math.max(d.totalReceived, d.totalLent, 1000)));
+                                     const scaleLimit = Math.ceil(maxVal * 1.15 / 1000) * 1000 || 1000;
+                                     
+                                     const width = 600;
+                                     const height = 180;
+                                     const paddingX = 40;
+                                     const paddingY = 20;
+                                     const chartWidth = width - paddingX * 2;
+                                     const chartHeight = height - paddingY * 2;
+                                     
+                                     const getX = (index: number) => paddingX + (index / 5) * chartWidth;
+                                     const getY = (val: number) => paddingY + chartHeight - (val / scaleLimit) * chartHeight;
+                                     
+                                     const receivedPoints = monthlyPerformanceHistory.map((d, index) => ({ x: getX(index), y: getY(d.totalReceived) }));
+                                     const lentPoints = monthlyPerformanceHistory.map((d, index) => ({ x: getX(index), y: getY(d.totalLent) }));
+                                     
+                                     const receivedLinePath = receivedPoints.length > 0
+                                       ? receivedPoints.reduce((acc, p, index) => acc + `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '')
+                                       : '';
+                                       
+                                     const receivedAreaPath = receivedPoints.length > 0
+                                       ? `${receivedLinePath} L ${receivedPoints[receivedPoints.length - 1].x} ${paddingY + chartHeight} L ${receivedPoints[0].x} ${paddingY + chartHeight} Z`
+                                       : '';
+                                       
+                                     const lentLinePath = lentPoints.length > 0
+                                       ? lentPoints.reduce((acc, p, index) => acc + `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '')
+                                       : '';
+
+                                     const ticks = [scaleLimit, scaleLimit * 0.66, scaleLimit * 0.33, 0];
+
+                                     return (
+                                       <div className="relative w-full overflow-hidden">
+                                         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto text-slate-400 font-bold text-[8px]" style={{ overflow: 'visible' }}>
+                                           <defs>
+                                             <linearGradient id="chart-received-gradient" x1="0" y1="0" x2="0" y2="1">
+                                               <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+                                               <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                                             </linearGradient>
+                                           </defs>
+                                           
+                                           {/* Horizontal Gridlines */}
+                                           {ticks.map((tick, index) => {
+                                             const y = getY(tick);
+                                             return (
+                                               <g key={index} className="opacity-40">
+                                                 <line 
+                                                   x1={paddingX} 
+                                                   y1={y} 
+                                                   x2={width - paddingX} 
+                                                   y2={y} 
+                                                   stroke="#e2e8f0" 
+                                                   strokeWidth="0.5" 
+                                                   strokeDasharray="3 3" 
+                                                 />
+                                                 <text 
+                                                   x={paddingX - 8} 
+                                                   y={y + 3} 
+                                                   textAnchor="end" 
+                                                   fill="#94a3b8" 
+                                                   className="font-bold font-sans text-[7px]"
+                                                 >
+                                                   {formatCurrency(tick).replace('R$', '').trim()}
+                                                 </text>
+                                               </g>
+                                             );
+                                           })}
+                                           
+                                           {/* Vertical Gridlines & X labels */}
+                                           {monthlyPerformanceHistory.map((d, index) => {
+                                             const x = getX(index);
+                                             return (
+                                               <g key={index}>
+                                                 <line 
+                                                   x1={x} 
+                                                   y1={paddingY} 
+                                                   x2={x} 
+                                                   y2={paddingY + chartHeight} 
+                                                   stroke="#e2e8f0" 
+                                                   strokeWidth="0.5" 
+                                                   className="opacity-20"
+                                                 />
+                                                 <text 
+                                                   x={x} 
+                                                   y={paddingY + chartHeight + 14} 
+                                                   textAnchor="middle" 
+                                                   fill="#64748b" 
+                                                   className="font-bold text-[8px] uppercase tracking-wider font-sans"
+                                                 >
+                                                   {d.monthName}
+                                                 </text>
+                                               </g>
+                                             );
+                                           })}
+                                           
+                                           {/* Total Received Area (Lucro / Retorno) */}
+                                           {receivedPoints.length > 0 && (
+                                             <>
+                                               <path 
+                                                 d={receivedAreaPath} 
+                                                 fill="url(#chart-received-gradient)" 
+                                               />
+                                               <path 
+                                                 d={receivedLinePath} 
+                                                 fill="none" 
+                                                 stroke="#10b981" 
+                                                 strokeWidth="2" 
+                                                 strokeLinecap="round" 
+                                                 strokeLinejoin="round" 
+                                               />
+                                             </>
+                                           )}
+                                           
+                                           {/* Capital Deployed Line (Novos Aportes) */}
+                                           {lentPoints.length > 0 && (
+                                             <path 
+                                               d={lentLinePath} 
+                                               fill="none" 
+                                               stroke="#0f172a" 
+                                               strokeWidth="1.5" 
+                                               strokeDasharray="4 2"
+                                               strokeLinecap="round" 
+                                               strokeLinejoin="round" 
+                                               className="opacity-70"
+                                             />
+                                           )}
+                                           
+                                           {/* Data dots on the lines */}
+                                           {monthlyPerformanceHistory.map((d, index) => {
+                                             const rx = getX(index);
+                                             const ry = getY(d.totalReceived);
+                                             const lx = getX(index);
+                                             const ly = getY(d.totalLent);
+                                             
+                                             return (
+                                               <g key={index}>
+                                                 {/* Capital Deployed Dot */}
+                                                 {d.totalLent > 0 && (
+                                                   <circle 
+                                                     cx={lx} 
+                                                     cy={ly} 
+                                                     r="3" 
+                                                     fill="#0f172a" 
+                                                     stroke="#ffffff" 
+                                                     strokeWidth="1" 
+                                                   />
+                                                 )}
+                                                 
+                                                 {/* Total Received Dot */}
+                                                 <circle 
+                                                   cx={rx} 
+                                                   cy={ry} 
+                                                   r="4.5" 
+                                                   fill="#10b981" 
+                                                   stroke="#ffffff" 
+                                                   strokeWidth="1.5" 
+                                                 />
+                                                 
+                                                 {/* Values above final point of selected month or non-zero points */}
+                                                 {(index === 5 || (index % 2 === 0 && d.totalReceived > 0)) && (
+                                                   <text
+                                                     x={rx}
+                                                     y={ry - 8}
+                                                     textAnchor="middle"
+                                                     fill="#059669"
+                                                     className="font-bold text-[7.5px] font-sans"
+                                                   >
+                                                     {formatCurrency(d.totalReceived).replace('R$', '').trim()}
+                                                   </text>
+                                                 )}
+                                               </g>
+                                             );
+                                           })}
+                                         </svg>
+                                       </div>
+                                     );
+                                   })()}
+                                 </div>
+                               </div>
+                               
+                               {/* Simplified Progress Section / Distribution */}
+                               <div className="lg:col-span-4 border p-8 rounded-[32px] border-slate-100 bg-white flex flex-col justify-between">
+                                 <div className="w-full">
+                                   <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-8 pb-4 border-b border-slate-100">Distribuição de Receita</h3>
+                                   <div className="space-y-10">
+                                     <div className="space-y-4">
+                                       <div className="flex justify-between items-end">
+                                         <span className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-900">Amortização de Capital</span>
+                                         <span className="text-xs font-black text-slate-900">{(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
+                                       </div>
+                                       <div className="h-1 rounded-full overflow-hidden bg-slate-100">
+                                         <div className="h-full rounded-full bg-slate-900" style={{ width: `${(monthlyReportStats.capitalPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
+                                       </div>
                                      </div>
-                                     <div className={cn("h-1 rounded-full overflow-hidden", isDark ? "bg-white/5" : "bg-slate-100")}>
-                                       <div className="h-full bg-brand-primary rounded-full" style={{ width: `${(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
+                                     <div className="space-y-4">
+                                       <div className="flex justify-between items-end">
+                                         <span className="text-[10px] font-black uppercase tracking-[0.1em] text-slate-900">Rendimento de Juros</span>
+                                         <span className="text-xs font-black text-slate-900 font-sans">{(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1) * 100).toFixed(1)}%</span>
+                                       </div>
+                                       <div className="h-1 rounded-full overflow-hidden bg-slate-100">
+                                         <div className="h-full bg-brand-primary rounded-full" style={{ width: `${(monthlyReportStats.interestPayments / (monthlyReportStats.totalPayments || 1)) * 100}%` }} />
+                                       </div>
                                      </div>
                                    </div>
                                  </div>
-                              </div>
-                            </div>
+                               </div>
+                             </div>
 
                             {/* Professional Sign-off & Footer */}
                             <div className={cn("mt-auto grid grid-cols-2 lg:grid-cols-4 gap-12 pt-12 border-t", isDark ? "border-white/5" : "border-slate-200")}>
