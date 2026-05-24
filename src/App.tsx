@@ -59,7 +59,8 @@ import {
   getDocs,
   setDoc,
   serverTimestamp,
-  writeBatch
+  writeBatch,
+  limit
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
@@ -135,6 +136,7 @@ interface MonthlyClosure {
     paymentCount: number;
     loanCount: number;
     currentOutstanding: number;
+    estimatedInterest: number;
   };
 }
 
@@ -157,7 +159,7 @@ interface Loan {
 
 interface SystemAction {
   id: string;
-  type: 'loan_created' | 'payment_received' | 'loan_deleted' | 'loan_updated';
+  type: 'loan_created' | 'payment_received' | 'loan_deleted' | 'loan_updated' | 'loan_activated' | 'loan_scheduled' | 'loan_renewed';
   description: string;
   amount?: number;
   capitalAmount?: number;
@@ -244,11 +246,12 @@ export default function App() {
     const saved = localStorage.getItem('nexus_privacy_mode');
     return saved === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações'>('Principal');
+  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Quitados' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações'>('Principal');
   const [activeReportTab, setActiveReportTab] = useState<'mensal' | 'fechamentos'>('mensal');
   const [previousTab, setPreviousTab] = useState<typeof activeTab>('Principal');
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+  const [visibleTransactionsCount, setVisibleTransactionsCount] = useState(50);
   const currentDateText = useMemo(() => format(new Date(), "dd 'de' MMMM", { locale: ptBR }), []);
 
   const changeTab = (newTab: typeof activeTab) => {
@@ -264,10 +267,13 @@ export default function App() {
       setPayingLoan(null);
       setEditingLoanId(null);
       setIsAdding(false);
+      setVisibleTransactionsCount(50);
+      setViewingReport(false);
     }
   };
   const [reportMonth, setReportMonth] = useState(new Date().getMonth());
   const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  const [viewingReport, setViewingReport] = useState(false);
   
   // Form State
   const [isAdding, setIsAdding] = useState(false);
@@ -290,7 +296,7 @@ export default function App() {
   useEffect(() => {
     if (viewingClientLoans) {
       const activeLoans = loans
-        .filter(l => l.clientName === viewingClientLoans && l.status !== 'Pago')
+        .filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0))
         .map(l => l.id);
       setSelectedLoansForUnified(activeLoans);
     } else {
@@ -524,6 +530,9 @@ export default function App() {
     if (!element) return;
 
     setIsGeneratingPDF(true);
+    let noPrintElements: NodeListOf<Element> | null = null;
+    const originalDisplays: string[] = [];
+
     try {
       // Wait for fonts to be fully loaded to ensure consistent typography
       await document.fonts.ready;
@@ -532,8 +541,7 @@ export default function App() {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Hide elements before capture
-      const noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
-      const originalDisplays: string[] = [];
+      noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
       noPrintElements.forEach(el => {
         originalDisplays.push((el as HTMLElement).style.display);
         (el as HTMLElement).style.display = 'none';
@@ -763,11 +771,6 @@ export default function App() {
         }
       });
 
-      // Restore elements
-      noPrintElements.forEach((el, i) => {
-        (el as HTMLElement).style.display = originalDisplays[i];
-      });
-
       if (format === 'image') {
         const imgData = canvas.toDataURL('image/png', 1.0);
         let fileName = 'comprovante.png';
@@ -913,6 +916,13 @@ export default function App() {
         console.error('Erro ao gerar PDF:', error);
       }
     } finally {
+      if (noPrintElements) {
+        noPrintElements.forEach((el, i) => {
+          if (el && originalDisplays[i] !== undefined) {
+            (el as HTMLElement).style.display = originalDisplays[i];
+          }
+        });
+      }
       setIsGeneratingPDF(false);
     }
   };
@@ -1218,7 +1228,8 @@ export default function App() {
     const qActions = query(
       collection(db, 'actions'),
       where('uid', '==', user.uid),
-      orderBy('date', 'desc')
+      orderBy('date', 'desc'),
+      limit(1000)
     );
 
     const unsubscribeActions = onSnapshot(qActions, (snapshot) => {
@@ -1389,7 +1400,14 @@ export default function App() {
           jurosPagos: 0
         };
         const docRef = await addDoc(collection(db, 'loans'), newDocData);
-        await logAction('loan_created', `Novo empréstimo para ${loanData.clientName}`, loanData.clientName, docRef.id, loanData.capital);
+        const isScheduled = (newLoan.status as string) === 'Agendado';
+    await logAction(
+      isScheduled ? 'loan_scheduled' : 'loan_created', 
+      `${isScheduled ? 'Agendamento' : 'Novo empréstimo'} para ${loanData.clientName}`, 
+      loanData.clientName, 
+      docRef.id, 
+      loanData.capital
+    );
         if (newDocData.status === 'Agendado') {
           setViewingScheduleReceipt({ id: docRef.id, ...newDocData, createdAt: new Date().toISOString() } as unknown as Loan);
         }
@@ -1733,6 +1751,64 @@ export default function App() {
     });
   };
 
+  const deletePaidLoans = async () => {
+    const paidLoans = loans.filter(l => l.status === 'Pago' && l.capital <= 0);
+    if (paidLoans.length === 0) return;
+
+    setConfirmPassword('');
+    setConfirmError(null);
+    setConfirmModal({
+      isOpen: true,
+      requiresPassword: true,
+      title: 'Excluir Todos os Empréstimos Quitados',
+      message: `Tem certeza que deseja excluir todos os ${paidLoans.length} empréstimos quitados e todo o histórico associado? Você deve confirmar sua senha de acesso.`,
+      onConfirm: async (password?: string) => {
+        if (!user || !user.email || !password) {
+          setConfirmError("A senha é obrigatória.");
+          return;
+        }
+
+        setIsVerifyingPassword(true);
+        setConfirmError(null);
+
+        try {
+          // Verify password
+          const credential = EmailAuthProvider.credential(user.email, password);
+          await reauthenticateWithCredential(user, credential);
+
+          // We delete each paid loan and its associated actions in parallel
+          await Promise.all(paidLoans.map(async (loan) => {
+            await deleteDoc(doc(db, 'loans', loan.id));
+            
+            // Delete associated actions for this loan
+            const q = query(
+              collection(db, 'actions'), 
+              where('loanId', '==', loan.id),
+              where('uid', '==', user.uid)
+            );
+            const snapshot = await getDocs(q);
+            const actionDeletions = snapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(actionDeletions);
+
+            await logAction('loan_deleted', `Empréstimo quitado excluído - ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
+          }));
+
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (err: unknown) {
+          const error = err as { code?: string };
+          console.error("Re-auth Error:", error);
+          if (error.code === 'auth/wrong-password') {
+            setConfirmError("Senha incorreta.");
+          } else {
+            setConfirmError("Erro ao verificar senha.");
+          }
+        } finally {
+          setIsVerifyingPassword(false);
+        }
+      }
+    });
+  };
+
   const deleteAction = async (id: string) => {
     const action = actions.find(a => a.id === id);
     if (!action) return;
@@ -1833,9 +1909,12 @@ export default function App() {
     }
 
     if (activeTab === 'Empréstimos') {
-      result = result.filter(l => l.status !== 'Agendado');
+      result = result.filter(l => l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0));
       // Always sort by due date in loans tab, and remove the slice to show all loans
       result = [...result].sort((a, b) => (toDate(a.dueDate)?.getTime() || 0) - (toDate(b.dueDate)?.getTime() || 0));
+    } else if (activeTab === 'Quitados') {
+      result = result.filter(l => l.status === 'Pago' && l.capital <= 0);
+      result = [...result].sort((a, b) => (toDate(b.dueDate)?.getTime() || 0) - (toDate(a.dueDate)?.getTime() || 0));
     } else if (activeTab === 'Agendados') {
       result = result.filter(l => l.status === 'Agendado');
     }
@@ -1881,7 +1960,7 @@ export default function App() {
 
       if (loan.status !== 'Agendado') {
         existing.totalLoans += 1;
-        if (loan.status !== 'Pago') {
+        if (loan.status !== 'Pago' || loan.capital > 0) {
           existing.activeCapital += (loan.capital || 0);
           existing.activeDebt += (loan.totalBruto || 0);
           existing.loanCount += 1;
@@ -2016,29 +2095,31 @@ export default function App() {
       return d && d.getMonth() === reportMonth && d.getFullYear() === reportYear;
     });
 
-    const loansCreatedInPeriod = loans.filter(l => {
-      const d = toDate(l.createdAt || l.date);
-      return d && d.getMonth() === reportMonth && d.getFullYear() === reportYear && l.status !== 'Agendado';
-    });
+    const releasedActions = periodActions.filter(a => 
+      (a.type === 'loan_created' && !a.description.includes('Agendamento')) || 
+      a.type === 'loan_activated'
+    );
+    const paymentActions = periodActions.filter(a => a.type === 'payment_received' || a.type === 'loan_renewed');
 
-    const totalLent = Math.round(loansCreatedInPeriod.reduce((acc, curr) => acc + curr.capital, 0) * 100) / 100;
+    const totalLent = Math.round(releasedActions.reduce((acc, curr) => acc + (curr.amount || 0), 0) * 100) / 100;
     
-    const totalPayments = Math.round(periodActions
-      .filter(a => a.type === 'payment_received')
+    const totalPayments = Math.round(paymentActions
       .reduce((acc, curr) => acc + (curr.amount || 0), 0) * 100) / 100;
 
-    const capitalPayments = Math.round(periodActions
-      .filter(a => a.type === 'payment_received')
+    const capitalPayments = Math.round(paymentActions
       .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
 
-    const interestPayments = Math.round(periodActions
-      .filter(a => a.type === 'payment_received')
+    const interestPayments = Math.round(paymentActions
       .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
 
     // Outstanding balance is everything not paid yet as of now
     const currentOutstanding = Math.round(loans
-      .filter(l => l.status !== 'Pago' || l.capital > 0)
+      .filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado')
       .reduce((acc, curr) => acc + (curr.totalBruto - (curr.capitalPago || 0)), 0) * 100) / 100;
+
+    const estimatedInterest = Math.round(loans
+      .filter(l => l.status !== 'Agendado')
+      .reduce((acc, curr) => acc + (curr.capital * (curr.interestRate || 0)), 0) * 100) / 100;
 
     return {
       totalLent,
@@ -2046,8 +2127,9 @@ export default function App() {
       capitalPayments,
       interestPayments,
       currentOutstanding,
-      loanCount: loansCreatedInPeriod.length,
-      paymentCount: periodActions.filter(a => a.type === 'payment_received').length
+      estimatedInterest,
+      loanCount: releasedActions.length,
+      paymentCount: paymentActions.length
     };
   }, [actions, loans, reportMonth, reportYear]);
 
@@ -2504,6 +2586,7 @@ export default function App() {
   const menuItems = [
     { id: 'Principal', label: 'Principal', icon: BarChart3 },
     { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
+    { id: 'Quitados', label: 'Quitados', icon: CheckCircle2 },
     { id: 'Clientes', label: 'Clientes', icon: Users },
     { id: 'Transações', label: 'Transações', icon: Wallet },
     { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
@@ -3026,12 +3109,17 @@ export default function App() {
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className="px-0 py-4 sm:py-8 space-y-10"
               >
-                {/* Stats Grid */}
-                <div className="flex items-center justify-between gap-4 mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Fluxo de Caixa em Tempo Real</span>
-                  </div>
+                {/* Welcome Header */}
+                <div className="space-y-1 mb-6">
+                  <h2 className={cn("text-lg sm:text-xl font-black tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                    Olá, {(() => {
+                      const raw = (userProfile?.displayName || user?.displayName || 'Usuário').trim().split(' ')[0];
+                      return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+                    })()}
+                  </h2>
+                  <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-500 leading-none">
+                    gerencie seus empréstimos
+                  </p>
                 </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
@@ -3287,7 +3375,7 @@ export default function App() {
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 className={cn("glass-card overflow-hidden transition-colors shadow-2xl", !isDark && "bg-white border-slate-200")}
               >
-                {(activeTab === 'Clientes' || activeTab === 'Empréstimos') && (
+                {(activeTab === 'Clientes' || activeTab === 'Empréstimos' || activeTab === 'Quitados') && (
                      <div className={cn("p-4 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors", isDark ? "border-white/[0.03]" : "border-slate-100")}>
                        <div className="relative group flex-1">
                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -3308,6 +3396,21 @@ export default function App() {
                          />
                        </div>
                        <div className="flex items-center gap-3">
+                         {activeTab === 'Quitados' && loans.some(l => l.status === 'Pago' && l.capital <= 0) && (
+                           <button
+                             onClick={deletePaidLoans}
+                             className={cn(
+                               "flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition-all duration-300 active:scale-95 cursor-pointer shrink-0 shadow-lg shadow-brand-danger/10",
+                               isDark 
+                                 ? "bg-brand-danger/10 hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/20" 
+                                 : "bg-red-50 hover:bg-red-100 text-red-600 border border-red-200"
+                             )}
+                             title="Excluir todos os empréstimos quitados"
+                           >
+                             <Trash2 className="w-3.5 h-3.5" />
+                             <span className="hidden sm:inline">Excluir Todos Quitados</span>
+                           </button>
+                         )}
                          <div className={cn("flex items-center gap-2 border rounded-xl px-3 py-1.5 focus-within:border-brand-primary/50 transition-colors", isDark ? "bg-transparent border-white/10" : "bg-transparent border-slate-200")}>
                            <Calendar className="w-3.5 h-3.5 text-slate-500" />
                            <select 
@@ -3403,7 +3506,8 @@ export default function App() {
                                  </span>
                                </td>
                                <td className="px-8 py-6 text-right">
-                                 <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-brand-primary group-hover:translate-x-1 transition-all ml-auto" />
+                                <td className="px-8 py-6 text-right">
+                               </td>
                                </td>
                              </tr>
                            ))
@@ -3601,7 +3705,7 @@ export default function App() {
                             </td>
                           </tr>
                         ) : (
-                          filteredTransactions.map((action) => (
+                          filteredTransactions.slice(0, visibleTransactionsCount).map((action) => (
                             <tr key={action.id} className={cn("group transition-colors", isDark ? "hover:bg-white/[0.01]" : "hover:bg-slate-50")}>
                               <td className="px-8 py-4 text-slate-400 text-xs font-medium">
                                 {safeFormatDate(action.date, 'dd/MM/yyyy HH:mm')}
@@ -3667,7 +3771,7 @@ export default function App() {
                          {command.trim() ? 'Nenhuma transação encontrada.' : 'Nenhuma transação registrada.'}
                       </div>
                     ) : (
-                      filteredTransactions.map((action) => (
+                      filteredTransactions.slice(0, visibleTransactionsCount).map((action) => (
                         <div key={`trans-mobile-${action.id}`} className={cn("glass-card p-5 space-y-4 border transition-colors", isDark ? "border-white/5" : "bg-white border-slate-200 shadow-lg")}>
                           <div className="flex justify-between items-start">
                             <div className="space-y-1">
@@ -3715,6 +3819,22 @@ export default function App() {
                       ))
                     )}
                   </div>
+
+                  {filteredTransactions.length > visibleTransactionsCount && (
+                    <div className="flex justify-center pt-6">
+                      <button
+                        onClick={() => setVisibleTransactionsCount(prev => prev + 50)}
+                        className={cn(
+                          "px-6 py-4 border font-bold uppercase tracking-widest text-[9px] rounded-2xl transition-all",
+                          isDark 
+                            ? "bg-white/5 border-white/10 hover:bg-white/10 text-slate-300" 
+                            : "bg-slate-100 border-slate-200 hover:bg-slate-200 text-slate-600 shadow-sm"
+                        )}
+                      >
+                        Carregar Mais Transações ({filteredTransactions.length - visibleTransactionsCount} restantes)
+                      </button>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             ) : activeTab === 'Pagamento' ? (
@@ -3869,7 +3989,10 @@ export default function App() {
                               isDark ? "text-white [color-scheme:dark]" : "text-slate-900 [color-scheme:light]"
                             )}
                             value={reportMonth}
-                            onChange={(e) => setReportMonth(parseInt(e.target.value))}
+                            onChange={(e) => {
+                              setReportMonth(parseInt(e.target.value));
+                              setViewingReport(false);
+                            }}
                           >
                             {ptBrMonths.map((month, index) => (
                               <option key={month} value={index} className={isDark ? "bg-black" : "bg-white"}>{month}</option>
@@ -3884,7 +4007,10 @@ export default function App() {
                               isDark ? "text-white [color-scheme:dark]" : "text-slate-900 [color-scheme:light]"
                             )}
                             value={reportYear}
-                            onChange={(e) => setReportYear(parseInt(e.target.value))}
+                            onChange={(e) => {
+                              setReportYear(parseInt(e.target.value));
+                              setViewingReport(false);
+                            }}
                           >
                             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
                               <option key={year} value={year} className={isDark ? "bg-black" : "bg-white"}>{year}</option>
@@ -3926,8 +4052,79 @@ export default function App() {
                         exit={{ opacity: 0, y: -20 }}
                         className="space-y-8"
                       >
-                        <div id="printable-report" className="space-y-8 printable-content">
-                          <div className="report-page font-sans shadow-none border-none p-10 rounded-[40px] bg-white text-black">
+                        {!viewingReport ? (
+                          <div className={cn(
+                            "p-10 md:p-16 rounded-[40px] border text-center flex flex-col items-center justify-center max-w-3xl mx-auto transition-all duration-300",
+                            isDark 
+                              ? "bg-white/[0.01] border-white/5" 
+                              : "bg-white border-slate-200 shadow-xl"
+                          )}>
+                            <div className={cn(
+                              "w-20 h-20 rounded-full flex items-center justify-center mb-6 border animate-pulse",
+                              isDark ? "bg-brand-primary/10 border-brand-primary/20 text-brand-primary" : "bg-amber-50 border-amber-200 text-amber-600"
+                            )}>
+                              <FileText className="w-10 h-10" />
+                            </div>
+                            
+                            <h3 className={cn("text-2xl font-black uppercase tracking-tight mb-2", isDark ? "text-white" : "text-slate-950")}>
+                              Relatório de Performance
+                            </h3>
+                            
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-6">
+                              Ciclo de {ptBrMonths[reportMonth]} de {reportYear}
+                            </p>
+                            
+                            <p className={cn("text-xs sm:text-sm max-w-md leading-relaxed mb-10", isDark ? "text-slate-400" : "text-slate-600")}>
+                              Visualize a demonstração consolidada completa deste ciclo financeiro. O relatório gerado inclui os indicadores de lucratividade, distribuição de receita e fluxo de caixa sob gestão.
+                            </p>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg mb-10 text-left">
+                              {[
+                                { label: 'Demonstrativo Contábil', desc: 'Lançamentos detalhados de receitas de juros' },
+                                { label: 'Metas e Rendimento', desc: 'Análise de performance sobre contratos ativos' },
+                                { label: 'Distribuição de Fluxo', desc: 'Comparativo gráfico de juros e amortizações' },
+                                { label: 'Assinatura e Autenticação', desc: 'Rastreabilidade digital com QR Code' }
+                              ].map((item, index) => (
+                                <div key={index} className={cn(
+                                  "p-4 rounded-2xl border flex flex-col gap-1 transition-all",
+                                  isDark ? "bg-white/[0.02] border-white/5 hover:bg-white/[0.04]" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                                )}>
+                                  <span className={cn("text-[10px] font-black uppercase tracking-wider", isDark ? "text-slate-200" : "text-slate-800")}>
+                                    {item.label}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500">{item.desc}</span>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <button
+                              onClick={() => setViewingReport(true)}
+                              className="w-full sm:w-auto flex items-center justify-center gap-3 px-10 py-5 bg-brand-primary text-slate-950 font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-brand-primary/10 hover:shadow-brand-primary/30 hover:-translate-y-0.5 active:translate-y-0 transition-all"
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>Visualizar Relatório Completo</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-6">
+                            {/* Elegant Back Navigation */}
+                            <div className="flex justify-start no-print">
+                              <button
+                                onClick={() => setViewingReport(false)}
+                                className={cn(
+                                  "flex items-center gap-2 px-5 py-3 border rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                  isDark 
+                                    ? "bg-white/5 border-white/10 hover:bg-white/10 text-slate-300" 
+                                    : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700 shadow-sm"
+                                )}
+                              >
+                                <ChevronLeft className="w-4 h-4" />
+                                Voltar para Controle
+                              </button>
+                            </div>
+
+                            <div id="printable-report" className="space-y-8 printable-content">
+                              <div className="report-page font-sans shadow-none border-none p-10 rounded-[40px] bg-white text-black">
                             {/* Clean Professional Header */}
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-10 mb-12 gap-8 border-slate-200">
                               <div className="space-y-1">
@@ -3957,11 +4154,12 @@ export default function App() {
                             </div>
 
                             {/* Clean Stats Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-14">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-14">
                               {[
                                 { label: 'Capital Liberado', value: monthlyReportStats.totalLent, sub: `${monthlyReportStats.loanCount} Contratos`, color: 'slate-900' },
                                 { label: 'Total Recebido', value: monthlyReportStats.totalPayments, sub: `${monthlyReportStats.paymentCount} Transações`, color: 'emerald-600' },
                                 { label: 'Lucro (Juros)', value: monthlyReportStats.interestPayments, sub: 'Rendimentos Reais', color: 'emerald-600' },
+                                { label: 'Renda Estimada', value: monthlyReportStats.estimatedInterest, sub: 'Expectativa de Juros', color: 'amber-600' },
                                 { label: 'Saldo Ativo', value: monthlyReportStats.currentOutstanding, sub: 'Em Aberto', color: 'slate-900' }
                               ].map((stat, i) => (
                                 <div key={i} className="border p-6 rounded-xl flex flex-col justify-between items-center text-center bg-white border-slate-100">
@@ -3969,7 +4167,8 @@ export default function App() {
                                   <div>
                                     <div className={cn(
                                       "text-xl font-black tracking-tight", 
-                                      stat.color === 'emerald-600' ? "text-emerald-600" : "text-slate-900"
+                                      stat.color === 'emerald-600' ? "text-emerald-600" : 
+                                      stat.color === 'amber-600' ? "text-amber-600" : "text-slate-900"
                                     )}>
                                       {formatCurrency(stat.value)}
                                     </div>
@@ -4055,6 +4254,8 @@ export default function App() {
                             </div>
                           </div>
                         </div>
+                        </div>
+                        )}
                       </motion.div>
                     ) : (
                       <motion.div 
@@ -4098,14 +4299,18 @@ export default function App() {
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-6 mb-8 pt-6 border-t border-white/10">
+                                <div className="grid grid-cols-3 gap-2 mb-8 pt-6 border-t border-white/10 text-center">
+                                  <div className="text-left">
+                                    <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-1">Lucro Real</span>
+                                    <div className="text-emerald-500 font-black text-xs">R$ {(closure.stats.interestPayments || 0).toLocaleString('pt-BR')}</div>
+                                  </div>
                                   <div>
-                                    <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest block mb-1">Lucro Real</span>
-                                    <div className="text-emerald-500 font-black text-sm">R$ {closure.stats.interestPayments.toLocaleString('pt-BR')}</div>
+                                    <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-1">Renda Est.</span>
+                                    <div className="text-amber-500 font-black text-xs">R$ {(closure.stats.estimatedInterest ?? 0).toLocaleString('pt-BR')}</div>
                                   </div>
                                   <div className="text-right">
-                                    <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest block mb-1">Movimentado</span>
-                                    <div className={cn("font-black text-sm", isDark ? "text-white" : "text-slate-900")}>R$ {closure.stats.totalPayments.toLocaleString('pt-BR')}</div>
+                                    <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-1">Movimentado</span>
+                                    <div className={cn("font-black text-xs", isDark ? "text-white" : "text-slate-900")}>R$ {(closure.stats.totalPayments || 0).toLocaleString('pt-BR')}</div>
                                   </div>
                                 </div>
 
@@ -4114,6 +4319,7 @@ export default function App() {
                                     setReportMonth(closure.month);
                                     setReportYear(closure.year);
                                     setActiveReportTab('mensal');
+                                    setViewingReport(true);
                                   }}
                                   className="w-full py-4 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all"
                                 >
@@ -4507,6 +4713,11 @@ export default function App() {
                               <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Agendado</th>
                               <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Data para Efetuar</th>
                             </>
+                          ) : activeTab === 'Quitados' ? (
+                            <>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Pago</th>
+                              <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Data</th>
+                            </>
                           ) : (
                             <>
                               <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Valor Original</th>
@@ -4516,13 +4727,15 @@ export default function App() {
                               <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Status</th>
                             </>
                           )}
-                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
+                          {activeTab !== 'Quitados' && (
+                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.05]">
                         {loading ? (
                           <tr>
-                            <td colSpan={activeTab === 'Agendados' ? 4 : 7} className="px-8 py-20 text-center">
+                            <td colSpan={activeTab === 'Agendados' ? 4 : activeTab === 'Quitados' ? 3 : 7} className="px-8 py-20 text-center">
                               <div className="flex flex-col items-center gap-3">
                                 <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
                                 <span className="text-slate-500 font-medium">Sincronizando dados...</span>
@@ -4531,7 +4744,7 @@ export default function App() {
                           </tr>
                         ) : filteredLoans.length === 0 ? (
                           <tr>
-                            <td colSpan={activeTab === 'Agendados' ? 4 : 7} className="px-8 py-20 text-center">
+                            <td colSpan={activeTab === 'Agendados' ? 4 : activeTab === 'Quitados' ? 3 : 7} className="px-8 py-20 text-center">
                               <div className="flex flex-col items-center gap-4">
                                 <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
                                   <Users className="w-8 h-8 text-slate-600" />
@@ -4540,6 +4753,7 @@ export default function App() {
                                   {filterDate ? 'Nenhum Empréstimo Encontrado' : 
                                    command.trim() ? 'Nenhum empréstimo encontrado para esta busca.' : 
                                    activeTab === 'Agendados' ? 'Nenhum empréstimo agendado.' :
+                                   activeTab === 'Quitados' ? 'Nenhum empréstimo quitado.' :
                                    'Nenhum empréstimo pendente.'}
                                 </span>
                               </div>
@@ -4553,14 +4767,22 @@ export default function App() {
                               isOverdue(loan) && (isDark ? "bg-brand-danger/[0.03]" : "bg-brand-danger/[0.01]")
                             )}>
                               <td className="px-8 py-4">
-                                <button 
-                                  onClick={() => setViewingClientLoans(loan.clientName)}
-                                  className={cn("font-bold hover:text-brand-primary transition-colors text-left", isDark ? "text-white" : "text-slate-900")}
-                                  title="Ver todos os contratos deste cliente"
-                                >
-                                  {loan.clientName}
-                                </button>
-                                {loan.clientPhone && <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{loan.clientPhone}</div>}
+                                {activeTab === 'Quitados' ? (
+                                  <span className={cn("font-bold text-left", isDark ? "text-white" : "text-slate-900")}>
+                                    {loan.clientName}
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button 
+                                      onClick={() => setViewingClientLoans(loan.clientName)}
+                                      className={cn("font-bold hover:text-brand-primary transition-colors text-left", isDark ? "text-white" : "text-slate-900")}
+                                      title="Ver todos os contratos deste cliente"
+                                    >
+                                      {loan.clientName}
+                                    </button>
+                                    {loan.clientPhone && <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{loan.clientPhone}</div>}
+                                  </>
+                                )}
                               </td>
                               {activeTab === 'Agendados' ? (
                                 <>
@@ -4572,6 +4794,20 @@ export default function App() {
                                       <Clock className="w-3.5 h-3.5 text-slate-500" />
                                       <span className="text-brand-primary font-black">
                                         {safeFormatDate(loan.date, 'dd/MM/yyyy')}
+                                      </span>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : activeTab === 'Quitados' ? (
+                                <>
+                                  <td className={cn("px-8 py-4 text-xs font-black transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                    R$ {((loan.capitalPago || 0) + (loan.jurosPagos || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-8 py-4 text-slate-400 text-xs font-medium">
+                                    <div className="flex items-center gap-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-slate-500" />
+                                      <span className={isDark ? "text-slate-300" : "text-slate-700"}>
+                                        {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
                                       </span>
                                     </div>
                                   </td>
@@ -4612,15 +4848,18 @@ export default function App() {
                                   </td>
                                 </>
                               )}
-                              <td className="px-8 py-6 text-right">
+                              {activeTab !== 'Quitados' && (
+                                <td className="px-8 py-6 text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  <button 
-                                    onClick={() => setViewingClientLoans(loan.clientName)}
-                                    className="p-2 bg-white/5 text-slate-400 hover:bg-brand-primary/20 hover:text-brand-primary rounded-xl border border-white/10 hover:border-brand-primary/30"
-                                    title="Ver Histórico"
-                                  >
-                                    <History className="w-4 h-4" />
-                                  </button>
+                                  {loan.status !== 'Agendado' && (
+                                    <button 
+                                      onClick={() => setViewingClientLoans(loan.clientName)}
+                                      className="p-2 bg-white/5 text-slate-400 hover:bg-brand-primary/20 hover:text-brand-primary rounded-xl border border-white/10 hover:border-brand-primary/30"
+                                      title="Ver Histórico"
+                                    >
+                                      <History className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   {loan.status === 'Agendado' && (
                                     <button 
                                       onClick={() => setViewingScheduleReceipt(loan)}
@@ -4673,6 +4912,7 @@ export default function App() {
                                     </button>
                                 </div>
                               </td>
+                              )}
                             </tr>
                           ))
                         )}
@@ -4693,6 +4933,7 @@ export default function App() {
                       <div className="py-20 text-center text-slate-500 font-medium glass-card">
                          {filterDate ? 'Nenhum Empréstimo Encontrado' : 
                           activeTab === 'Agendados' ? 'Nenhum agendamento encontrado.' :
+                          activeTab === 'Quitados' ? 'Nenhum empréstimo quitado.' :
                           'Nenhum empréstimo registrado.'}
                       </div>
                     ) : (
@@ -4702,7 +4943,29 @@ export default function App() {
                           isDark ? "border-white/5" : "bg-white border-slate-200 shadow-lg",
                           isOverdue(loan) && (isDark ? "border-brand-danger/30 bg-brand-danger/[0.03] shadow-lg shadow-brand-danger/5" : "border-brand-danger/20 bg-brand-danger/[0.01] shadow-lg shadow-brand-danger/5")
                         )}>
-                          <div className="flex justify-between items-start">
+                          {activeTab === 'Quitados' ? (
+                            <>
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <span className={cn("font-bold text-sm leading-tight uppercase tracking-tight text-left", isDark ? "text-white" : "text-slate-900")}>
+                                    {loan.clientName}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className={cn("grid grid-cols-2 gap-4 pt-4 border-t transition-colors", isDark ? "border-white/5" : "border-slate-100")}>
+                                <div>
+                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Valor Pago</span>
+                                  <div className={cn("font-black text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>R$ {((loan.capitalPago || 0) + (loan.jurosPagos || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Data</span>
+                                  <div className={cn("font-black text-xs tracking-tight", isDark ? "text-slate-300" : "text-slate-700")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex justify-between items-start">
                              <div>
                               <button 
                                 onClick={() => setViewingClientLoans(loan.clientName)}
@@ -4762,12 +5025,14 @@ export default function App() {
                           </div>
 
                           <div className="flex gap-2 pt-2">
-                             <button 
-                                onClick={() => setViewingClientLoans(loan.clientName)}
-                                className="p-3.5 bg-white/5 text-slate-400 rounded-xl border border-white/10 active:scale-95 transition-all"
-                              >
-                                <History className="w-5 h-5" />
-                              </button>
+                             {loan.status !== 'Agendado' && (
+                               <button 
+                                  onClick={() => setViewingClientLoans(loan.clientName)}
+                                  className="p-3.5 bg-white/5 text-slate-400 rounded-xl border border-white/10 active:scale-95 transition-all"
+                                >
+                                  <History className="w-5 h-5" />
+                                </button>
+                             )}
                               {loan.status === 'Agendado' && (
                                 <button 
                                   onClick={() => setViewingScheduleReceipt(loan)}
@@ -4818,6 +5083,8 @@ export default function App() {
                                   )}
                                 </button>
                           </div>
+                            </>
+                          )}
                         </div>
                       ))
                     )}
@@ -5591,12 +5858,12 @@ export default function App() {
                         <input 
                           type="checkbox"
                           checked={
-                            loans.filter(l => l.clientName === viewingClientLoans).length > 0 &&
-                            loans.filter(l => l.clientName === viewingClientLoans).every(l => selectedLoansForUnified.includes(l.id))
+                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0)).length > 0 &&
+                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0)).every(l => selectedLoansForUnified.includes(l.id))
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
-                              const active = loans.filter(l => l.clientName === viewingClientLoans).map(l => l.id);
+                              const active = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0)).map(l => l.id);
                               setSelectedLoansForUnified(active);
                             } else {
                               setSelectedLoansForUnified([]);
@@ -5614,7 +5881,7 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-white/[0.05]">
                     {loans
-                      .filter(l => l.clientName === viewingClientLoans)
+                      .filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0))
                       .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))
                       .map((loan) => (
                         <tr key={loan.id} className={cn(
@@ -5725,14 +5992,14 @@ export default function App() {
           </div>
         )}
       {viewingContract && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex justify-center items-start p-4 sm:p-8 bg-black/95 overflow-y-auto">
           <div className={cn(
-            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative",
+            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl relative my-auto sm:my-8",
             isDark ? "bg-[#0a0a0a]" : "bg-white"
           )}>
-            <div id="printable-contract" className="p-10 sm:p-20 printable-content relative bg-white text-slate-900">
+            <div id="printable-contract" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
-              <div className="flex flex-col items-center mb-16 relative z-10">
+              <div className="flex flex-col items-center mb-12 relative z-10">
                 <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
@@ -5747,7 +6014,7 @@ export default function App() {
               </div>
 
               {/* Main Amount - Elegant Focus */}
-              <div className="text-center mb-16 relative z-10">
+              <div className="text-center mb-12 relative z-10">
                 <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total da Operação</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
@@ -5756,46 +6023,48 @@ export default function App() {
               </div>
 
               {/* Essential Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 sm:gap-x-12 mb-16 relative z-10 border-t pt-10 border-slate-100">
-                <div className="col-span-1 sm:col-span-2 pb-6 border-b border-slate-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-x-12 mb-12 relative z-10 border-t pt-8 border-slate-100">
+                <div className="col-span-1 sm:col-span-2 pb-4 border-b border-slate-50">
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Cliente Beneficiário</span>
                   <p className="text-xl font-black uppercase tracking-tight text-slate-900">
-                    {viewingContract[0].clientName}
+                    {viewingContract?.[0]?.clientName || 'Cliente'}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Capital Emprestado</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Capital Emprestado</span>
                   <p className="font-black uppercase text-sm leading-tight text-slate-900">
                     {formatCurrency(viewingContract.reduce((acc, l) => acc + l.capital, 0))}
                   </p>
                 </div>
                 <div className="sm:text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Valor dos Juros</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Valor dos Juros</span>
                   <p className="font-black text-brand-primary uppercase text-sm leading-tight">
                     {formatCurrency(viewingContract.reduce((acc, l) => acc + (l.totalBruto - l.capital), 0))}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Data e Hora</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Data e Hora</span>
                   <p className="font-black uppercase text-sm leading-tight text-slate-900">{safeFormatDate(new Date().toISOString(), 'dd/MM/yyyy HH:mm')}</p>
                 </div>
                 <div className="sm:text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Vencimento Principal</span>
-                  <p className="font-black text-neon-red uppercase text-sm leading-tight">{safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Vencimento Principal</span>
+                  <p className="font-black text-neon-red uppercase text-sm leading-tight">
+                    {viewingContract?.[0]?.dueDate ? safeFormatDate(viewingContract[0].dueDate, 'dd/MM/yyyy') : '---'}
+                  </p>
                 </div>
               </div>
 
               {/* Individual Contracts Breakdown */}
               {viewingContract.length > 1 && (
-                <div className="mb-16 relative z-10">
-                  <p className="text-[8px] font-black uppercase tracking-widest mb-6 pb-2 border-b border-slate-50 text-slate-400">Detalhamento Individual</p>
-                  <div className="space-y-6">
+                <div className="mb-12 relative z-10">
+                  <p className="text-[8px] font-black uppercase tracking-widest mb-4 pb-2 border-b border-slate-50 text-slate-400">Detalhamento Individual</p>
+                  <div className="space-y-4">
                     {viewingContract.map((loan, index) => (
-                      <div key={loan.id} className="flex flex-col sm:flex-row justify-between items-start gap-4 sm:gap-0 py-2 group">
+                      <div key={loan.id} className="flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-0 py-2 border-b border-slate-50 last:border-0">
                         <div className="flex gap-4">
                           <span className="text-[9px] font-black mt-1 text-slate-300">0{index + 1}</span>
                           <div>
-                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-900">Contrato {loan.id.slice(0, 8)}</p>
+                            <p className="text-[9px] font-black uppercase tracking-wider text-slate-900">Contrato {loan.id ? loan.id.slice(0, 8) : ''}</p>
                             <p className="text-[8px] font-bold text-slate-500 uppercase mt-1">Venc. {safeFormatDate(loan.dueDate, 'dd/MM/y')}</p>
                           </div>
                         </div>
@@ -5818,14 +6087,16 @@ export default function App() {
               )}
 
               {/* Minimalist Authentication */}
-              <div className="pt-10 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-8 border-slate-100">
-                <div className="flex items-center gap-6 w-full sm:w-auto">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
+              <div className="pt-8 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-slate-100">
+                <div className="flex items-center gap-4 w-full sm:w-auto">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
                     <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Autenticação Digital</p>
-                    <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">{viewingContract[0].id.toUpperCase()}-{new Date().getTime()}</p>
+                    <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">
+                      {viewingContract?.[0]?.id ? viewingContract[0].id.toUpperCase() : 'NEXUS'}-{viewingContract?.[0]?.date ? toDate(viewingContract[0].date).getTime() : new Date().getTime()}
+                    </p>
                   </div>
                 </div>
                 <div className="text-center sm:text-right opacity-40 w-full sm:w-auto">
@@ -5833,38 +6104,41 @@ export default function App() {
                   <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Asset Management</p>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons (Hidden in PDF) */}
-              <div className="flex flex-col gap-4 no-print-section no-print relative z-20">
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => shareAsPDF(false, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <FileText className="w-4 h-4" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                  </button>
-                  <button
-                    onClick={() => shareAsPDF(true, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                  >
-                    <Printer className="w-4 h-4" />
-                    Imprimir
-                  </button>
-                </div>
+            {/* Action Buttons (Separated, Outside printable-contract) */}
+            <div className={cn(
+              "p-6 sm:p-8 border-t flex flex-col gap-4 relative z-20 no-print-section no-print",
+              isDark ? "bg-[#0b0b0b] border-white/5" : "bg-slate-50 border-slate-100"
+            )}>
+              <div className="grid grid-cols-2 gap-4">
                 <button
-                  onClick={() => setViewingContract(null)}
-                  className="px-10 py-6 bg-slate-100 text-slate-600 font-black uppercase tracking-widest text-sm rounded-3xl hover:bg-slate-200 transition-all"
+                  onClick={() => shareAsPDF(false, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Fechar
+                  {isGeneratingPDF ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <FileText className="w-4 h-4" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                </button>
+                <button
+                  onClick={() => shareAsPDF(true, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir
                 </button>
               </div>
+              <button
+                onClick={() => setViewingContract(null)}
+                className="px-10 py-5 bg-slate-200 text-slate-800 font-black uppercase tracking-widest text-xs rounded-3xl hover:bg-slate-300 transition-all"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
@@ -5872,12 +6146,12 @@ export default function App() {
 
       {/* Modal de Detalhes do Cliente */}
       {viewingClientDetail && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex justify-center items-start p-4 sm:p-8 bg-black/95 overflow-y-auto">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className={cn(
-              "w-full max-w-4xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8",
+              "w-full max-w-4xl sm:rounded-[40px] overflow-hidden shadow-2xl my-auto relative",
               isDark ? "bg-surface-900 border border-white/5" : "bg-white"
             )}
           >
@@ -6117,14 +6391,14 @@ export default function App() {
       )}
 
       {viewingReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex justify-center items-start p-4 sm:p-8 bg-black/95 overflow-y-auto">
           <div className={cn(
-            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative flex flex-col",
+            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl relative my-auto sm:my-8",
             isDark ? "bg-[#0a0a0a]" : "bg-white"
           )}>
-            <div id="printable-receipt" className="p-10 sm:p-20 printable-content relative flex-1 bg-white text-slate-900">
+            <div id="printable-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
-              <div className="flex flex-col items-center mb-16 relative z-10">
+              <div className="flex flex-col items-center mb-12 relative z-10">
                 <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
@@ -6139,11 +6413,11 @@ export default function App() {
               </div>
 
               {/* Amount Centerpiece */}
-              <div className="text-center mb-16 relative z-10">
+              <div className="text-center mb-12 relative z-10">
                 <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total Recebido</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
-                  {viewingReceipt.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  {(viewingReceipt?.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
                 <div className="mt-6 flex items-center justify-center gap-2 text-emerald-600">
                   <div className="w-6 h-6 rounded-full flex items-center justify-center bg-emerald-100">
@@ -6154,23 +6428,23 @@ export default function App() {
               </div>
 
               {/* Essential Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 sm:gap-x-12 mb-16 relative z-10 border-t pt-10 border-slate-100">
-                <div className="col-span-1 sm:col-span-2 pb-6 border-b border-slate-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-x-12 mb-12 relative z-10 border-t pt-8 border-slate-100">
+                <div className="col-span-1 sm:col-span-2 pb-4 border-b border-slate-50">
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Pagador</span>
                   <p className="text-xl font-black uppercase tracking-tight text-slate-900">
-                    {viewingReceipt.clientName}
+                    {viewingReceipt?.clientName || 'Cliente'}
                   </p>
                 </div>
                 
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Data e Hora</span>
-                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Data e Hora</span>
+                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{viewingReceipt?.date ? safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm') : '---'}</p>
                 </div>
                 <div className="sm:text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Operação</span>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Operação</span>
                   <p className="font-black text-brand-primary uppercase text-sm leading-tight">
-                    {viewingReceipt.description.toLowerCase().includes('juros') ? 'Rendimentos' : 
-                     viewingReceipt.description.toLowerCase().includes('capital') ? 'Amortização' : 
+                    {viewingReceipt?.description?.toLowerCase()?.includes('juros') ? 'Rendimentos' : 
+                     viewingReceipt?.description?.toLowerCase()?.includes('capital') ? 'Amortização' : 
                      'Recebimento'}
                   </p>
                 </div>
@@ -6178,21 +6452,21 @@ export default function App() {
                 <div className="col-span-1 sm:col-span-2 pt-6 border-t border-slate-50">
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Descrição Detalhada</span>
                   <p className="text-xs leading-relaxed font-medium uppercase tracking-tight text-slate-600">
-                    {viewingReceipt.description}
+                    {viewingReceipt?.description || 'Recebimento de parcelas'}
                   </p>
                 </div>
               </div>
 
               {/* Footer Authentication */}
-              <div className="pt-10 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-8 border-slate-100">
-                <div className="flex items-center gap-6 w-full sm:w-auto">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
+              <div className="pt-8 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-slate-100">
+                <div className="flex items-center gap-4 w-full sm:w-auto">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
                     <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Autenticação Digital</p>
                     <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">
-                      {viewingReceipt.id.toUpperCase()}-{new Date(viewingReceipt.date).getTime()}
+                      {viewingReceipt?.id ? viewingReceipt.id.toUpperCase() : 'NEXUS'}-{viewingReceipt?.date ? toDate(viewingReceipt.date).getTime() : new Date().getTime()}
                     </p>
                   </div>
                 </div>
@@ -6201,52 +6475,55 @@ export default function App() {
                   <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Digital Auth</p>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
-              <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => shareAsPDF(false, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <FileText className="w-4 h-4" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                  </button>
-                  <button
-                    onClick={() => shareAsPDF(true, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
-                  >
-                    <Printer className="w-4 h-4" />
-                    Imprimir
-                  </button>
-                </div>
-                <button 
-                  onClick={() => setViewingReceipt(null)}
-                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-colors pt-6 text-center"
+            {/* Action Buttons (Separated, Outside printable-receipt) */}
+            <div className={cn(
+              "p-6 sm:p-8 border-t flex flex-col gap-4 relative z-20 no-print-section no-print",
+              isDark ? "bg-[#0b0b0b] border-white/5" : "bg-slate-50 border-slate-100"
+            )}>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => shareAsPDF(false, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                 >
-                  Voltar ao Painel
+                  {isGeneratingPDF ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <FileText className="w-4 h-4" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                </button>
+                <button
+                  onClick={() => shareAsPDF(true, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir
                 </button>
               </div>
+              <button 
+                onClick={() => setViewingReceipt(null)}
+                className="py-4 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-colors text-center"
+              >
+                Voltar ao Painel
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {viewingScheduleReceipt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/95 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex justify-center items-start p-4 sm:p-8 bg-black/95 overflow-y-auto">
           <div className={cn(
-            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl my-0 sm:my-8 relative",
+            "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl relative my-auto sm:my-8",
             isDark ? "bg-[#0a0a0a]" : "bg-white"
           )}>
-            <div id="printable-schedule-receipt" className="p-10 sm:p-20 printable-content relative bg-white text-slate-900">
+            <div id="printable-schedule-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
-              <div className="flex flex-col items-center mb-16 relative z-10">
+              <div className="flex flex-col items-center mb-12 relative z-10">
                 <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
                   <img 
                     src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
@@ -6261,50 +6538,50 @@ export default function App() {
               </div>
 
               {/* Amount Centerpiece */}
-              <div className="text-center mb-16 relative z-10">
+              <div className="text-center mb-12 relative z-10">
                 <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Total Agendado</p>
                 <h2 className="text-5xl font-black tracking-tighter text-slate-900">
                   <span className="text-xl mr-2 text-slate-300">R$</span>
-                  {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  {(viewingScheduleReceipt?.capital || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </h2>
               </div>
 
               {/* Essential Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-10 sm:gap-x-12 mb-16 relative z-10 border-t pt-10 border-slate-100">
-                <div className="col-span-1 sm:col-span-2 pb-6 border-b border-slate-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-x-12 mb-12 relative z-10 border-t pt-8 border-slate-100">
+                <div className="col-span-1 sm:col-span-2 pb-4 border-b border-slate-50">
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Cliente Beneficiário</span>
                   <p className="text-xl font-black uppercase tracking-tight text-slate-900">
-                    {viewingScheduleReceipt.clientName}
+                    {viewingScheduleReceipt?.clientName || 'Cliente'}
                   </p>
                 </div>
                 
                 <div>
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Data para Liberação</span>
-                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Data para Liberação</span>
+                  <p className="font-black uppercase text-sm leading-tight text-slate-900">{viewingScheduleReceipt?.date ? safeFormatDate(viewingScheduleReceipt.date, 'dd/MM/yyyy') : '---'}</p>
                 </div>
                 <div className="sm:text-right">
-                  <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Previsão de Vencimento</span>
-                  <p className="font-black text-neon-red uppercase text-sm leading-tight">{safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy')}</p>
+                  <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Previsão de Vencimento</span>
+                  <p className="font-black text-neon-red uppercase text-sm leading-tight">{viewingScheduleReceipt?.dueDate ? safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy') : '---'}</p>
                 </div>
 
                 <div className="col-span-1 sm:col-span-2 pt-6 border-t border-slate-50">
                   <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Observações do Agendamento</span>
                   <p className="text-xs leading-relaxed font-medium uppercase tracking-tight text-slate-600">
-                    O crédito de R$ {viewingScheduleReceipt.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} está programado no sistema para processamento na data indicada. A ativação ocorrerá automaticamente após a validação do lastro financeiro.
+                    O crédito de R$ {(viewingScheduleReceipt?.capital || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} está programado no sistema para processamento na data indicada. A ativação ocorrerá automaticamente após a validação do lastro financeiro.
                   </p>
                 </div>
               </div>
 
               {/* Footer Authentication */}
-              <div className="pt-10 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-8 border-slate-100">
-                <div className="flex items-center gap-6 w-full sm:w-auto">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
+              <div className="pt-8 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-slate-100">
+                <div className="flex items-center gap-4 w-full sm:w-auto">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
                     <QrCode className="w-full h-full text-slate-200" />
                   </div>
                   <div>
                     <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Controle de Agendamento</p>
                     <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">
-                      SCH-{viewingScheduleReceipt.id.toUpperCase()}-{new Date(viewingScheduleReceipt.createdAt || new Date()).getTime()}
+                      SCH-{viewingScheduleReceipt?.id ? viewingScheduleReceipt.id.toUpperCase() : 'SCH'}-{viewingScheduleReceipt?.createdAt ? toDate(viewingScheduleReceipt.createdAt).getTime() : new Date().getTime()}
                     </p>
                   </div>
                 </div>
@@ -6313,38 +6590,41 @@ export default function App() {
                   <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Reserve System</p>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons (Hidden in PDF) */}
-              <div className="mt-12 flex flex-col gap-4 no-print-section no-print relative z-20">
-                <div className="grid grid-cols-2 gap-4">
-                  <button
-                    onClick={() => shareAsPDF(false, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                  >
-                    {isGeneratingPDF ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <FileText className="w-4 h-4" />
-                    )}
-                    {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
-                  </button>
-                  <button
-                    onClick={() => shareAsPDF(true, 'pdf')}
-                    disabled={isGeneratingPDF}
-                    className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
-                  >
-                    <Printer className="w-4 h-4" />
-                    Imprimir
-                  </button>
-                </div>
-                <button 
-                  onClick={() => setViewingScheduleReceipt(null)}
-                  className="py-4 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-colors pt-6 text-center"
+            {/* Action Buttons (Separated, Outside printable-schedule-receipt) */}
+            <div className={cn(
+              "p-6 sm:p-8 border-t flex flex-col gap-4 relative z-20 no-print-section no-print",
+              isDark ? "bg-[#0b0b0b] border-white/5" : "bg-slate-50 border-slate-100"
+            )}>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => shareAsPDF(false, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
                 >
-                  Voltar ao Painel
+                  {isGeneratingPDF ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <FileText className="w-4 h-4" />
+                  )}
+                  {isGeneratingPDF ? 'Gerando...' : 'Compartilhar'}
+                </button>
+                <button
+                  onClick={() => shareAsPDF(true, 'pdf')}
+                  disabled={isGeneratingPDF}
+                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                >
+                  <Printer className="w-4 h-4" />
+                  Imprimir
                 </button>
               </div>
+              <button 
+                onClick={() => setViewingScheduleReceipt(null)}
+                className="py-4 text-slate-400 font-bold uppercase tracking-widest text-[9px] hover:text-slate-600 transition-colors text-center"
+              >
+                Voltar ao Painel
+              </button>
             </div>
           </div>
         </div>
@@ -6460,6 +6740,7 @@ export default function App() {
                 <span className={cn("text-[8px] font-black uppercase tracking-widest", isActive ? "opacity-100" : "opacity-50")}>
                   {item.label === 'Principal' ? 'Início' : 
                    item.label === 'Empréstimos' ? 'Giro' :
+                   item.label === 'Quitados' ? 'Pagos' :
                    item.label === 'Clientes' ? 'Base' : 
                    item.label === 'Transações' ? 'Fluxo' : item.label}
                 </span>
