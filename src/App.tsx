@@ -228,6 +228,83 @@ export const BRAZILIAN_BANKS = [
   { id: 'safra', name: 'Safra', color: '#B08D57', short: 'Sf' },
 ];
 
+// Helper to fallback gracefully if canvas or browser doesn't resolve modern color function
+const getFallbackColor = (colorStr: string): string => {
+  const matchParts = colorStr.match(/[\d.]+/g);
+  if (matchParts && matchParts.length > 0) {
+    const l = parseFloat(matchParts[0]);
+    // lightness can be 0..1 or 0..100%
+    const normalizedL = l > 1 ? l / 100 : l;
+    const gray = Math.round(Math.min(1, Math.max(0, normalizedL)) * 255);
+    const hexValue = gray.toString(16).padStart(2, '0');
+    return `#${hexValue}${hexValue}${hexValue}`;
+  }
+  return '#000000';
+};
+
+// Helper to resolve modern oklch/oklab colors using HTML5 Canvas context
+const resolveModernColor = (() => {
+  const cache: Record<string, string> = {
+    'oklch(0.129 0.042 264.695)': '#0f172a',
+    'oklch(0.208 0.042 265.755)': '#1e293b',
+    'oklch(0.279 0.041 260.031)': '#334155',
+    'oklch(0.371 0.027 261.221)': '#475569',
+    'oklch(0.446 0.03 256.802)': '#64748b',
+    'oklch(0.615 0.165 159.252)': '#059669',
+    'oklch(0.61 0.25 24.3)': '#ff3131',
+    'oklch(0.627 0.265 14.5)': '#ff4d4d',
+    'oklch(0.704 0.191 22.216)': '#fca5a5',
+    'oklch(1 0 0)': '#ffffff',
+    'oklch(0 0 0)': '#000000',
+  };
+  let canvas: HTMLCanvasElement | null = null;
+  let ctx: CanvasRenderingContext2D | null = null;
+
+  return (colorStr: string): string => {
+    const trimmed = colorStr.trim();
+    if (cache[trimmed]) return cache[trimmed];
+
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+    if (!ctx) {
+      try {
+        ctx = canvas.getContext('2d');
+      } catch (e) {
+        console.warn('Canvas 2D context not available', e);
+      }
+    }
+
+    if (!ctx) return getFallbackColor(trimmed);
+
+    try {
+      ctx.fillStyle = 'rgba(0,0,0,0)'; 
+      ctx.fillStyle = trimmed;
+      const resolved = ctx.fillStyle;
+      if (resolved === 'rgba(0,0,0,0)' || (resolved === '#000000' && !trimmed.includes('0 0 0') && !trimmed.includes(' 0 0')) ) {
+        return getFallbackColor(trimmed);
+      }
+      cache[trimmed] = resolved;
+      return resolved;
+    } catch {
+      return getFallbackColor(trimmed);
+    }
+  };
+})();
+
+const sanitizeCSSColorFunctions = (value: string): string => {
+  if (typeof value !== 'string') return value;
+  if (!value.toLowerCase().includes('oklch') && !value.toLowerCase().includes('oklab')) {
+    return value;
+  }
+
+  return value.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
+    return resolveModernColor(match);
+  });
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
@@ -533,7 +610,272 @@ export default function App() {
     let noPrintElements: NodeListOf<Element> | null = null;
     const originalDisplays: string[] = [];
 
+    const parentLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+    const parentStyleTags = Array.from(document.querySelectorAll('style'));
+    const originalParentStyleContents = parentStyleTags.map(tag => tag.innerHTML);
+    const tempStylesToDestroy: HTMLStyleElement[] = [];
+    const disabledLinks: { link: HTMLLinkElement; originalRel: string }[] = [];
+
+    // Save original states to safely restore in finally block
+    const originalGetComputedStyle = window.getComputedStyle;
+    const originalContentWindowDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+    const originalContentDocumentDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
+    const originalAppendChild = Element.prototype.appendChild;
+    const originalInsertBefore = Element.prototype.insertBefore;
+
+    // Helper to sanitize all CSS content of oklch/oklab to prevent html2canvas crashes
+    const sanitizeCSSString = (css: string) => {
+      let result = css;
+      const colorMap: Record<string, string> = {
+        'oklch(0.129 0.042 264.695)': '#0f172a',
+        'oklch(0.208 0.042 265.755)': '#1e293b',
+        'oklch(0.279 0.041 260.031)': '#334155',
+        'oklch(0.371 0.027 261.221)': '#475569',
+        'oklch(0.446 0.03 256.802)': '#64748b',
+        'oklch(0.614 0.225 25.74)': getAccentColorHex(),
+        'oklch(0.615 0.165 159.252)': '#059669',
+        'oklch(0.61 0.25 24.3)': '#ff3131',
+        'oklch(0.627 0.265 14.5)': '#ff4d4d',
+        'oklch(0.704 0.191 22.216)': '#fca5a5',
+        'oklch(1 0 0)': '#ffffff',
+        'oklch(0 0 0)': '#000000',
+      };
+
+      Object.entries(colorMap).forEach(([oklch, hex]) => {
+        result = result.replace(new RegExp(oklch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), hex);
+      });
+
+      // Fallback for any remaining oklch/oklab - very thorough regex
+      result = result.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
+        const matchParts = match.match(/[\d.]+/g);
+        if (matchParts && matchParts.length > 0) {
+          const l = parseFloat(matchParts[0]);
+          const gray = Math.round(Math.min(1, Math.max(0, l)) * 255);
+          const hexValue = gray.toString(16).padStart(2, '0');
+          return `#${hexValue}${hexValue}${hexValue}`;
+        }
+        return '#000000';
+      });
+
+      return result;
+    };
+
+    type PatchedWindow = Window & {
+      __getComputedStyleMocked?: boolean;
+      __cssStylePrototypesPatched?: boolean;
+      CSSStyleDeclaration?: { prototype: { getPropertyValue: (prop: string) => string } };
+      CSSRule?: { prototype: unknown };
+    };
+
+    const restoreList: { proto: unknown; prop: string; desc: PropertyDescriptor }[] = [];
+    const originalGetPropertyValueMap = new Map<unknown, (prop: string) => string>();
+
+    const patchCSSStylePrototypes = (win: PatchedWindow) => {
+      if (!win || win.__cssStylePrototypesPatched) return;
+      try {
+        win.__cssStylePrototypesPatched = true;
+        
+        // 1. Patch win.CSSStyleDeclaration.prototype gets
+        const proto = (win as unknown as { CSSStyleDeclaration?: { prototype: { getPropertyValue: (prop: string) => string } } }).CSSStyleDeclaration?.prototype;
+        if (proto) {
+          const originalGetPropertyValue = proto.getPropertyValue;
+          if (originalGetPropertyValue) {
+            originalGetPropertyValueMap.set(proto, originalGetPropertyValue);
+            proto.getPropertyValue = function (prop: string) {
+              const val = originalGetPropertyValue.call(this, prop);
+              if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
+                return sanitizeCSSColorFunctions(val);
+              }
+              return val;
+            };
+          }
+
+          Object.getOwnPropertyNames(proto).forEach((prop: string) => {
+            try {
+              const desc = Object.getOwnPropertyDescriptor(proto, prop);
+              if (desc && desc.get && typeof desc.get === 'function' && desc.configurable) {
+                const originalGet = desc.get;
+                restoreList.push({ proto, prop, desc });
+                Object.defineProperty(proto, prop, {
+                  ...desc,
+                  get() {
+                    const val = originalGet.call(this);
+                    if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
+                      return sanitizeCSSColorFunctions(val);
+                    }
+                    return val;
+                  }
+                });
+              }
+            } catch {}
+          });
+        }
+
+        // 2. Patch win.CSSRule.prototype cssText
+        const ruleProto = (win as unknown as { CSSRule?: { prototype: unknown } }).CSSRule?.prototype;
+        if (ruleProto) {
+          const desc = Object.getOwnPropertyDescriptor(ruleProto, 'cssText');
+          if (desc && desc.get && typeof desc.get === 'function' && desc.configurable) {
+            const originalGet = desc.get;
+            restoreList.push({ proto: ruleProto, prop: 'cssText', desc });
+            Object.defineProperty(ruleProto, 'cssText', {
+              ...desc,
+              get() {
+                const val = originalGet.call(this);
+                if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
+                  return sanitizeCSSString(val);
+                }
+                return val;
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to patch CSSStyle prototypes for window', err);
+      }
+    };
+
+    // Robust helper to setup proxy on getComputedStyle of any window (main or iframe contentWindow)
+    const setupIntercept = (win: PatchedWindow) => {
+      if (!win) return;
+
+      if (!win.__getComputedStyleMocked) {
+        try {
+          win.__getComputedStyleMocked = true;
+          const originalGetCS = win.getComputedStyle;
+          win.getComputedStyle = function (el: Element, pseudoEl?: string | null): CSSStyleDeclaration {
+            const style = originalGetCS(el, pseudoEl);
+            return new Proxy(style, {
+              get(target, property) {
+                if (property === 'getPropertyValue') {
+                  return function (propName: string) {
+                    const val = target.getPropertyValue(propName);
+                    if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
+                      return sanitizeCSSColorFunctions(val);
+                    }
+                    return val;
+                  };
+                }
+                const val = Reflect.get(target, property);
+                if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
+                  return sanitizeCSSColorFunctions(val);
+                }
+                if (typeof val === 'function') {
+                  return val.bind(target);
+                }
+                return val;
+              }
+            }) as unknown as CSSStyleDeclaration;
+          };
+        } catch (err) {
+          console.warn('Failed to setup getComputedStyle mock', err);
+        }
+      }
+
+      patchCSSStylePrototypes(win);
+    };
+
     try {
+      // 1. Mock window.getComputedStyle with a Proxy for the main window
+      setupIntercept(window as unknown as PatchedWindow);
+
+      // 2. Overwrite prototype descriptors for iframe properties so that dynamically created iframes are intercepted
+      if (originalContentWindowDescriptor && originalContentWindowDescriptor.get) {
+        const originalGetter = originalContentWindowDescriptor.get;
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          get() {
+            const win = originalGetter.call(this);
+            if (win) setupIntercept(win as unknown as PatchedWindow);
+            return win;
+          },
+          configurable: true
+        });
+      }
+
+      if (originalContentDocumentDescriptor && originalContentDocumentDescriptor.get) {
+        const originalGetter = originalContentDocumentDescriptor.get;
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
+          get() {
+            const doc = originalGetter.call(this);
+            if (doc && doc.defaultView) setupIntercept(doc.defaultView as unknown as PatchedWindow);
+            return doc;
+          },
+          configurable: true
+        });
+      }
+
+      // 3. Overwrite DOM insertion methods to immediately patch any appended iframes
+      Element.prototype.appendChild = function<T extends Node>(newChild: T): T {
+        const res = originalAppendChild.call(this, newChild);
+        if (newChild instanceof HTMLIFrameElement) {
+          try {
+            if (newChild.contentWindow) setupIntercept(newChild.contentWindow as unknown as PatchedWindow);
+          } catch {}
+        }
+        return res;
+      };
+
+      Element.prototype.insertBefore = function<T extends Node>(newChild: T, refChild: Node | null): T {
+        const res = originalInsertBefore.call(this, newChild, refChild);
+        if (newChild instanceof HTMLIFrameElement) {
+          try {
+            if (newChild.contentWindow) setupIntercept(newChild.contentWindow as unknown as PatchedWindow);
+          } catch {}
+        }
+        return res;
+      };
+
+      // Pre-fetch stylesheets to sanitize oklch/oklab before html2canvas processes link elements
+      const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+      const linkStyleSheetsContent = await Promise.all(
+        links.map(async (link) => {
+          try {
+            const h = (link as HTMLLinkElement).href;
+            if (h.startsWith(window.location.origin) || h.startsWith('/') || !h.includes('://')) {
+              const response = await fetch(h);
+              if (response.ok) {
+                const text = await response.text();
+                return sanitizeCSSString(text);
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to pre-fetch stylesheet', err);
+          }
+          return '';
+        })
+      );
+
+      // Disable live link stylesheets so html2canvas doesn't try to load their un-sanitized versions
+      parentLinks.forEach(link => {
+        const h = (link as HTMLLinkElement).href;
+        if (h.startsWith(window.location.origin) || h.startsWith('/') || !h.includes('://')) {
+          disabledLinks.push({ link: link as HTMLLinkElement, originalRel: link.getAttribute('rel') || 'stylesheet' });
+          link.setAttribute('rel', 'alternate'); // Disables the stylesheet temporarily for the browser
+        }
+      });
+
+      // Insert sanitized style blocks for those disabled links into the parent document
+      linkStyleSheetsContent.forEach(content => {
+        if (content) {
+          const s = document.createElement('style');
+          s.innerHTML = content;
+          document.head.appendChild(s);
+          tempStylesToDestroy.push(s);
+        }
+      });
+
+      // Sanitize all style tags in the parent document in-place
+      parentStyleTags.forEach(tag => {
+        try {
+          const css = tag.innerHTML;
+          if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
+            tag.innerHTML = sanitizeCSSString(css);
+          }
+        } catch (err) {
+          console.warn('Failed to sanitize live style tag', err);
+        }
+      });
+
       // Wait for fonts to be fully loaded to ensure consistent typography
       await document.fonts.ready;
       
@@ -554,6 +896,24 @@ export default function App() {
         backgroundColor: '#ffffff',
         imageTimeout: 15000, // Increase timeout for images
         onclone: (clonedDoc) => {
+          // Mock clonedDoc.defaultView style objects to dynamically intercept color requests from html2canvas within the iframe
+          if (clonedDoc.defaultView) {
+            setupIntercept(clonedDoc.defaultView as unknown as PatchedWindow);
+          }
+
+          // Remove link tags in the clone to bypass html2canvas trying to parse their un-sanitized content which crashes it
+          const clonedLinks = Array.from(clonedDoc.querySelectorAll('link[rel="stylesheet"]'));
+          clonedLinks.forEach(link => link.remove());
+
+          // Inject the pre-fetched and thoroughly sanitized sheets as style blocks
+          linkStyleSheetsContent.forEach(content => {
+            if (content) {
+              const s = clonedDoc.createElement('style');
+              s.innerHTML = content;
+              clonedDoc.head.appendChild(s);
+            }
+          });
+
           const clonedElement = clonedDoc.getElementById(elementId);
           if (clonedElement) {
             clonedElement.style.height = 'auto';
@@ -590,41 +950,10 @@ export default function App() {
           const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
           styleTags.forEach(tag => {
             try {
-              let css = tag.innerHTML;
+              const css = tag.innerHTML;
               // Remove ALL oklch and oklab occurrences, mapping known ones first
               if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
-                const colorMap: Record<string, string> = {
-                  'oklch(0.129 0.042 264.695)': '#0f172a',
-                  'oklch(0.208 0.042 265.755)': '#1e293b',
-                  'oklch(0.279 0.041 260.031)': '#334155',
-                  'oklch(0.371 0.027 261.221)': '#475569',
-                  'oklch(0.446 0.03 256.802)': '#64748b',
-                  'oklch(0.614 0.225 25.74)': getAccentColorHex(),
-                  'oklch(0.615 0.165 159.252)': '#059669',
-                  'oklch(0.61 0.25 24.3)': '#ff3131',
-                  'oklch(0.627 0.265 14.5)': '#ff4d4d',
-                  'oklch(0.704 0.191 22.216)': '#fca5a5',
-                  'oklch(1 0 0)': '#ffffff',
-                  'oklch(0 0 0)': '#000000',
-                };
-
-                Object.entries(colorMap).forEach(([oklch, hex]) => {
-                  css = css.replace(new RegExp(oklch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), hex);
-                });
-
-                // Fallback for any remaining oklch/oklab - very thorough regex
-                css = css.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
-                  const matchParts = match.match(/[\d.]+/g);
-                  if (matchParts && matchParts.length > 0) {
-                    const l = parseFloat(matchParts[0]);
-                    const gray = Math.round(Math.min(1, Math.max(0, l)) * 255);
-                    const hexValue = gray.toString(16).padStart(2, '0');
-                    return `#${hexValue}${hexValue}${hexValue}`;
-                  }
-                  return '#000000';
-                });
-                
-                tag.innerHTML = css;
+                tag.innerHTML = sanitizeCSSString(css);
               }
             } catch (e) {
               console.warn('Could not sanitize style tag', e);
@@ -923,6 +1252,51 @@ export default function App() {
           }
         });
       }
+
+      // Destroy temporary sanitize style tags in the parent document
+      tempStylesToDestroy.forEach(s => s.remove());
+
+      // Restore parent style tags to their original oklch/oklab styles
+      parentStyleTags.forEach((tag, idx) => {
+        try {
+          tag.innerHTML = originalParentStyleContents[idx];
+        } catch (err) {
+          console.warn('Failed to restore parent style tag', err);
+        }
+      });
+
+      // Re-enable original parent link stylesheets
+      disabledLinks.forEach(({ link, originalRel }) => {
+        link.setAttribute('rel', originalRel);
+      });
+
+      // Restore iframe properties
+      if (originalContentWindowDescriptor) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', originalContentWindowDescriptor);
+      }
+      if (originalContentDocumentDescriptor) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', originalContentDocumentDescriptor);
+      }
+
+      // Restore insertion methods
+      Element.prototype.appendChild = originalAppendChild;
+      Element.prototype.insertBefore = originalInsertBefore;
+
+      // Restore all patched prototype getters
+      restoreList.forEach(({ proto, prop, desc }) => {
+        try {
+          Object.defineProperty(proto as object, prop, desc);
+        } catch {}
+      });
+      originalGetPropertyValueMap.forEach((originalFn, proto) => {
+        try {
+          (proto as { getPropertyValue: (prop: string) => string }).getPropertyValue = originalFn;
+        } catch {}
+      });
+
+      // Restore standard getComputedStyle
+      window.getComputedStyle = originalGetComputedStyle;
+
       setIsGeneratingPDF(false);
     }
   };
@@ -1445,7 +1819,7 @@ export default function App() {
         date: format(newStartDate, 'yyyy-MM-dd'),
         dueDate: format(newEndDate, 'yyyy-MM-dd'),
       });
-      await logAction('loan_updated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
+      await logAction('loan_activated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
       changeTab('Empréstimos');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${loan.id}`);
@@ -2131,6 +2505,21 @@ export default function App() {
   }, [loans, actions, userProfile]);
 
   const monthlyReportStats = useMemo(() => {
+    // If there is an archived closure for this specific month & year, use its saved stats
+    const archivedClosure = [...monthlyClosures].find(c => c.month === reportMonth && c.year === reportYear);
+    if (archivedClosure && archivedClosure.stats) {
+      return {
+        totalLent: archivedClosure.stats.totalLent || 0,
+        totalPayments: archivedClosure.stats.totalPayments || 0,
+        capitalPayments: archivedClosure.stats.capitalPayments || 0,
+        interestPayments: archivedClosure.stats.interestPayments || 0,
+        currentOutstanding: archivedClosure.stats.currentOutstanding || 0,
+        estimatedInterest: archivedClosure.stats.estimatedInterest || 0,
+        loanCount: archivedClosure.stats.loanCount || 0,
+        paymentCount: archivedClosure.stats.paymentCount || 0
+      };
+    }
+
     const periodActions = actions.filter(a => {
       const d = toDate(a.date);
       return d && d.getMonth() === reportMonth && d.getFullYear() === reportYear;
@@ -2172,7 +2561,7 @@ export default function App() {
       loanCount: releasedActions.length,
       paymentCount: paymentActions.length
     };
-  }, [actions, loans, reportMonth, reportYear]);
+  }, [actions, loans, reportMonth, reportYear, monthlyClosures]);
 
   const monthlyPerformanceHistory = useMemo(() => {
     const data = [];
@@ -2187,6 +2576,20 @@ export default function App() {
         y -= 1;
       }
       
+      const archived = [...monthlyClosures].find(c => c.month === m && c.year === y);
+      if (archived && archived.stats) {
+        data.push({
+          monthName: monthsNameShort[m],
+          m,
+          y,
+          interestPayments: archived.stats.interestPayments || 0,
+          capitalPayments: archived.stats.capitalPayments || 0,
+          totalLent: archived.stats.totalLent || 0,
+          totalReceived: (archived.stats.interestPayments || 0) + (archived.stats.capitalPayments || 0)
+        });
+        continue;
+      }
+
       const monthActions = actions.filter(a => {
         const d = toDate(a.date);
         return d && d.getMonth() === m && d.getFullYear() === y;
@@ -2217,7 +2620,7 @@ export default function App() {
       });
     }
     return data;
-  }, [actions, reportMonth, reportYear]);
+  }, [actions, reportMonth, reportYear, monthlyClosures]);
 
 
   const notifications = useMemo(() => {
@@ -4519,27 +4922,18 @@ export default function App() {
 
                             {/* Action Buttons (Hidden in PDF) - MIRRORING CONTRACT PATTERN */}
                             <div className="mt-16 pt-12 border-t border-slate-100 flex flex-col gap-4 no-print-section no-print relative z-20">
-                              <div className="grid grid-cols-2 gap-4">
-                                <button
-                                  onClick={() => shareAsPDF(false, 'pdf')}
-                                  disabled={isGeneratingPDF}
-                                  className="flex items-center justify-center gap-3 px-6 py-5 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-2xl shadow-black/20 hover:shadow-black/40 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50"
-                                >
-                                  {isGeneratingPDF ? (
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                  ) : (
-                                    <Share2 className="w-5 h-5" />
-                                  )}
-                                  <span>Exportar Relatório Geral</span>
-                                </button>
-                                <button
-                                  onClick={() => shareAsPDF(true, 'pdf')}
-                                  className="flex items-center justify-center gap-3 px-6 py-5 bg-white text-slate-900 border border-slate-200 font-black uppercase tracking-widest text-[10px] rounded-3xl shadow-xl hover:shadow-slate-200 transition-all hover:-translate-y-1 active:translate-y-0"
-                                >
-                                  <Download className="w-5 h-5" />
-                                  <span>Baixar PDF</span>
-                                </button>
-                              </div>
+                              <button
+                                onClick={() => shareAsPDF(true, 'pdf')}
+                                disabled={isGeneratingPDF}
+                                className="w-full flex items-center justify-center gap-3 px-6 py-5 bg-slate-100 text-slate-900 font-black uppercase tracking-widest text-[10px] rounded-3xl hover:bg-slate-200 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 border border-slate-200"
+                              >
+                                {isGeneratingPDF ? (
+                                  <div className="w-4 h-4 border-2 border-slate-900/35 border-t-slate-900 rounded-full animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4" />
+                                )}
+                                <span>{isGeneratingPDF ? 'Gerando...' : 'Baixar'}</span>
+                              </button>
                             </div>
                           </div>
                         </div>
