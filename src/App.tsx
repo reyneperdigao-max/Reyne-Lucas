@@ -305,6 +305,60 @@ const sanitizeCSSColorFunctions = (value: string): string => {
   });
 };
 
+const pureToDate = (val: unknown): Date | null => {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  const v = val as { toDate?: () => Date };
+  if (typeof v.toDate === 'function') return v.toDate();
+  if (typeof val === 'string') {
+    try {
+      const d = parseISO(val);
+      return isNaN(d.getTime()) ? new Date(val) : d;
+    } catch {
+      return new Date(val);
+    }
+  }
+  return new Date(val as string | number);
+};
+
+const getOverdueMonths = (dueDateVal: unknown): number => {
+  const dueDate = pureToDate(dueDateVal);
+  if (!dueDate) return 0;
+  const today = startOfDay(new Date());
+  if (today <= startOfDay(dueDate)) return 0;
+
+  // Calculate difference in months between dueDate and today
+  let months = (today.getFullYear() - dueDate.getFullYear()) * 12 + (today.getMonth() - dueDate.getMonth());
+  
+  if (today.getDate() > dueDate.getDate()) {
+    months += 1;
+  }
+  
+  return Math.max(0, months);
+};
+
+const enrichLoanWithAccruedInterest = (loan: Loan): Loan => {
+  if (!loan.dueDate) return loan;
+  if (loan.status === 'Agendado') return loan;
+  if (loan.status === 'Pago' && loan.capital <= 0) return loan;
+  
+  // If status is 'Pago' but capital > 0, it means interest was paid for the current cycle
+  // and they are waiting for next month's Pendente. No overdue interest applies because they already paid it.
+  if (loan.status === 'Pago') return loan;
+
+  const overdueMonths = getOverdueMonths(loan.dueDate);
+  if (overdueMonths <= 0) return loan;
+
+  const standardInterest = Math.round(loan.capital * loan.interestRate * 100) / 100;
+  const totalInterest = standardInterest * (1 + overdueMonths);
+  const dynamicTotalBruto = Math.round((loan.capital + totalInterest) * 100) / 100;
+
+  return {
+    ...loan,
+    totalBruto: dynamicTotalBruto
+  };
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
@@ -1566,7 +1620,8 @@ export default function App() {
       if (updatedLoan && (
         updatedLoan.capital !== payingLoan.capital || 
         updatedLoan.dueDate !== payingLoan.dueDate ||
-        updatedLoan.status !== payingLoan.status
+        updatedLoan.status !== payingLoan.status ||
+        updatedLoan.totalBruto !== payingLoan.totalBruto
       )) {
         setPayingLoan(updatedLoan);
       }
@@ -1590,8 +1645,9 @@ export default function App() {
 
     const unsubscribeLoans = onSnapshot(q, (snapshot) => {
       const loanData: Loan[] = [];
-      snapshot.forEach((doc) => {
-        loanData.push({ id: doc.id, ...doc.data() } as Loan);
+      snapshot.forEach((docSnap) => {
+        const rawLoan = { id: docSnap.id, ...docSnap.data() } as Loan;
+        loanData.push(enrichLoanWithAccruedInterest(rawLoan));
       });
       setLoans(loanData);
       setLoading(false);
@@ -1837,7 +1893,7 @@ export default function App() {
     
     // Use only first name
     const firstName = (loan.clientName || 'Cliente').trim().split(' ')[0];
-    const interestAmount = Math.round(loan.capital * (loan.interestRate || 0) * 100) / 100;
+    const interestAmount = Math.round((loan.totalBruto - loan.capital) * 100) / 100;
     const capitalFormatted = formatCurrency(loan.capital);
     const jurosFormatted = formatCurrency(interestAmount);
     const vencimentoFormatted = format(parseISO(loan.dueDate), 'dd/MM/yyyy');
