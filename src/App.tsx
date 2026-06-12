@@ -202,12 +202,14 @@ const ptBrMonths = [
 
 interface SystemSettings {
   whatsappTemplate: string;
+  whatsappOverdueTemplate: string;
   defaultInterestRate: number;
   accentColor: 'yellow' | 'green' | 'blue' | 'violet' | 'red';
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
   whatsappTemplate: 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {capital}.\n\nCaso prefira, você pode pagar apenas os juros de R$ {juros} para renovar por mais 30 dias.',
+  whatsappOverdueTemplate: 'Olá {nome}, passando para lembrar que constam {meses_atraso} {termo_meses} em atraso do seu empréstimo de R$ {capital}, e estamos próximos de mais um vencimento.\n\nCaso prefira, você pode pagar os juros acumulados de R$ {juros} para regularizar e renovar por mais 30 dias.',
   defaultInterestRate: 0,
   accentColor: 'yellow'
 };
@@ -325,16 +327,17 @@ const getOverdueMonths = (dueDateVal: unknown): number => {
   const dueDate = pureToDate(dueDateVal);
   if (!dueDate) return 0;
   const today = startOfDay(new Date());
-  if (today <= startOfDay(dueDate)) return 0;
-
-  // Calculate difference in months between dueDate and today
-  let months = (today.getFullYear() - dueDate.getFullYear()) * 12 + (today.getMonth() - dueDate.getMonth());
+  const due = startOfDay(dueDate);
   
-  if (today.getDate() > dueDate.getDate()) {
-    months += 1;
+  if (today <= due) return 0;
+
+  let monthsDiff = (today.getFullYear() - due.getFullYear()) * 12 + (today.getMonth() - due.getMonth());
+  
+  if (today.getDate() < due.getDate()) {
+    monthsDiff -= 1;
   }
   
-  return Math.max(0, months);
+  return Math.max(0, monthsDiff);
 };
 
 const enrichLoanWithAccruedInterest = (loan: Loan): Loan => {
@@ -1683,7 +1686,10 @@ export default function App() {
     const settingsRef = doc(db, 'users', user.uid, 'settings', 'system');
     const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
-        setSystemSettings(docSnap.data() as SystemSettings);
+        setSystemSettings({
+          ...DEFAULT_SETTINGS,
+          ...docSnap.data()
+        } as SystemSettings);
       }
       setIsSettingsLoaded(true);
     }, (err) => {
@@ -1902,7 +1908,16 @@ export default function App() {
     const jurosFormatted = formatCurrency(interestAmount);
     const vencimentoFormatted = format(parseISO(loan.dueDate), 'dd/MM/yyyy');
     
-    let message = systemSettings.whatsappTemplate
+    const isLoanOverdue = isOverdue(loan) || loan.status === 'Atrasado';
+    const overdueCount = getOverdueMonths(loan.dueDate) + 1;
+    const termoMeses = overdueCount === 1 ? 'mês' : 'meses';
+    const totalBrutoFormatted = formatCurrency(loan.totalBruto);
+
+    const baseTemplate = isLoanOverdue 
+      ? (systemSettings.whatsappOverdueTemplate || DEFAULT_SETTINGS.whatsappOverdueTemplate)
+      : (systemSettings.whatsappTemplate || DEFAULT_SETTINGS.whatsappTemplate);
+
+    let message = baseTemplate
       .replace(/{nome}/gi, firstName)
       .replace(/{valor}/gi, capitalFormatted)
       .replace(/{capital}/gi, capitalFormatted)
@@ -1910,7 +1925,10 @@ export default function App() {
       .replace(/{valor do captal}/gi, capitalFormatted)
       .replace(/{juros}/gi, jurosFormatted)
       .replace(/{valor do juros}/gi, jurosFormatted)
-      .replace(/{vencimento}/gi, vencimentoFormatted);
+      .replace(/{vencimento}/gi, vencimentoFormatted)
+      .replace(/{meses_atraso}/gi, String(overdueCount))
+      .replace(/{termo_meses}/gi, termoMeses)
+      .replace(/{total_bruto}/gi, totalBrutoFormatted);
 
     if (userProfile?.pixKey) {
       const pixInfo = `\n\nChave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}`;
@@ -5379,13 +5397,14 @@ export default function App() {
                           </div>
                         )}
                         {activeSettingsSection === 'mensagem' && (
-                          <div className="space-y-6">
+                          <div className="space-y-8">
+                            {/* Standard Template */}
                             <div className="space-y-4">
-                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Template de Cobrança</label>
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Template de Cobrança Padrão</label>
                               <textarea 
                                 value={systemSettings.whatsappTemplate}
                                 onChange={(e) => setSystemSettings(prev => ({ ...prev, whatsappTemplate: e.target.value }))}
-                                rows={8}
+                                rows={5}
                                 className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-xs leading-relaxed font-medium text-slate-300 focus:border-brand-primary focus:outline-none transition-all placeholder:text-slate-800"
                               />
                               <div className="flex flex-wrap gap-2">
@@ -5399,6 +5418,31 @@ export default function App() {
                                   </button>
                                 ))}
                               </div>
+                            </div>
+
+                            {/* Overdue Template */}
+                            <div className="space-y-4 pt-6 border-t border-white/[0.05]">
+                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Template de Cobrança de Atrasados</label>
+                              <textarea 
+                                value={systemSettings.whatsappOverdueTemplate || ''}
+                                onChange={(e) => setSystemSettings(prev => ({ ...prev, whatsappOverdueTemplate: e.target.value }))}
+                                rows={5}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-xs leading-relaxed font-medium text-slate-300 focus:border-brand-primary focus:outline-none transition-all placeholder:text-slate-800"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                {['{nome}', '{capital}', '{juros}', '{total_bruto}', '{meses_atraso}', '{termo_meses}'].map(tag => (
+                                  <button 
+                                    key={tag}
+                                    onClick={() => setSystemSettings(prev => ({ ...prev, whatsappOverdueTemplate: (prev.whatsappOverdueTemplate || '') + tag }))}
+                                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-bold text-slate-400 hover:text-brand-primary transition-all"
+                                  >
+                                    {tag}
+                                  </button>
+                                ))}
+                              </div>
+                              <p className="text-[9px] text-slate-500 uppercase font-black leading-relaxed tracking-wider ml-1">
+                                Dica: Utilize <span className="text-[#FFD700] font-bold">{'{meses_atraso}'}</span> (ex: 1, 2) e <span className="text-[#FFD700] font-bold">{'{termo_meses}'}</span> (mês/meses) para estruturar a mensagem de atrasados de maneira dinâmica.
+                              </p>
                             </div>
                           </div>
                         )}
