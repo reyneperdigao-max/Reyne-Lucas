@@ -427,7 +427,7 @@ export default function App() {
   useEffect(() => {
     if (viewingClientLoans) {
       const activeLoans = loans
-        .filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0))
+        .filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado')
         .map(l => l.id);
       setSelectedLoansForUnified(activeLoans);
     } else {
@@ -1802,7 +1802,11 @@ export default function App() {
     try {
       if (editingLoanId) {
         const oldLoan = loans.find(l => l.id === editingLoanId);
-        await updateDoc(doc(db, 'loans', editingLoanId), loanData);
+        const updateData: Record<string, unknown> = { ...loanData };
+        if (newLoan.status) {
+          updateData.status = newLoan.status;
+        }
+        await updateDoc(doc(db, 'loans', editingLoanId), updateData);
         await logAction('loan_updated', `Empréstimo atualizado para ${loanData.clientName}`, loanData.clientName, editingLoanId, loanData.capital);
         
         // If name, phone or address changed, bulk update all other loans for this client
@@ -1929,10 +1933,11 @@ export default function App() {
       clientName: loan.clientName,
       clientPhone: loan.clientPhone || '',
       clientAddress: loan.clientAddress || '',
-      capital: loan.capital.toString(),
+      capital: loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
       interestRate: (loan.interestRate * 100).toString(),
       date: loan.date,
       dueDate: loan.dueDate,
+      status: loan.status,
     });
     setIsAdding(true);
   };
@@ -3997,7 +4002,7 @@ export default function App() {
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Contratos Ativos</th>
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Capital em Aberto</th>
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Total a Receber</th>
-                           <th className="px-8 py-6 text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] text-right">Total Clientes: {stats.totalClients}</th>
+                           <th className="px-8 py-6 text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] text-right">Ações (Total: {stats.totalClients})</th>
                          </tr>
                        </thead>
                        <tbody className={cn("divide-y transition-colors", isDark ? "divide-white/[0.05]" : "divide-slate-100")}>
@@ -4052,10 +4057,29 @@ export default function App() {
                                    R$ {client.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                  </span>
                                </td>
-                               <td className="px-8 py-6 text-right">
-                                <td className="px-8 py-6 text-right">
-                               </td>
-                               </td>
+                               <td className="px-8 py-6 text-right" onClick={(e) => e.stopPropagation()}>
+                                  <button 
+                                    onClick={() => {
+                                      setEditingLoanId(null);
+                                      setNewLoan({
+                                        clientName: client.name,
+                                        clientPhone: client.phone || '',
+                                        clientAddress: client.address || '',
+                                        capital: '',
+                                        interestRate: '',
+                                        date: format(new Date(), 'yyyy-MM-dd'),
+                                        dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                                        status: 'Pendente'
+                                      });
+                                      setIsAdding(true);
+                                    }}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-brand-primary/10 text-brand-primary border border-brand-primary/20 hover:bg-brand-primary hover:text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95"
+                                    title="Fazer Novo Empréstimo"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Novo Empréstimo</span>
+                                  </button>
+                                </td>
                              </tr>
                            ))
                          )}
@@ -4119,12 +4143,35 @@ export default function App() {
                                 </p>
                               </div>
                               <div className={cn("p-4 rounded-2xl border transition-colors", isDark ? "bg-brand-primary/5 border-brand-primary/10" : "bg-brand-primary/[0.03] border-brand-primary/10")}>
-                                <span className="text-[8px] font-black text-brand-primary uppercase tracking-widest block mb-1">Total a Receber</span>
-                                <p className="text-xs font-black text-brand-primary leading-none font-mono">
-                                  R$ {client.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </p>
-                              </div>
-                            </div>
+                                 <span className="text-[8px] font-black text-brand-primary uppercase tracking-widest block mb-1">Total a Receber</span>
+                                 <p className="text-xs font-black text-brand-primary leading-none font-mono">
+                                   R$ {client.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                 </p>
+                               </div>
+                             </div>
+
+                             <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                               <button
+                                 onClick={() => {
+                                   setEditingLoanId(null);
+                                   setNewLoan({
+                                     clientName: client.name,
+                                     clientPhone: client.phone || '',
+                                     clientAddress: client.address || '',
+                                     capital: '',
+                                     interestRate: '',
+                                     date: format(new Date(), 'yyyy-MM-dd'),
+                                     dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                                     status: 'Pendente'
+                                   });
+                                   setIsAdding(true);
+                                 }}
+                                 className="w-full py-2.5 bg-brand-primary/10 text-brand-primary border border-brand-primary/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:bg-brand-primary hover:text-black flex items-center justify-center gap-1.5"
+                               >
+                                 <Plus className="w-3.5 h-3.5" />
+                                 <span>Novo Empréstimo</span>
+                               </button>
+                             </div>
                           </div>
                         ))
                       )}
@@ -5602,6 +5649,13 @@ export default function App() {
                                   {loan.status === 'Agendado' && (
                                     <>
                                       <button 
+                                        onClick={() => openEditModal(loan)}
+                                        className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl border border-brand-primary/20 transition-all active:scale-95"
+                                        title="Editar Agendamento"
+                                      >
+                                        <Edit2 className="w-4 h-4" />
+                                      </button>
+                                      <button 
                                         onClick={() => setViewingScheduleReceipt(loan)}
                                         className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl border border-amber-500/20"
                                         title="Gerar Comprovante de Agendamento"
@@ -5784,6 +5838,13 @@ export default function App() {
                               {loan.status === 'Agendado' && (
                                 <>
                                   <button 
+                                    onClick={() => openEditModal(loan)}
+                                    className="p-3.5 bg-brand-primary/10 text-brand-primary rounded-xl border border-brand-primary/20 active:scale-95 transition-all"
+                                    title="Editar Agendamento"
+                                  >
+                                    <Edit2 className="w-5 h-5" />
+                                  </button>
+                                  <button 
                                     onClick={() => setViewingScheduleReceipt(loan)}
                                     className="p-3.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 active:scale-95 transition-all"
                                     title="Comprovante de Agendamento"
@@ -5858,7 +5919,7 @@ export default function App() {
 
       {/* Add Loan Modal */}
       {isAdding && (
-        <div key="modal-add-loan" className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4">
+        <div key="modal-add-loan" className="fixed inset-0 z-[150] flex items-center justify-center p-0 sm:p-4">
           <div 
             onClick={() => setIsAdding(false)}
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
@@ -6070,7 +6131,7 @@ export default function App() {
 
         {/* Payment Modal */}
         {payingLoan && (
-          <div key="modal-payment" className="fixed inset-0 z-[60] flex items-center justify-center p-0 sm:p-4">
+          <div key="modal-payment" className="fixed inset-0 z-[150] flex items-center justify-center p-0 sm:p-4">
             <div 
               onClick={() => { setPayingLoan(null); setLastAction(null); }}
               className="absolute inset-0 bg-black/80 backdrop-blur-sm"
@@ -6455,7 +6516,7 @@ export default function App() {
           </div>
         )}
         {confirmModal.isOpen && (
-          <div key="modal-confirm" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div key="modal-confirm" className="fixed inset-0 z-[150] flex items-center justify-center p-4">
             <div 
               onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
               className="absolute inset-0 bg-black/80"
@@ -6615,12 +6676,12 @@ export default function App() {
                         <input 
                           type="checkbox"
                           checked={
-                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0)).length > 0 &&
-                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0)).every(l => selectedLoansForUnified.includes(l.id))
+                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado').length > 0 &&
+                            loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado').every(l => selectedLoansForUnified.includes(l.id))
                           }
                           onChange={(e) => {
                             if (e.target.checked) {
-                              const active = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0)).map(l => l.id);
+                              const active = loans.filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado').map(l => l.id);
                               setSelectedLoansForUnified(active);
                             } else {
                               setSelectedLoansForUnified([]);
@@ -6638,7 +6699,7 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-white/[0.05]">
                     {loans
-                      .filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado' && (l.status !== 'Pago' || l.capital > 0))
+                      .filter(l => l.clientName === viewingClientLoans && l.status !== 'Agendado')
                       .sort((a, b) => (toDate(b.date)?.getTime() || 0) - (toDate(a.date)?.getTime() || 0))
                       .map((loan) => (
                         <tr key={loan.id} className={cn(
@@ -6646,19 +6707,23 @@ export default function App() {
                           selectedLoansForUnified.includes(loan.id) && "bg-brand-primary/5"
                         )}>
                           <td className="px-6 py-4">
-                            <input 
-                              type="checkbox"
-                              checked={selectedLoansForUnified.includes(loan.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedLoansForUnified(prev => [...prev, loan.id]);
-                                } else {
-                                  setSelectedLoansForUnified(prev => prev.filter(id => id !== loan.id));
-                                }
-                              }}
-                              className="w-4 h-4 bg-white/5 border-white/10 rounded focus:ring-brand-primary text-brand-primary cursor-pointer"
-                            />
-                          </td>
+                             {loan.status !== 'Pago' ? (
+                               <input 
+                                 type="checkbox"
+                                 checked={selectedLoansForUnified.includes(loan.id)}
+                                 onChange={(e) => {
+                                   if (e.target.checked) {
+                                     setSelectedLoansForUnified(prev => [...prev, loan.id]);
+                                   } else {
+                                     setSelectedLoansForUnified(prev => prev.filter(id => id !== loan.id));
+                                   }
+                                 }}
+                                 className="w-4 h-4 bg-white/5 border-white/10 rounded focus:ring-brand-primary text-brand-primary cursor-pointer"
+                               />
+                             ) : (
+                               <div className="w-4 h-4 flex items-center justify-center text-slate-600 font-mono">-</div>
+                             )}
+                           </td>
                           <td className="px-6 py-4 text-white text-xs">
                             R$ {loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </td>
@@ -6690,24 +6755,28 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button 
-                                onClick={() => {
-                                  setViewingClientLoans(null);
-                                  setPayingLoan(loan);
-                                  setLastAction(null);
-                                }}
-                                className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
-                                title="Pagamento"
-                              >
-                                <DollarSign className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => sendWhatsAppCollection(loan)}
-                                className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
-                                title="Cobrança WhatsApp"
-                              >
-                                <MessageCircle className="w-4 h-4" />
-                              </button>
+                              {loan.status !== 'Pago' && (
+                                 <button 
+                                   onClick={() => {
+                                     setViewingClientLoans(null);
+                                     setPayingLoan(loan);
+                                     setLastAction(null);
+                                   }}
+                                   className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
+                                   title="Pagamento"
+                                 >
+                                   <DollarSign className="w-4 h-4" />
+                                 </button>
+                               )}
+                              {loan.status !== 'Pago' && (
+                                 <button 
+                                   onClick={() => sendWhatsAppCollection(loan)}
+                                   className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl transition-all active:scale-95 border border-emerald-500/20"
+                                   title="Cobrança WhatsApp"
+                                 >
+                                   <MessageCircle className="w-4 h-4" />
+                                 </button>
+                               )}
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
@@ -6718,16 +6787,18 @@ export default function App() {
                               >
                                 <FileText className="w-4 h-4" />
                               </button>
-                              <button 
-                                onClick={() => {
-                                  setViewingClientLoans(null);
-                                  openEditModal(loan);
-                                }}
-                                className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
-                                title="Editar"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
+                              {loan.status !== 'Pago' && (
+                                 <button 
+                                   onClick={() => {
+                                     setViewingClientLoans(null);
+                                     openEditModal(loan);
+                                   }}
+                                   className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
+                                   title="Editar"
+                                 >
+                                   <Edit2 className="w-4 h-4" />
+                                 </button>
+                               )}
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
@@ -7073,7 +7144,7 @@ export default function App() {
                               const clientLoans = loans.filter(l => l.clientName === viewingClientDetail.name);
                               const batch = writeBatch(db);
                               clientLoans.forEach(l => {
-                                batch.delete(doc(db, 'users', user?.uid || '', 'loans', l.id));
+                                batch.delete(doc(db, 'loans', l.id));
                               });
                               await batch.commit();
                               setViewingClientDetail(null);
