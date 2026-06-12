@@ -209,7 +209,7 @@ interface SystemSettings {
 
 const DEFAULT_SETTINGS: SystemSettings = {
   whatsappTemplate: 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {capital}.\n\nCaso prefira, você pode pagar apenas os juros de R$ {juros} para renovar por mais 30 dias.',
-  whatsappOverdueTemplate: 'Olá {nome}, passando para lembrar que constam {meses_atraso} {termo_meses} em atraso do seu empréstimo de R$ {capital}, e estamos próximos de mais um vencimento.\n\nCaso prefira, você pode pagar os juros acumulados de R$ {juros} para regularizar e renovar por mais 30 dias.',
+  whatsappOverdueTemplate: 'Olá {nome}, passando para lembrar que constam {meses_atraso} {termo_meses} em atraso do seu empréstimo de {capital}, e estamos próximos de mais um vencimento.\n\nCaso prefira, você pode pagar os juros acumulados de {juros} para regularizar e renovar por mais 30 dias.',
   defaultInterestRate: 0,
   accentColor: 'yellow'
 };
@@ -1686,9 +1686,20 @@ export default function App() {
     const settingsRef = doc(db, 'users', user.uid, 'settings', 'system');
     const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
+        const data = docSnap.data();
+        let loadedOverdueTemplate = data.whatsappOverdueTemplate || DEFAULT_SETTINGS.whatsappOverdueTemplate;
+        
+        const oldDefault1 = 'Olá {nome}, passando para lembrar que constam {meses_atraso} {termo_meses} em atraso do seu empréstimo de R$ {capital}, e estamos próximos de mais um vencimento.\n\nCaso prefira, você pode pagar os juros acumulados de R$ {juros} para regularizar e renovar por mais 30 dias.';
+        const oldDefault2 = 'Olá {nome}, tudo bem?\n\nIdentificamos que você possui {meses_atraso} {termo_meses} em atraso referente ao seu empréstimo de capital R$ {capital}. Além disso, está prestes a vencer mais uma parcela.\n\nAté o momento, o valor total em aberto é de R$ {total_bruto}.\n\nPara regularizar ou refinanciar, por favor, entre em contato.';
+        
+        if (loadedOverdueTemplate === oldDefault1 || loadedOverdueTemplate === oldDefault2) {
+          loadedOverdueTemplate = DEFAULT_SETTINGS.whatsappOverdueTemplate;
+        }
+
         setSystemSettings({
           ...DEFAULT_SETTINGS,
-          ...docSnap.data()
+          ...data,
+          whatsappOverdueTemplate: loadedOverdueTemplate
         } as SystemSettings);
       }
       setIsSettingsLoaded(true);
