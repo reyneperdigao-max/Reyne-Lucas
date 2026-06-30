@@ -80,6 +80,214 @@ import { cn } from './lib/utils';
 // @ts-expect-error - image import from assets without type declaration file
 import luxuryBg from './assets/images/luxury_login_background_1782841009798.jpg';
 
+// --- Highly Realistic 3D Money SVGs for Luxury active tabs ---
+const CurvedDarkLuxuryBanknote = () => (
+  <div 
+    className="absolute right-0 top-0 bottom-0 w-[55%] pointer-events-none select-none z-0 overflow-hidden opacity-45 dark:opacity-60 transition-opacity duration-300"
+    style={{ animation: 'luxuryWaveFlow 6s ease-in-out infinite' }}
+  >
+    <svg className="w-full h-full" viewBox="0 0 160 56" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        {/* Deep, rich dark-gold and ultra-dark charcoal background gradient for the banknote body */}
+        <linearGradient id="darkLuxuryBillBg" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#07080a" stopOpacity="0.98" />
+          <stop offset="35%" stopColor="#0d0f14" stopOpacity="0.95" />
+          <stop offset="70%" stopColor="#1e180b" stopOpacity="0.98" />
+          <stop offset="100%" stopColor="#0c0d12" stopOpacity="0.95" />
+        </linearGradient>
+
+        {/* Shimmering, high-contrast gold gradient for borders and lines */}
+        <linearGradient id="luxuryGoldStroke" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#8c7023" />
+          <stop offset="50%" stopColor="#F5D061" />
+          <stop offset="100%" stopColor="#D4AF37" />
+        </linearGradient>
+
+        {/* Guilloche pattern representing financial security waves */}
+        <linearGradient id="guillocheGold" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.02" />
+          <stop offset="30%" stopColor="#F5D061" stopOpacity="0.25" />
+          <stop offset="70%" stopColor="#D4AF37" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#8c7023" stopOpacity="0.1" />
+        </linearGradient>
+
+        {/* Fine background grid */}
+        <pattern id="securityGrid" width="6" height="6" patternUnits="userSpaceOnUse">
+          <path d="M 6 0 L 0 0 0 6" fill="none" stroke="#D4AF37" strokeWidth="0.15" strokeOpacity="0.08" />
+        </pattern>
+      </defs>
+
+      {/* Background Security Grid (only inside the bill shape) */}
+      <path 
+        d="M 0 56 Q 35 56 70 38 T 120 18 T 160 6 L 160 56 Z" 
+        fill="url(#securityGrid)" 
+      />
+
+      {/* The main curved banknote body representing a growing financial chart */}
+      <path 
+        d="M 0 56 Q 35 56 70 38 T 120 18 T 160 6 L 160 56 Z" 
+        fill="url(#darkLuxuryBillBg)"
+        stroke="url(#luxuryGoldStroke)"
+        strokeWidth="1.2"
+      />
+
+      {/* Dashed security border just inside the curved edge */}
+      <path 
+        d="M 2 54 Q 35 54 69 36 T 119 16 T 158 5" 
+        fill="none"
+        stroke="#D4AF37"
+        strokeWidth="0.4"
+        strokeDasharray="2.5 1.5"
+        strokeOpacity="0.5"
+      />
+
+      {/* Wave Guilloche 1 - Engraved wave line */}
+      <path 
+        d="M 0 46 Q 35 46 70 30 T 120 12 T 160 2" 
+        fill="none"
+        stroke="url(#guillocheGold)"
+        strokeWidth="0.45"
+        strokeOpacity="0.6"
+      />
+
+      {/* Wave Guilloche 2 - Lower intersecting wave line */}
+      <path 
+        d="M 0 51 Q 35 48 70 34 T 120 15 T 160 5" 
+        fill="none"
+        stroke="url(#guillocheGold)"
+        strokeWidth="0.3"
+        strokeOpacity="0.4"
+      />
+
+      {/* Wave Guilloche 3 - Very fine background vibration line */}
+      <path 
+        d="M 0 38 Q 35 34 70 24 T 120 8 T 160 1" 
+        fill="none"
+        stroke="url(#guillocheGold)"
+        strokeWidth="0.2"
+        strokeOpacity="0.25"
+      />
+
+      {/* Banknote Watermark Stamp (Luxury Royal Emblem / Central Seal) */}
+      <g transform="translate(122, 28) scale(0.6)">
+        {/* Outer security circle */}
+        <circle cx="12" cy="12" r="11" fill="#0d0f14" stroke="#D4AF37" strokeWidth="0.8" strokeOpacity="0.8" />
+        <circle cx="12" cy="12" r="9" fill="none" stroke="#D4AF37" strokeWidth="0.3" strokeDasharray="1.5 0.8" strokeOpacity="0.6" />
+        {/* Central Currency Emblem */}
+        <path d="M12 5.5 L13.5 8.5 L17 9 L14.5 11.5 L15 15 L12 13.5 L9 15 L9.5 11.5 L7 9 L10.5 8.5 Z" fill="#D4AF37" fillOpacity="0.85" />
+      </g>
+
+      {/* Security Thread - Vertical metal strip cutting through the bill */}
+      <line x1="88" y1="28" x2="88" y2="56" stroke="url(#luxuryGoldStroke)" strokeWidth="0.8" strokeOpacity="0.4" strokeDasharray="3 1.5" />
+
+      {/* Engraved vertical bar codes & borders at the right end */}
+      <line x1="152" y1="8" x2="152" y2="52" stroke="#D4AF37" strokeWidth="0.3" strokeOpacity="0.4" strokeDasharray="1 1" />
+      <line x1="155" y1="6" x2="155" y2="52" stroke="#D4AF37" strokeWidth="0.5" strokeOpacity="0.3" />
+
+      {/* Banknote text, numbers, and currency indicators following the design */}
+      <text x="12" y="52" fill="#D4AF37" fillOpacity="0.8" fontSize="6.5" fontWeight="900" fontFamily="monospace" letterSpacing="0.8">100</text>
+      <text x="142" y="15" fill="#D4AF37" fillOpacity="0.75" fontSize="4.5" fontWeight="bold" fontFamily="sans-serif" letterSpacing="0.5">USD</text>
+      <text x="52" y="51" fill="#D4AF37" fillOpacity="0.35" fontSize="3.2" fontWeight="bold" fontFamily="serif" letterSpacing="1.2">SECURE CAPITAL</text>
+      <text x="118" y="51" fill="#D4AF37" fillOpacity="0.3" fontSize="2.8" fontWeight="bold" fontFamily="monospace">N° 888-2026</text>
+
+      {/* Financial Growth Chart Markers (Vertices on the curve) */}
+      <circle cx="70" cy="38" r="2.2" fill="#FFD700" stroke="#07080a" strokeWidth="0.5" />
+      <circle cx="120" cy="18" r="2.2" fill="#FFD700" stroke="#07080a" strokeWidth="0.5" />
+      {/* High-growth endpoint indicator */}
+      <circle cx="160" cy="6" r="3.2" fill="#FFFFFF" stroke="#D4AF37" strokeWidth="0.8" className="animate-pulse" />
+    </svg>
+  </div>
+);
+
+
+
+const RealisticCoin = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#FFE082" />
+        <stop offset="30%" stopColor="#FFB300" />
+        <stop offset="70%" stopColor="#FFA000" />
+        <stop offset="100%" stopColor="#B78103" />
+      </linearGradient>
+      <linearGradient id="goldRim" x1="100%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.8" />
+        <stop offset="50%" stopColor="#FFD54F" />
+        <stop offset="100%" stopColor="#6D4C41" />
+      </linearGradient>
+    </defs>
+    <circle cx="12" cy="12" r="11" fill="url(#goldGrad)" stroke="url(#goldRim)" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="8" fill="none" stroke="#FF8F00" strokeWidth="0.5" strokeDasharray="1.5 1" />
+    <circle cx="12" cy="12" r="7.5" fill="none" stroke="#FFE082" strokeWidth="0.5" />
+    <path d="M12.5 6C12.5 6 10.5 7 10.5 9C10.5 11 13.5 11.5 13.5 13C13.5 14.5 11.5 15.5 11.5 15.5M12 5V18" stroke="#795548" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M12.5 6.5C12.5 6.5 10.5 7.5 10.5 9.5C10.5 11.5 13.5 12 13.5 13.5C13.5 15 11.5 16 11.5 16M12 5.5V18.5" stroke="#FFFFFF" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.9" />
+    <path d="M12.5 6C12.5 6 10.5 7 10.5 9C10.5 11 13.5 11.5 13.5 13C13.5 14.5 11.5 15.5 11.5 15.5M12 5V18" stroke="#E65100" strokeWidth="1" strokeLinecap="round" />
+  </svg>
+);
+
+// --- Highly Professional, Conservative SVG Charts/Sparklines for Pro Dashboard ---
+const AssetSparkline = () => (
+  <div className="w-full h-14 mt-6 opacity-70 dark:opacity-80">
+    <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="assetGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#D4AF37" stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M 0 50 Q 25 45 50 48 T 100 28 T 150 20 T 200 10 L 200 60 L 0 60 Z"
+        fill="url(#assetGrad)"
+      />
+      <path
+        d="M 0 50 Q 25 45 50 48 T 100 28 T 150 20 T 200 10"
+        fill="none"
+        stroke="#D4AF37"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="200" cy="10" r="3" fill="#D4AF37" />
+    </svg>
+  </div>
+);
+
+const OverdueSparkline = () => (
+  <div className="w-full h-14 mt-4 opacity-70 dark:opacity-80">
+    <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="overdueGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#EF4444" stopOpacity="0.12" />
+          <stop offset="100%" stopColor="#EF4444" stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M 0 15 Q 40 40 80 20 T 140 42 T 200 25 L 200 60 L 0 60 Z"
+        fill="url(#overdueGrad)"
+      />
+      <path
+        d="M 0 15 Q 40 40 80 20 T 140 42 T 200 25"
+        fill="none"
+        stroke="#EF4444"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="200" cy="25" r="3" fill="#EF4444" />
+    </svg>
+  </div>
+);
+
+const LiquidationBars = () => (
+  <div className="w-full h-14 mt-4 opacity-70 dark:opacity-80 flex items-end justify-between px-2 gap-[3px]">
+    <div className="w-full bg-emerald-500/20 dark:bg-emerald-500/10 hover:bg-emerald-500/40 rounded-t-[2px] transition-all duration-300" style={{ height: '35%' }}></div>
+    <div className="w-full bg-emerald-500/25 dark:bg-emerald-500/15 hover:bg-emerald-500/40 rounded-t-[2px] transition-all duration-300" style={{ height: '55%' }}></div>
+    <div className="w-full bg-emerald-500/20 dark:bg-emerald-500/10 hover:bg-emerald-500/40 rounded-t-[2px] transition-all duration-300" style={{ height: '40%' }}></div>
+    <div className="w-full bg-emerald-500/30 dark:bg-emerald-500/20 hover:bg-emerald-500/50 rounded-t-[2px] transition-all duration-300" style={{ height: '70%' }}></div>
+    <div className="w-full bg-emerald-500/40 dark:bg-emerald-500/25 hover:bg-emerald-500/60 rounded-t-[2px] transition-all duration-300" style={{ height: '60%' }}></div>
+    <div className="w-full bg-emerald-500/60 dark:bg-emerald-500/40 hover:bg-emerald-500/80 rounded-t-[2px] transition-all duration-300" style={{ height: '85%' }}></div>
+    <div className="w-full bg-emerald-500 dark:bg-emerald-500/80 hover:bg-emerald-500 rounded-t-[2px] transition-all duration-300" style={{ height: '95%' }}></div>
+  </div>
+);
+
 // --- Constants ---
 const CRC16_POLY = 0x1021;
 const CRC16_INIT = 0xFFFF;
@@ -444,6 +652,17 @@ export default function App() {
 
   const [viewingReceipt, setViewingReceipt] = useState<SystemAction | null>(null);
   const [viewingScheduleReceipt, setViewingScheduleReceipt] = useState<Loan | null>(null);
+  const [shareModalData, setShareModalData] = useState<{
+    isOpen: boolean;
+    title: string;
+    text: string;
+    fileName: string;
+    imgDataUrl?: string;
+    pdfBlob?: Blob;
+    whatsappText: string;
+    detailsText: string;
+  } | null>(null);
+  const [copiedShareText, setCopiedShareText] = useState(false);
   const [lastAction, setLastAction] = useState<SystemAction | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [showOnlyOverdue, setShowOnlyOverdue] = useState(false);
@@ -1178,6 +1397,84 @@ export default function App() {
           });
         }
       });
+
+      if (!forceDownload) {
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        let fileName = 'comprovante.png';
+        let shareTitle = 'Comprovante Nexus Private';
+        let shareText = customShareText !== undefined ? customShareText : 'Segue o comprovante de recebimento Nexus Private.';
+
+        if (elementId === 'printable-contract') {
+          fileName = 'contrato.png';
+          shareTitle = 'Contrato Nexus Private';
+          shareText = customShareText !== undefined ? customShareText : 'Segue o contrato da operação Nexus Private.';
+        } else if (elementId === 'printable-schedule-receipt') {
+          fileName = 'comprovante_agendamento.png';
+          shareTitle = 'Comprovante de Agendamento';
+          shareText = customShareText !== undefined ? customShareText : 'Segue o comprovante de agendamento Nexus Private.';
+        } else if (elementId === 'printable-report') {
+          fileName = `relatorio-${ptBrMonths[reportMonth].toLowerCase()}-${reportYear}.png`;
+          shareTitle = 'Relatório Mensal Nexus Private';
+          shareText = `Segue o relatório mensal de ${ptBrMonths[reportMonth]}/${reportYear}.`;
+        }
+
+        // Construct structured WhatsApp and copy text
+        let whatsappText = '';
+        let detailsText = '';
+
+        if (elementId === 'printable-receipt' && viewingReceipt) {
+          const amountStr = (viewingReceipt.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          const dateStr = viewingReceipt.date ? safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm') : '';
+          const nameStr = viewingReceipt.clientName || 'Cliente';
+          const opType = viewingReceipt.description?.toLowerCase()?.includes('juros') ? 'Rendimentos' : 
+                         viewingReceipt.description?.toLowerCase()?.includes('capital') ? 'Amortização' : 
+                         'Recebimento';
+          const authId = (viewingReceipt.id ? viewingReceipt.id.toUpperCase() : 'NEXUS') + '-' + (viewingReceipt.date ? toDate(viewingReceipt.date).getTime() : new Date().getTime());
+
+          whatsappText = `*COMPROVANTE DE RECEBIMENTO*%0A*NEXUS PRIVATE*%0A%0A*Pagador:* ${encodeURIComponent(nameStr)}%0A*Valor:* R$ ${encodeURIComponent(amountStr)}%0A*Data:* ${encodeURIComponent(dateStr)}%0A*Operação:* ${encodeURIComponent(opType)}%0A*Descrição:* ${encodeURIComponent(viewingReceipt.description || '')}%0A*Autenticação:* ${encodeURIComponent(authId)}%0A%0A_Enviado via Nexus Private_`;
+          
+          detailsText = `COMPROVANTE DE RECEBIMENTO\nNEXUS PRIVATE\n\nPagador: ${nameStr}\nValor: R$ ${amountStr}\nData: ${dateStr}\nOperação: ${opType}\nDescrição: ${viewingReceipt.description || ''}\nAutenticação: ${authId}`;
+        } else if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
+          const clientStr = viewingScheduleReceipt.clientName || 'Cliente';
+          const capStr = (viewingScheduleReceipt.capital || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          const rateStr = viewingScheduleReceipt.interestRate || '---';
+          const dueStr = viewingScheduleReceipt.dueDate ? safeFormatDate(viewingScheduleReceipt.dueDate, 'dd/MM/yyyy') : '---';
+          const authId = `SCH-${viewingScheduleReceipt.id ? viewingScheduleReceipt.id.toUpperCase() : 'SCH'}-${viewingScheduleReceipt.createdAt ? toDate(viewingScheduleReceipt.createdAt).getTime() : new Date().getTime()}`;
+
+          whatsappText = `*COMPROVANTE DE AGENDAMENTO*%0A*NEXUS PRIVATE*%0A%0A*Cliente:* ${encodeURIComponent(clientStr)}%0A*Capital:* R$ ${encodeURIComponent(capStr)}%0A*Taxa:* ${encodeURIComponent(rateStr)}%25 a.m.%0A*Vencimento:* ${encodeURIComponent(dueStr)}%0A*Identificador:* ${encodeURIComponent(authId)}%0A%0A_Enviado via Nexus Private_`;
+
+          detailsText = `COMPROVANTE DE AGENDAMENTO\nNEXUS PRIVATE\n\nCliente: ${clientStr}\nCapital: R$ ${capStr}\nTaxa: ${rateStr}% a.m.\nVencimento: ${dueStr}\nIdentificador: ${authId}`;
+        } else if (elementId === 'printable-contract' && viewingContract && viewingContract.length > 0) {
+          const clientStr = viewingContract[0].clientName || 'Cliente';
+          const countStr = viewingContract.length;
+          const totalCapital = viewingContract.reduce((sum, l) => sum + (Number(l.capital) || 0), 0);
+          const capStr = totalCapital.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          const authId = `${viewingContract[0].id ? viewingContract[0].id.toUpperCase() : 'NEXUS'}-${viewingContract[0].date ? toDate(viewingContract[0].date).getTime() : new Date().getTime()}`;
+
+          whatsappText = `*CONTRATO DE OPERAÇÃO*%0A*NEXUS PRIVATE*%0A%0A*Contratante:* ${encodeURIComponent(clientStr)}%0A*Contratos Ativos:* ${encodeURIComponent(countStr)}%0A*Valor Total:* R$ ${encodeURIComponent(capStr)}%0A*Autenticação:* ${encodeURIComponent(authId)}%0A%0A_Enviado via Nexus Private_`;
+
+          detailsText = `CONTRATO DE OPERAÇÃO\nNEXUS PRIVATE\n\nContratante: ${clientStr}\nContratos Ativos: ${countStr}\nValor Total: R$ ${capStr}\nAutenticação: ${authId}`;
+        } else if (elementId === 'printable-report') {
+          const monthYearStr = `${ptBrMonths[reportMonth]} de ${reportYear}`;
+          whatsappText = `*RELATÓRIO MENSAL*%0A*NEXUS PRIVATE*%0A%0A*Competência:* ${encodeURIComponent(monthYearStr)}%0A*Status:* Consolidado%0A%0A_Enviado via Nexus Private_`;
+          detailsText = `RELATÓRIO MENSAL\nNEXUS PRIVATE\n\nCompetência: ${monthYearStr}\nStatus: Consolidado`;
+        } else {
+          whatsappText = `*DOCUMENTO NEXUS PRIVATE*%0A%0A_Enviado via Nexus Private_`;
+          detailsText = `DOCUMENTO NEXUS PRIVATE`;
+        }
+
+        setShareModalData({
+          isOpen: true,
+          title: shareTitle,
+          text: shareText,
+          fileName: fileName,
+          imgDataUrl: imgData,
+          whatsappText: whatsappText,
+          detailsText: detailsText
+        });
+        setIsGeneratingPDF(false);
+        return;
+      }
 
       if (format === 'image') {
         const imgData = canvas.toDataURL('image/png', 1.0);
@@ -3212,6 +3509,59 @@ export default function App() {
       )}
       style={{ '--color-brand-primary': getAccentColorHex() } as React.CSSProperties}
     >
+      <style>{`
+        @keyframes luxuryGlow {
+          0% { box-shadow: 0 4px 15px rgba(212, 175, 55, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+          100% { box-shadow: 0 8px 30px rgba(212, 175, 55, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+        }
+        @keyframes luxuryFloatBill {
+          0% { transform: translateY(-50%) rotate(15deg) scale(0.95); opacity: 0.35; }
+          50% { transform: translateY(-53%) rotate(18deg) scale(1.02); opacity: 0.55; }
+          100% { transform: translateY(-47%) rotate(12deg) scale(0.95); opacity: 0.35; }
+        }
+        @keyframes luxuryFloatBillMini {
+          0% { transform: rotate(15deg) scale(0.9); opacity: 0.35; }
+          50% { transform: rotate(18deg) scale(1.05); opacity: 0.55; }
+          100% { transform: rotate(12deg) scale(0.9); opacity: 0.35; }
+        }
+        @keyframes luxuryWaveFlow {
+          0% { transform: scale(1.0) translateY(0%) rotate(0deg); filter: brightness(0.95) contrast(1.05); }
+          50% { transform: scale(1.015) translateY(-0.8%) rotate(0.4deg); filter: brightness(1.15) contrast(1.1); }
+          100% { transform: scale(1.0) translateY(0%) rotate(0deg); filter: brightness(0.95) contrast(1.05); }
+        }
+        @keyframes luxuryShine {
+          0% { left: -100%; }
+          100% { left: 200%; }
+        }
+        @keyframes ambientPulseGold {
+          0% { box-shadow: 0 12px 32px rgba(212, 175, 55, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+          100% { box-shadow: 0 20px 48px rgba(212, 175, 55, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+        }
+        @keyframes ambientPulseRed {
+          0% { box-shadow: 0 12px 32px rgba(239, 68, 68, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+          100% { box-shadow: 0 20px 48px rgba(239, 68, 68, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+        }
+        @keyframes ambientPulseGreen {
+          0% { box-shadow: 0 12px 32px rgba(16, 185, 129, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+          100% { box-shadow: 0 20px 48px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+        }
+        @keyframes floatPoster {
+          0% { transform: translateY(0px) rotate(0deg); }
+          100% { transform: translateY(-8px) rotate(0.5deg); }
+        }
+        @keyframes floatPoster2 {
+          0% { transform: translateY(0px) rotate(0deg); }
+          100% { transform: translateY(-8px) rotate(-0.5deg); }
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
+
       {/* Sidebar - Desktop */}
       <aside className={cn(
         "hidden lg:flex flex-col shrink-0 sticky top-0 h-dvh border-r transition-all duration-300 z-50 overflow-hidden",
@@ -3257,11 +3607,21 @@ export default function App() {
                   "w-full flex items-center transition-all duration-300 group relative overflow-hidden",
                   isSidebarCollapsed ? "justify-center p-3.5 rounded-xl" : "gap-4 px-4 py-3.5 rounded-2xl",
                   isActive 
-                    ? "bg-brand-primary text-black shadow-xl shadow-brand-primary/20 scale-[1.02]" 
+                    ? "text-black font-extrabold scale-[1.03]" 
                     : cn("text-slate-500", isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-900 hover:bg-slate-100")
                 )}
+                style={isActive ? {
+                  background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
+                  border: '1px solid #FFD700',
+                  animation: 'luxuryGlow 2.5s ease-in-out infinite alternate',
+                  color: '#000000'
+                } : undefined}
                 title={isSidebarCollapsed ? item.label : ""}
               >
+                {isActive && (
+                  <CurvedDarkLuxuryBanknote />
+                )}
+
                 <Icon className={cn(
                   "w-5 h-5 shrink-0 transition-transform duration-500", 
                   isActive ? "text-black scale-110" : "group-hover:text-brand-primary group-hover:scale-110"
@@ -3355,12 +3715,21 @@ export default function App() {
                     setIsMobileSidebarOpen(false);
                   }}
                   className={cn(
-                    "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all",
+                    "w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all relative overflow-hidden",
                     activeTab === item.id 
-                      ? "bg-brand-primary text-black font-black shadow-lg shadow-brand-primary/20" 
+                      ? "text-black font-black shadow-xl scale-[1.01]" 
                       : cn("text-slate-500", isDark ? "hover:bg-surface-800 hover:text-white" : "hover:bg-slate-100 hover:text-slate-900")
                   )}
+                  style={activeTab === item.id ? {
+                    background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
+                    border: '1px solid #FFD700',
+                    animation: 'luxuryGlow 2.5s ease-in-out infinite alternate',
+                    color: '#000000'
+                  } : undefined}
                 >
+                  {activeTab === item.id && (
+                    <CurvedDarkLuxuryBanknote />
+                  )}
                   <item.icon className="w-5 h-5" />
                   <span className="text-xs uppercase tracking-widest">{item.label}</span>
                 </button>
@@ -3815,85 +4184,112 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-10 mb-12">
+                {/* POSTER 1: VISÃO DE ATIVOS (GOLDEN MAJESTY) */}
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5 }}
                   className={cn(
-                    "p-8 sm:p-10 rounded-[40px] sm:rounded-[48px] border transition-all relative overflow-hidden group", 
-                    isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/40"
+                    "p-8 sm:p-10 rounded-[32px] border transition-all duration-300 relative overflow-hidden group cursor-pointer", 
+                    isDark ? "bg-[#0d0e12] border-slate-800 hover:border-[#D4AF37]/50" : "bg-white border-slate-200/80 shadow-md shadow-slate-100/40 hover:border-[#D4AF37]/50"
                   )}
+                  whileHover={{ y: -4 }}
                 >
-                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/5 rounded-full blur-3xl group-hover:bg-brand-primary/10 transition-colors" />
-                  <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-slate-500 mb-8 sm:mb-10 flex items-center gap-3 relative z-10">
-                    <span className="w-2.5 h-2.5 bg-brand-primary rounded-full shadow-[0_0_10px_var(--color-brand-primary)]" />
-                    Visão de Ativos
-                  </h3>
-                  <div className="space-y-8 sm:space-y-10 relative z-10">
-                    <div className="flex justify-between items-end pb-4 sm:pb-5 border-b border-white/[0.03]">
+                  {/* Subtle Corner Accents */}
+                  <div className="absolute top-4 right-4 opacity-15 group-hover:opacity-30 transition-opacity">
+                    <RealisticCoin className="w-6 h-6" />
+                  </div>
+
+                  {/* Header Badge */}
+                  <div className="relative z-10 flex flex-col mb-6">
+                    <div className="text-[8px] font-black text-[#D4AF37] uppercase tracking-[0.4em] mb-1">REAL ASSETS & CAPITAL</div>
+                    <h3 className="text-[12px] sm:text-[13px] font-black uppercase tracking-[0.25em] text-slate-800 dark:text-[#FFF5C0] flex items-center gap-3">
+                      <span className="w-2 h-2 bg-[#D4AF37] rounded-full shadow-[0_0_8px_#D4AF37]" />
+                      Visão de Ativos
+                    </h3>
+                  </div>
+
+                  <div className="space-y-6 relative z-10">
+                    <div className="flex justify-between items-end pb-3 border-b border-slate-100 dark:border-slate-800/60">
                        <div className="flex flex-col">
-                         <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Base Ativa</span>
-                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
+                         <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Base Ativa</span>
+                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase">Clientes</span>
                        </div>
                        {loading ? (
                          <div className="h-8 w-12 bg-slate-500/15 rounded animate-pulse mt-1" />
                        ) : (
-                         <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
+                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-[#FFF5C0]" : "text-slate-900")}>{stats.totalClients}</span>
                        )}
                     </div>
-                    <div className="flex justify-between items-end pb-4 sm:pb-5 border-b border-white/[0.03]">
+                    <div className="flex justify-between items-end pb-3 border-b border-slate-100 dark:border-slate-800/60">
                        <div className="flex flex-col">
-                         <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Capilaridade</span>
-                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
+                         <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Capilaridade</span>
+                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase">Contratos</span>
                        </div>
                        {loading ? (
                          <div className="h-8 w-12 bg-slate-500/15 rounded animate-pulse mt-1" />
                        ) : (
-                         <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
+                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-[#FFF5C0]" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
                        )}
                     </div>
-                    <div className="flex justify-between items-end pb-1 text-right">
+                    <div className="flex justify-between items-end pb-1">
                        <div className="flex flex-col text-left">
-                         <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Score de Risco</span>
-                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
+                         <span className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Score de Risco</span>
+                         <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase">Inadimplência</span>
                        </div>
                        {loading ? (
                          <div className="h-7 w-16 bg-slate-500/15 rounded animate-pulse mt-1" />
                        ) : (
-                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter text-brand-danger")}>
+                         <span className="text-xl sm:text-2xl font-black tracking-tighter text-red-500">
                            {((loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago' || l.capital > 0).length || 1)) * 100).toFixed(1)}%
                          </span>
                        )}
                     </div>
                   </div>
+
+                  {/* Sparkline Graphic */}
+                  <AssetSparkline />
+
+                  {/* Aesthetic Footer Watermark */}
+                  <div className="absolute bottom-2 right-4 text-[7px] font-black tracking-[0.3em] text-slate-400/20 uppercase pointer-events-none">
+                    SECURE LEDGER
+                  </div>
                 </motion.div>
 
+                {/* POSTER 2: ALERTA DE ATRASOS (ROYAL CRIMSON) */}
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.1 }}
                   className={cn(
-                    "p-8 sm:p-10 rounded-[40px] sm:rounded-[48px] border transition-all relative overflow-hidden group", 
-                    isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/40"
+                    "p-8 sm:p-10 rounded-[32px] border transition-all duration-300 relative overflow-hidden group cursor-pointer", 
+                    isDark ? "bg-[#0d0e12] border-slate-800 hover:border-red-500/50" : "bg-white border-slate-200/80 shadow-md shadow-slate-100/40 hover:border-red-500/50"
                   )}
+                  whileHover={{ y: -4 }}
                 >
-                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-danger/5 rounded-full blur-3xl group-hover:bg-brand-danger/10 transition-colors" />
-                  <div className="absolute -top-4 -right-4 p-8 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
-                    <AlertTriangle className="w-24 h-24 text-brand-danger" />
+                  {/* Subtle Stamp Overlay */}
+                  <div className="absolute top-4 right-4 opacity-15 group-hover:opacity-30 transition-opacity">
+                    <AlertTriangle className="w-6 h-6 text-red-500" />
                   </div>
-                  <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-brand-danger mb-8 sm:mb-10 flex items-center gap-3 relative z-10">
-                    <span className="w-2.5 h-2.5 bg-brand-danger rounded-full animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.5)]" />
-                    Alerta de Atrasos
-                  </h3>
-                  <div className="space-y-4 sm:space-y-5 relative z-10">
+
+                  {/* Header Badge */}
+                  <div className="relative z-10 flex flex-col mb-6">
+                    <div className="text-[8px] font-black text-red-500 uppercase tracking-[0.4em] mb-1">CRITICAL RISK & AUDIT</div>
+                    <h3 className="text-[12px] sm:text-[13px] font-black uppercase tracking-[0.25em] text-red-600 dark:text-red-400 flex items-center gap-3">
+                      <span className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_8px_#EF4444]" />
+                      Alerta de Atrasos
+                    </h3>
+                  </div>
+
+                  <div className="space-y-3 relative z-10 max-h-[190px] overflow-y-auto no-scrollbar pr-1">
                     {loading ? (
                       Array.from({ length: 3 }).map((_, i) => (
-                        <div key={`overdue-ske-${i}`} className="flex justify-between items-center p-4 sm:p-5 rounded-2xl bg-slate-500/5 animate-pulse">
-                          <div className="space-y-2 w-1/2">
-                            <div className="h-4 bg-slate-500/10 rounded w-3/4" />
-                            <div className="h-3 bg-slate-500/10 rounded w-1/2" />
+                        <div key={`overdue-ske-${i}`} className="flex justify-between items-center p-3 rounded-xl bg-slate-500/5 animate-pulse">
+                          <div className="space-y-1.5 w-1/2">
+                            <div className="h-3.5 bg-slate-500/10 rounded w-3/4" />
+                            <div className="h-2.5 bg-slate-500/10 rounded w-1/2" />
                           </div>
-                          <div className="h-5 bg-slate-500/10 rounded w-1/4" />
+                          <div className="h-4.5 bg-slate-500/10 rounded w-1/4" />
                         </div>
                       ))
                     ) : (
@@ -3901,57 +4297,76 @@ export default function App() {
                         {loans
                           .filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l))
                           .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                          .slice(0, 4)
+                          .slice(0, 3)
                           .map(loan => (
                             <div key={`overdue-dash-${loan.id}`} className={cn(
-                              "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
-                              isDark ? "" : "hover:bg-slate-50"
+                              "flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/40 hover:bg-red-500/[0.03] transition-all",
+                              isDark ? "bg-red-500/[0.01]" : "bg-red-50/20"
                             )}>
                               <div className="flex flex-col">
-                                <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                                <span className="text-[9px] sm:text-[10px] text-brand-danger font-black uppercase tracking-widest mt-1.5 line-clamp-1">
-                                  EXPIRADO {Math.abs(getDaysDiff(loan.dueDate))} DIAS
+                                <span className={cn("text-xs font-bold uppercase tracking-tight", isDark ? "text-slate-200" : "text-slate-800")}>{loan.clientName}</span>
+                                <span className="text-[9px] text-red-500 font-bold tracking-wider mt-1">
+                                  ATRASO {Math.abs(getDaysDiff(loan.dueDate))} DIAS
                                 </span>
                               </div>
-                              <span className="text-sm sm:text-base font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                              <span className="text-xs sm:text-sm font-bold text-red-500 font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                             </div>
                           ))}
                         {loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length === 0 && (
-                          <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
-                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-emerald-500/10 flex items-center justify-center">
-                               <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-500" />
+                          <div className="flex flex-col items-center justify-center py-6 gap-3 text-center opacity-70">
+                             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/15">
+                               <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                              </div>
-                             <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-emerald-500 max-w-[200px]">Portfólio em Conformidade</p>
+                             <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-500">Portfólio em Conformidade</p>
                           </div>
                         )}
                       </>
                     )}
                   </div>
+
+                  {/* Sparkline graphic inside */}
+                  <OverdueSparkline />
+
+                  {/* Aesthetic Footer Watermark */}
+                  <div className="absolute bottom-2 right-4 text-[7px] font-black tracking-[0.3em] text-slate-400/20 uppercase pointer-events-none">
+                    OVERDUE MONITOR
+                  </div>
                 </motion.div>
 
+                {/* POSTER 3: PRÓXIMAS LIQUIDAÇÕES (EMERALD JADE) */}
                 <motion.div 
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5, delay: 0.2 }}
                   className={cn(
-                    "p-8 sm:p-10 rounded-[40px] sm:rounded-[48px] border transition-all relative overflow-hidden group", 
-                    isDark ? "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]" : "bg-white border-slate-100 shadow-xl shadow-slate-200/40"
+                    "p-8 sm:p-10 rounded-[32px] border transition-all duration-300 relative overflow-hidden group cursor-pointer", 
+                    isDark ? "bg-[#0d0e12] border-slate-800 hover:border-emerald-500/50" : "bg-white border-slate-200/80 shadow-md shadow-slate-100/40 hover:border-emerald-500/50"
                   )}
+                  whileHover={{ y: -4 }}
                 >
-                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors" />
-                  <h3 className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.3em] sm:tracking-[0.4em] text-amber-500 mb-8 sm:mb-10 flex items-center gap-3 relative z-10">
-                    <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.4)]" />
-                    Próximas Liquidações
-                  </h3>
-                  <div className="space-y-4 sm:space-y-5 relative z-10">
+                  {/* Subtle Stamp Overlay */}
+                  <div className="absolute top-4 right-4 opacity-15 group-hover:opacity-30 transition-opacity">
+                    <Calendar className="w-6 h-6 text-emerald-500" />
+                  </div>
+
+                  {/* Header Badge */}
+                  <div className="relative z-10 flex flex-col mb-6">
+                    <div className="text-[8px] font-black text-emerald-500 uppercase tracking-[0.4em] mb-1">LIQUIDITY & MATURITY</div>
+                    <h3 className="text-[12px] sm:text-[13px] font-black uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400 flex items-center gap-3">
+                      <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_#10B981]" />
+                      Próximas Liquidações
+                    </h3>
+                  </div>
+
+                  <div className="space-y-3 relative z-10 max-h-[190px] overflow-y-auto no-scrollbar pr-1">
                     {loading ? (
                       Array.from({ length: 3 }).map((_, i) => (
-                        <div key={`upcoming-ske-${i}`} className="flex justify-between items-center p-4 sm:p-5 rounded-2xl bg-slate-500/5 animate-pulse">
-                          <div className="space-y-2 w-1/2">
-                            <div className="h-4 bg-slate-500/10 rounded w-3/4" />
-                            <div className="h-3 bg-slate-500/10 rounded w-1/2" />
+                        <div key={`upcoming-ske-${i}`} className="flex justify-between items-center p-3 rounded-xl bg-slate-500/5 animate-pulse">
+                          <div className="space-y-1.5 w-1/2">
+                            <div className="h-3.5 bg-slate-500/10 rounded w-3/4" />
+                            <div className="h-2.5 bg-slate-500/10 rounded w-1/2" />
                           </div>
-                          <div className="h-5 bg-slate-500/10 rounded w-1/4" />
+                          <div className="h-4.5 bg-slate-500/10 rounded w-1/4" />
                         </div>
                       ))
                     ) : (
@@ -3959,29 +4374,39 @@ export default function App() {
                         {loans
                           .filter(l => l.status === 'Pendente' && !isOverdue(l))
                           .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                          .slice(0, 4)
+                          .slice(0, 3)
                           .map(loan => (
                             <div key={`upcoming-dash-${loan.id}`} className={cn(
-                              "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
-                              isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
+                              "flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/40 hover:bg-emerald-500/[0.03] transition-all",
+                              isDark ? "bg-emerald-500/[0.01]" : "bg-emerald-50/20"
                             )}>
                               <div className="flex flex-col">
-                                <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                                <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">VENCE {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                                <span className={cn("text-xs font-bold uppercase tracking-tight", isDark ? "text-slate-200" : "text-slate-800")}>{loan.clientName}</span>
+                                <span className="text-[9px] text-slate-400 font-bold tracking-wider mt-1">
+                                  VENCE {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
+                                </span>
                               </div>
-                              <span className={cn("text-sm sm:text-base font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                              <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-emerald-400 font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                             </div>
                           ))}
                         {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
-                          <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
-                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-white/5 flex items-center justify-center">
-                               <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-slate-500" />
+                          <div className="flex flex-col items-center justify-center py-6 gap-3 text-center opacity-70">
+                             <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200/50 dark:border-white/10">
+                               <Calendar className="w-5 h-5 text-slate-500" />
                              </div>
-                             <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos Imediatos</p>
+                             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Sem Vencimentos Imediatos</p>
                           </div>
                         )}
                       </>
                     )}
+                  </div>
+
+                  {/* Sparkline/Bar Graphic */}
+                  <LiquidationBars />
+
+                  {/* Aesthetic Footer Watermark */}
+                  <div className="absolute bottom-2 right-4 text-[7px] font-black tracking-[0.3em] text-slate-400/20 uppercase pointer-events-none">
+                    LIQUIDITY STATUS
                   </div>
                 </motion.div>
               </div>
@@ -7787,7 +8212,209 @@ export default function App() {
         </div>
       )}
 
+      {shareModalData && shareModalData.isOpen && (
+        <div className="fixed inset-0 z-[150] flex justify-center items-center p-4 sm:p-6 bg-black/95 overflow-y-auto">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={cn(
+              "w-full max-w-lg rounded-[32px] overflow-hidden shadow-2xl border my-auto relative",
+              isDark ? "bg-[#0c0c0c] border-white/10" : "bg-white border-slate-200"
+            )}
+          >
+            {/* Header */}
+            <div className="p-6 sm:p-8 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-brand-primary/10 flex items-center justify-center border border-brand-primary/20">
+                  <Share2 className="w-5 h-5 text-brand-primary" />
+                </div>
+                <div className="text-left">
+                  <h3 className={cn("text-base font-black uppercase tracking-wider leading-none", isDark ? "text-white" : "text-slate-900")}>
+                    {shareModalData.title || "Compartilhar"}
+                  </h3>
+                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-1 leading-none">Opções Disponíveis</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShareModalData(null)}
+                className="p-2 rounded-xl hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
+            {/* Thumbnail Preview of Captured Document */}
+            {shareModalData.imgDataUrl && (
+              <div className="p-4 bg-slate-50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5 flex flex-col items-center">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-3">Prévia do Documento Gerado</p>
+                <div className="relative group max-w-[200px] rounded-2xl overflow-hidden shadow-md border border-slate-200 dark:border-white/10 bg-white">
+                  <img 
+                    src={shareModalData.imgDataUrl} 
+                    alt="Document preview" 
+                    className="max-h-36 object-contain"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Content Options */}
+            <div className="p-6 sm:p-8 space-y-4">
+              
+              {/* WhatsApp Option */}
+              <button
+                onClick={() => {
+                  const url = `https://api.whatsapp.com/send?text=${shareModalData.whatsappText}`;
+                  window.open(url, '_blank');
+                }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all active:scale-[0.98] text-left group"
+              >
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30 group-hover:scale-110 transition-transform shrink-0">
+                  <MessageCircle className="w-6 h-6 text-emerald-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black uppercase tracking-wider text-emerald-400 group-hover:text-emerald-300 transition-colors">Enviar por WhatsApp</p>
+                  <p className="text-[10px] text-slate-400">Mensagem estruturada profissional</p>
+                </div>
+              </button>
+
+              {/* Copy Text Option */}
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(shareModalData.detailsText);
+                  setCopiedShareText(true);
+                  setTimeout(() => setCopiedShareText(false), 2000);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] text-left group",
+                  isDark ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                )}
+              >
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:scale-110 transition-transform shrink-0">
+                  {copiedShareText ? (
+                    <Check className="w-6 h-6 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-6 h-6 text-indigo-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black uppercase tracking-wider text-indigo-400 group-hover:text-indigo-300 transition-colors">
+                    {copiedShareText ? "Copiado!" : "Copiar Texto do Comprovante"}
+                  </p>
+                  <p className="text-[10px] text-slate-400">Salvar dados organizados na área de transferência</p>
+                </div>
+              </button>
+
+              {/* Download PNG Option */}
+              {shareModalData.imgDataUrl && (
+                <button
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.download = shareModalData.fileName;
+                    link.href = shareModalData.imgDataUrl || '';
+                    link.click();
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] text-left group",
+                    isDark ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                  )}
+                >
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
+                    <Download className="w-6 h-6 text-amber-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black uppercase tracking-wider text-amber-500 group-hover:text-amber-400 transition-colors">Baixar Imagem (PNG)</p>
+                    <p className="text-[10px] text-slate-400">Salvar comprovante como foto de alta qualidade</p>
+                  </div>
+                </button>
+              )}
+
+              {/* Download PDF Option */}
+              <button
+                onClick={async () => {
+                  let docElementId = 'printable-receipt';
+                  if (shareModalData.fileName.includes('contrato')) docElementId = 'printable-contract';
+                  else if (shareModalData.fileName.includes('agendamento')) docElementId = 'printable-schedule-receipt';
+                  else if (shareModalData.fileName.includes('relatorio')) docElementId = 'printable-report';
+
+                  setShareModalData(null);
+                  await shareAsPDF(true, 'pdf', docElementId);
+                }}
+                className={cn(
+                  "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] text-left group",
+                  isDark ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                )}
+              >
+                <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20 group-hover:scale-110 transition-transform shrink-0">
+                  <FileText className="w-6 h-6 text-red-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black uppercase tracking-wider text-red-400 group-hover:text-red-300 transition-colors">Baixar PDF Oficial</p>
+                  <p className="text-[10px] text-slate-400">Gerar documento em formato PDF estruturado</p>
+                </div>
+              </button>
+
+              {/* Native System Share Menu */}
+              {navigator.share && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const dataurl = shareModalData.imgDataUrl || '';
+                      const arr = dataurl.split(',');
+                      const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/png';
+                      const bstr = atob(arr[1]);
+                      let n = bstr.length;
+                      const u8arr = new Uint8Array(n);
+                      while(n--){
+                        u8arr[n] = bstr.charCodeAt(n);
+                      }
+                      const blob = new Blob([u8arr], {type:mime});
+                      const file = new File([blob], shareModalData.fileName, { type: mime });
+
+                      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                          files: [file],
+                          title: shareModalData.title,
+                          text: shareModalData.text
+                        });
+                      } else {
+                        await navigator.share({
+                          title: shareModalData.title,
+                          text: shareModalData.detailsText
+                        });
+                      }
+                    } catch (err) {
+                      console.warn('Native share failed inside modal, fallback completed:', err);
+                    }
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] text-left group border-dashed",
+                    isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/5" : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                  )}
+                >
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 group-hover:scale-110 transition-transform shrink-0">
+                    <Share2 className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black uppercase tracking-wider text-blue-400 group-hover:text-blue-300 transition-colors">Compartilhamento do Aparelho</p>
+                    <p className="text-[10px] text-slate-400">Usar o menu de compartilhamento padrão do sistema</p>
+                  </div>
+                </button>
+              )}
+
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 sm:p-8 bg-slate-50 dark:bg-white/[0.02] border-t border-slate-100 dark:border-white/5">
+              <button 
+                onClick={() => setShareModalData(null)}
+                className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-black uppercase tracking-widest text-xs rounded-2xl transition-all"
+              >
+                Voltar
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Hidden Shareable PIX Template */}
       {pendingPayment && (
@@ -7885,14 +8512,24 @@ export default function App() {
                 onClick={() => changeTab(item.id as typeof activeTab)}
                 className={cn(
                   "flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
-                  isActive ? "text-brand-primary" : "text-slate-500"
+                  isActive ? "text-[#D4AF37]" : "text-slate-500"
                 )}
               >
-                <div className={cn(
-                  "p-1.5 rounded-xl transition-colors",
-                  isActive ? "bg-brand-primary/10" : ""
-                )}>
-                  <Icon className={cn("w-5 h-5", isActive ? "text-brand-primary" : "text-slate-400")} />
+                <div 
+                  className={cn(
+                    "p-1.5 rounded-xl transition-colors relative overflow-hidden",
+                    isActive ? "shadow-md" : ""
+                  )}
+                  style={isActive ? {
+                    background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
+                    border: '1px solid #FFD700',
+                    boxShadow: '0 4px 12px rgba(212, 175, 55, 0.3)',
+                  } : undefined}
+                >
+                  {isActive && (
+                    <CurvedDarkLuxuryBanknote />
+                  )}
+                  <Icon className={cn("w-5 h-5", isActive ? "text-black scale-110" : "text-slate-400")} />
                 </div>
                 <span className={cn("text-[8px] font-black uppercase tracking-widest", isActive ? "opacity-100" : "opacity-50")}>
                   {item.label === 'Principal' ? 'Início' : 
@@ -7908,14 +8545,24 @@ export default function App() {
             onClick={() => changeTab('Configurações')}
             className={cn(
               "flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
-              activeTab === 'Configurações' ? "text-brand-primary" : "text-slate-500"
+              activeTab === 'Configurações' ? "text-[#D4AF37]" : "text-slate-500"
             )}
           >
-            <div className={cn(
-              "p-1.5 rounded-xl transition-colors",
-              activeTab === 'Configurações' ? "bg-brand-primary/10" : ""
-            )}>
-              <Settings className={cn("w-5 h-5", activeTab === 'Configurações' ? "text-brand-primary" : "text-slate-400")} />
+            <div 
+              className={cn(
+                "p-1.5 rounded-xl transition-colors relative overflow-hidden",
+                activeTab === 'Configurações' ? "shadow-md" : ""
+              )}
+              style={activeTab === 'Configurações' ? {
+                background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
+                border: '1px solid #FFD700',
+                boxShadow: '0 4px 12px rgba(212, 175, 55, 0.3)',
+              } : undefined}
+            >
+              {activeTab === 'Configurações' && (
+                <CurvedDarkLuxuryBanknote />
+              )}
+              <Settings className={cn("w-5 h-5", activeTab === 'Configurações' ? "text-black scale-110" : "text-slate-400")} />
             </div>
             <span className={cn("text-[8px] font-black uppercase tracking-widest", activeTab === 'Configurações' ? "opacity-100" : "opacity-50")}>
               Ajustes
