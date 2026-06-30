@@ -45,6 +45,7 @@ import {
   LayoutGrid,
   ShieldCheck,
   Target,
+  Headphones,
 } from 'lucide-react';
 import { 
   collection, 
@@ -76,6 +77,8 @@ import { jsPDF } from 'jspdf';
 import { QRCodeSVG } from 'qrcode.react';
 import { db, auth } from './firebase';
 import { cn } from './lib/utils';
+// @ts-expect-error - image import from assets without type declaration file
+import luxuryBg from './assets/images/luxury_login_background_1782841009798.jpg';
 
 // --- Constants ---
 const CRC16_POLY = 0x1021;
@@ -380,7 +383,7 @@ export default function App() {
     const saved = localStorage.getItem('nexus_privacy_mode');
     return saved === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Quitados' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações'>('Principal');
+  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Quitados' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações' | 'Suporte'>('Principal');
   const [activeReportTab, setActiveReportTab] = useState<'mensal' | 'fechamentos'>('mensal');
   const [previousTab, setPreviousTab] = useState<typeof activeTab>('Principal');
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -397,6 +400,7 @@ export default function App() {
       setShowOnlyOverdue(false);
       setShowOnlyCapital(false);
       setShowOnlyInterest(false);
+      setShowOnlyPayoff(false);
       setViewingClientLoans(null);
       setPayingLoan(null);
       setEditingLoanId(null);
@@ -445,6 +449,24 @@ export default function App() {
   const [showOnlyOverdue, setShowOnlyOverdue] = useState(false);
   const [showOnlyCapital, setShowOnlyCapital] = useState(false);
   const [showOnlyInterest, setShowOnlyInterest] = useState(false);
+  const [showOnlyPayoff, setShowOnlyPayoff] = useState(false);
+
+  const handleToggleCapital = () => {
+    setShowOnlyCapital(!showOnlyCapital);
+    setShowOnlyInterest(false);
+    setShowOnlyPayoff(false);
+  };
+  const handleToggleInterest = () => {
+    setShowOnlyInterest(!showOnlyInterest);
+    setShowOnlyCapital(false);
+    setShowOnlyPayoff(false);
+  };
+  const handleTogglePayoff = () => {
+    setShowOnlyPayoff(!showOnlyPayoff);
+    setShowOnlyCapital(false);
+    setShowOnlyInterest(false);
+  };
+
   const [filterDate, setFilterDate] = useState('');
   const [userProfile, setUserProfile] = useState<{ 
     displayName?: string, 
@@ -2540,13 +2562,29 @@ export default function App() {
   const filteredTransactions = useMemo(() => {
     let result = filteredActions.filter(a => a.type === 'payment_received');
     if (showOnlyCapital) {
-      result = result.filter(a => (a.capitalAmount !== undefined && a.capitalAmount > 0) || a.description.toLowerCase().includes('capital') || a.description.toLowerCase().includes('amortização') || a.description.toLowerCase().includes('quitação'));
+      result = result.filter(a => {
+        const desc = a.description.toLowerCase();
+        const isPayoff = desc.includes('quitação') || desc.includes('quitado');
+        if (isPayoff) return false;
+        return (a.capitalAmount !== undefined && a.capitalAmount > 0) || desc.includes('capital') || desc.includes('amortização');
+      });
     }
     if (showOnlyInterest) {
-      result = result.filter(a => (a.interestAmount !== undefined && a.interestAmount > 0) || a.description.toLowerCase().includes('juros'));
+      result = result.filter(a => {
+        const desc = a.description.toLowerCase();
+        const isPayoff = desc.includes('quitação') || desc.includes('quitado');
+        if (isPayoff) return false;
+        return (a.interestAmount !== undefined && a.interestAmount > 0) || desc.includes('juros');
+      });
+    }
+    if (showOnlyPayoff) {
+      result = result.filter(a => {
+        const desc = a.description.toLowerCase();
+        return desc.includes('quitação') || desc.includes('quitado');
+      });
     }
     return result;
-  }, [filteredActions, showOnlyCapital, showOnlyInterest]);
+  }, [filteredActions, showOnlyCapital, showOnlyInterest, showOnlyPayoff]);
 
   const stats = useMemo(() => {
     const activeLoans = loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado');
@@ -2944,44 +2982,22 @@ export default function App() {
   );
 
   if (!user) {
-    const splashIsDark = theme === 'dark';
-    
     return (
-      <div className={cn(
-        "relative flex min-h-screen overflow-hidden transition-colors duration-700",
-        splashIsDark ? "bg-black" : "bg-slate-50"
-      )}>
-        {/* Background Glows (Universal) */}
-        <motion.div 
-          animate={{ 
-            scale: [1, 1.1, 1],
-            opacity: [0.2, 0.3, 0.2],
-          }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className={cn(
-            "absolute top-[-10%] left-[-10%] w-[80%] h-[80%] blur-[120px] rounded-full pointer-events-none",
-            splashIsDark ? "bg-brand-primary/20" : "bg-brand-primary/30"
-          )} 
-        />
-        <motion.div 
-          animate={{ 
-            scale: [1.1, 1, 1.1],
-            opacity: [0.1, 0.2, 0.1],
-          }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-          className={cn(
-            "absolute bottom-[-10%] right-[-10%] w-[80%] h-[80%] blur-[120px] rounded-full pointer-events-none",
-            splashIsDark ? "bg-indigo-600/10" : "bg-indigo-600/20"
-          )} 
-        />
+      <div 
+        className="relative flex min-h-screen overflow-hidden transition-all duration-700 bg-[#04040a]"
+        style={{
+          backgroundImage: `linear-gradient(to right, rgba(2, 2, 8, 0.45) 0%, rgba(2, 2, 8, 0.85) 100%), url(${luxuryBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      >
+        {/* Subtle Star Sparkles overlay */}
+        <div className="absolute inset-0 bg-black/10 pointer-events-none mix-blend-overlay" />
 
         {/* Left Side: Branding & Visuals (Desktop Only) */}
         <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-16 overflow-hidden">
-          {/* Desktop-specific extra layer of gradients */}
-          <div className={cn(
-            "absolute inset-0 opacity-10",
-            splashIsDark ? "bg-[radial-gradient(circle_at_center,_var(--color-brand-primary)_0%,_transparent_70%)]" : ""
-          )} />
+          {/* Subtle gold-tinted glow behind the text */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(212,175,55,0.08)_0%,_transparent_60%)]" />
           
           <div className="relative z-10">
             <motion.div 
@@ -2990,14 +3006,14 @@ export default function App() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               className="flex items-center gap-4"
             >
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-primary to-indigo-600 flex items-center justify-center shadow-2xl shadow-brand-primary/20 p-2.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-amber-700 flex items-center justify-center shadow-2xl shadow-[#D4AF37]/20 p-2.5">
                 <div className="w-full h-full border-2 border-white/20 rounded-lg flex items-center justify-center">
                   <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
                 </div>
               </div>
               <div>
-                <h1 className={cn("text-2xl font-black tracking-tighter uppercase leading-none", splashIsDark ? "text-white" : "text-slate-900")}>Nexus Private</h1>
-                <p className="text-[10px] font-black text-brand-primary uppercase tracking-[0.4em] mt-1">Crédito e Gestão</p>
+                <h1 className="text-2xl font-black tracking-tighter uppercase leading-none text-white">Nexus Private</h1>
+                <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.4em] mt-1">Crédito e Gestão</p>
               </div>
             </motion.div>
           </div>
@@ -3007,11 +3023,25 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className={cn("text-5xl font-black tracking-tighter leading-[0.95] mb-8", splashIsDark ? "text-white" : "text-slate-900")}
+              className="text-5xl font-black tracking-tighter leading-[1.05] mb-6 text-white"
             >
               A Nova Era do <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-primary to-indigo-500">Capital Privado</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] via-[#f3e5ab] to-[#AA7C11] filter drop-shadow-[0_2px_10px_rgba(212,175,55,0.3)]">Capital Privado</span>
             </motion.h2>
+
+            {/* Custom Slogan Phrase: "Sem dinheiro, sem graça" */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1, delay: 0.4 }}
+              className="mb-8 border-l-4 border-[#D4AF37] pl-5 py-2.5 bg-black/30 backdrop-blur-sm rounded-r-2xl"
+            >
+              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#D4AF37]">Mantra de Poder</p>
+              <p className="text-2xl font-black italic text-slate-100 tracking-tight mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                "Sem dinheiro, sem graça."
+              </p>
+            </motion.div>
+
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -3019,14 +3049,14 @@ export default function App() {
               className="grid grid-cols-2 gap-8"
             >
               <div>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Segurança</p>
-                <p className={cn("text-xs font-medium leading-relaxed", splashIsDark ? "text-slate-400" : "text-slate-600")}>
+                <p className="text-[10px] font-black text-[#D4AF37]/80 uppercase tracking-widest mb-2">Segurança</p>
+                <p className="text-xs font-medium leading-relaxed text-slate-300">
                   Infraestrutura baseada em nuvem com criptografia de ponta a ponta.
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Performance</p>
-                <p className={cn("text-xs font-medium leading-relaxed", splashIsDark ? "text-slate-400" : "text-slate-600")}>
+                <p className="text-[10px] font-black text-[#D4AF37]/80 uppercase tracking-widest mb-2">Performance</p>
+                <p className="text-xs font-medium leading-relaxed text-slate-300">
                   Algoritmos inteligentes para gestão de liquidez instantânea.
                 </p>
               </div>
@@ -3039,7 +3069,7 @@ export default function App() {
             transition={{ duration: 1, delay: 0.5 }}
             className="relative z-10 border-t border-white/5 pt-8"
           >
-            <p className="text-[9px] font-black text-slate-600 uppercase tracking-widest">
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
               © {new Date().getFullYear()} Nexus Asset Management • v2.4.0-PRO
             </p>
           </motion.div>
@@ -3051,31 +3081,35 @@ export default function App() {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            className={cn(
-              "w-full max-w-[440px] glass-card p-8 sm:p-14 relative z-10 rounded-[32px] sm:rounded-[48px]",
-              !splashIsDark && "bg-white/80 border-slate-200 shadow-2xl"
-            )}
+            className="w-full max-w-[440px] p-8 sm:p-14 relative z-10 rounded-[32px] sm:rounded-[48px] bg-black/45 backdrop-blur-2xl border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
           >
             {/* Mobile Header Branding */}
-            <div className="lg:hidden flex flex-col items-center mb-10">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-primary to-indigo-600 p-3.5 shadow-2xl shadow-brand-primary/30 flex items-center justify-center mb-4">
-                <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
+            <div className="lg:hidden flex flex-col items-center mb-8 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#8a660a] p-3 shadow-2xl shadow-[#D4AF37]/20 flex items-center justify-center mb-3">
+                <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
               </div>
-              <h3 className={cn("text-xl font-black tracking-tight", splashIsDark ? "text-white" : "text-slate-900")}>
+              <h3 className="text-lg font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 Nexus Private
               </h3>
-              <p className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] mt-1">
+              <p className="text-[9px] font-black text-[#D4AF37] uppercase tracking-[0.3em] mt-0.5">
                 Crédito e Gestão
               </p>
+              
+              {/* Slogan for mobile */}
+              <div className="mt-4 px-4 py-2 rounded-2xl bg-black/40 border border-[#D4AF37]/30 backdrop-blur-md">
+                <p className="text-[10px] font-extrabold italic text-[#f3e5ab] tracking-wider">
+                  "Sem dinheiro, sem graça"
+                </p>
+              </div>
             </div>
 
             {/* Desktop Header Text */}
-            <div className="hidden lg:block mb-10">
-              <h3 className={cn("text-2xl font-black tracking-tight mb-2", splashIsDark ? "text-white" : "text-slate-900")}>
-                Nexus Private
+            <div className="hidden lg:block mb-8">
+              <h3 className="text-2xl font-black tracking-tight mb-2 text-white">
+                Acessar Portal
               </h3>
-              <p className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em]">
-                Crédito e Gestão
+              <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.3em]">
+                Nexus Private Ledger
               </p>
             </div>
 
@@ -3094,46 +3128,30 @@ export default function App() {
 
             <form onSubmit={handleEmailLogin} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
                 <div className="relative group">
-                  <Mail className={cn(
-                    "absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors",
-                    splashIsDark ? "text-slate-600 group-focus-within:text-brand-primary" : "text-slate-400 group-focus-within:text-brand-primary"
-                  )} />
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
                   <input
                     type="email"
                     placeholder="email@nexusprivate.com"
                     value={email || ""}
                     onChange={(e) => setEmail(e.target.value)}
-                    className={cn(
-                      "w-full rounded-[20px] py-4 pl-12 pr-4 text-sm transition-all border outline-none",
-                      splashIsDark 
-                        ? "bg-white/[0.03] border-white/5 text-white placeholder:text-slate-600 focus:border-brand-primary/50 focus:bg-white/[0.06]" 
-                        : "bg-slate-100/50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-brand-primary/50 focus:bg-white"
-                    )}
+                    className="w-full rounded-[20px] py-4 pl-12 pr-4 text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Senha</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
                 <div className="relative group">
-                  <Lock className={cn(
-                    "absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors",
-                    splashIsDark ? "text-slate-600 group-focus-within:text-brand-primary" : "text-slate-400 group-focus-within:text-brand-primary"
-                  )} />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
                   <input
                     type="password"
                     placeholder="••••••••••••"
                     value={password || ""}
                     onChange={(e) => setPassword(e.target.value)}
-                    className={cn(
-                      "w-full rounded-[20px] py-4 pl-12 pr-4 text-sm transition-all border outline-none",
-                      splashIsDark 
-                        ? "bg-white/[0.03] border-white/5 text-white placeholder:text-slate-600 focus:border-brand-primary/50 focus:bg-white/[0.06]" 
-                        : "bg-slate-100/50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-brand-primary/50 focus:bg-white"
-                    )}
+                    className="w-full rounded-[20px] py-4 pl-12 pr-4 text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
                     required
                   />
                 </div>
@@ -3145,8 +3163,8 @@ export default function App() {
                   disabled={isSubmitting}
                   className="w-full relative group"
                 >
-                  <div className="absolute -inset-1 bg-gradient-to-r from-brand-primary to-indigo-600 rounded-[22px] blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200" />
-                  <div className="relative w-full bg-gradient-to-br from-brand-primary to-indigo-600 text-white font-black uppercase tracking-[0.2em] text-[11px] py-5 rounded-[20px] shadow-2xl hover:shadow-brand-primary/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
+                  <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[11px] py-5 rounded-[20px] shadow-2xl hover:shadow-[#D4AF37]/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
                     {isSubmitting ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
@@ -3165,13 +3183,13 @@ export default function App() {
   const menuItems = [
     { id: 'Principal', label: 'Principal', icon: BarChart3 },
     { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
-    { id: 'Quitados', label: 'Quitados', icon: CheckCircle2 },
     { id: 'Clientes', label: 'Clientes', icon: Users },
     { id: 'Transações', label: 'Transações', icon: Wallet },
     { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
     { id: 'Notificações', label: 'Alertas', icon: Bell },
     { id: 'Relatórios', label: 'Relatórios', icon: FileText },
     { id: 'Configurações', label: 'Configurações', icon: Settings },
+    { id: 'Suporte', label: 'Suporte', icon: Headphones },
   ];
 
   const handleSaveSystemSettings = async (settings: SystemSettings) => {
@@ -3205,15 +3223,11 @@ export default function App() {
             {userProfile?.profilePicture ? (
               <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
             ) : (
-              <img 
-                src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=64&h=64&fit=crop" 
-                className={cn(
-                  "w-10 h-10 rounded-xl object-cover transition-all",
-                  isDark ? "grayscale" : ""
-                )} 
-                alt="Nexus Logo"
-                referrerPolicy="no-referrer"
-              />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-700 flex items-center justify-center p-1.5 shadow-md shrink-0">
+                <div className="w-full h-full border border-white/20 rounded-md flex items-center justify-center">
+                  <span className="text-white font-black text-sm italic tracking-tighter">NP</span>
+                </div>
+              </div>
             )}
           </div>
           {!isSidebarCollapsed && (
@@ -3625,6 +3639,20 @@ export default function App() {
                     </button>
                   </div>
                 )}
+                {showOnlyPayoff && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg w-fit">
+                    <CheckCircle2 className="w-3 h-3 text-amber-500" />
+                    <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">
+                      Quitados
+                    </span>
+                    <button 
+                      onClick={() => setShowOnlyPayoff(false)}
+                      className="p-1 hover:bg-amber-500/20 rounded-md transition-colors"
+                    >
+                      <X className="w-2.5 h-2.5 text-amber-500" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
               
@@ -3711,6 +3739,7 @@ export default function App() {
                   color="primary"
                   trend="Ativo"
                   isDark={isDark}
+                  loading={loading}
                 />
                 <StatCard 
                   title="Capital Recebido" 
@@ -3719,10 +3748,12 @@ export default function App() {
                   color="success"
                   trend="Liquidado"
                   isDark={isDark}
+                  loading={loading}
                   onClick={() => {
                     changeTab('Transações');
                     setShowOnlyCapital(true);
                     setShowOnlyInterest(false);
+                    setShowOnlyPayoff(false);
                     setShowOnlyOverdue(false);
                     setFilterDate('');
                     setCommand('');
@@ -3735,10 +3766,12 @@ export default function App() {
                   color="primary"
                   trend="Lucro"
                   isDark={isDark}
+                  loading={loading}
                   onClick={() => {
                     changeTab('Transações');
                     setShowOnlyInterest(true);
                     setShowOnlyCapital(false);
+                    setShowOnlyPayoff(false);
                     setShowOnlyOverdue(false);
                     setFilterDate('');
                     setCommand('');
@@ -3754,6 +3787,7 @@ export default function App() {
                     trend="Risco"
                     isDark={isDark}
                     isMini
+                    loading={loading}
                     onClick={() => {
                       changeTab('Empréstimos');
                       setShowOnlyOverdue(true);
@@ -3769,6 +3803,7 @@ export default function App() {
                     trend="Alerta"
                     isDark={isDark}
                     isMini
+                    loading={loading}
                     onClick={() => {
                       changeTab('Empréstimos');
                       setFilterDate('TODAY');
@@ -3800,23 +3835,35 @@ export default function App() {
                          <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Base Ativa</span>
                          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Clientes Consolidados</span>
                        </div>
-                       <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
+                       {loading ? (
+                         <div className="h-8 w-12 bg-slate-500/15 rounded animate-pulse mt-1" />
+                       ) : (
+                         <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{stats.totalClients}</span>
+                       )}
                     </div>
                     <div className="flex justify-between items-end pb-4 sm:pb-5 border-b border-white/[0.03]">
                        <div className="flex flex-col">
                          <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Capilaridade</span>
                          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Contratos em Aberto</span>
                        </div>
-                       <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
+                       {loading ? (
+                         <div className="h-8 w-12 bg-slate-500/15 rounded animate-pulse mt-1" />
+                       ) : (
+                         <span className={cn("text-3xl sm:text-4xl font-black tracking-tighter", isDark ? "text-white" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
+                       )}
                     </div>
                     <div className="flex justify-between items-end pb-1 text-right">
                        <div className="flex flex-col text-left">
                          <span className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Score de Risco</span>
                          <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase">Taxa de Inadimplência</span>
                        </div>
-                       <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter text-brand-danger")}>
-                         {((loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago' || l.capital > 0).length || 1)) * 100).toFixed(1)}%
-                       </span>
+                       {loading ? (
+                         <div className="h-7 w-16 bg-slate-500/15 rounded animate-pulse mt-1" />
+                       ) : (
+                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter text-brand-danger")}>
+                           {((loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length / (loans.filter(l => l.status !== 'Pago' || l.capital > 0).length || 1)) * 100).toFixed(1)}%
+                         </span>
+                       )}
                     </div>
                   </div>
                 </motion.div>
@@ -3839,31 +3886,45 @@ export default function App() {
                     Alerta de Atrasos
                   </h3>
                   <div className="space-y-4 sm:space-y-5 relative z-10">
-                    {loans
-                      .filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l))
-                      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                      .slice(0, 4)
-                      .map(loan => (
-                        <div key={`overdue-dash-${loan.id}`} className={cn(
-                          "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
-                          isDark ? "" : "hover:bg-slate-50"
-                        )}>
-                          <div className="flex flex-col">
-                            <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                            <span className="text-[9px] sm:text-[10px] text-brand-danger font-black uppercase tracking-widest mt-1.5 line-clamp-1">
-                              EXPIRADO {Math.abs(getDaysDiff(loan.dueDate))} DIAS
-                            </span>
+                    {loading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <div key={`overdue-ske-${i}`} className="flex justify-between items-center p-4 sm:p-5 rounded-2xl bg-slate-500/5 animate-pulse">
+                          <div className="space-y-2 w-1/2">
+                            <div className="h-4 bg-slate-500/10 rounded w-3/4" />
+                            <div className="h-3 bg-slate-500/10 rounded w-1/2" />
                           </div>
-                          <span className="text-sm sm:text-base font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                          <div className="h-5 bg-slate-500/10 rounded w-1/4" />
                         </div>
-                      ))}
-                    {loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
-                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-emerald-500/10 flex items-center justify-center">
-                           <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-500" />
-                         </div>
-                         <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-emerald-500 max-w-[200px]">Portfólio em Conformidade</p>
-                      </div>
+                      ))
+                    ) : (
+                      <>
+                        {loans
+                          .filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l))
+                          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                          .slice(0, 4)
+                          .map(loan => (
+                            <div key={`overdue-dash-${loan.id}`} className={cn(
+                              "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-danger/20 hover:bg-brand-danger/[0.02] group/item",
+                              isDark ? "" : "hover:bg-slate-50"
+                            )}>
+                              <div className="flex flex-col">
+                                <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                                <span className="text-[9px] sm:text-[10px] text-brand-danger font-black uppercase tracking-widest mt-1.5 line-clamp-1">
+                                  EXPIRADO {Math.abs(getDaysDiff(loan.dueDate))} DIAS
+                                </span>
+                              </div>
+                              <span className="text-sm sm:text-base font-black text-brand-danger font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                            </div>
+                          ))}
+                        {loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && isOverdue(l)).length === 0 && (
+                          <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
+                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-emerald-500/10 flex items-center justify-center">
+                               <CheckCircle2 className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-500" />
+                             </div>
+                             <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-emerald-500 max-w-[200px]">Portfólio em Conformidade</p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>
@@ -3883,29 +3944,43 @@ export default function App() {
                     Próximas Liquidações
                   </h3>
                   <div className="space-y-4 sm:space-y-5 relative z-10">
-                    {loans
-                      .filter(l => l.status === 'Pendente' && !isOverdue(l))
-                      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-                      .slice(0, 4)
-                      .map(loan => (
-                        <div key={`upcoming-dash-${loan.id}`} className={cn(
-                          "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
-                          isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
-                        )}>
-                          <div className="flex flex-col">
-                            <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
-                            <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">VENCE {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                    {loading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <div key={`upcoming-ske-${i}`} className="flex justify-between items-center p-4 sm:p-5 rounded-2xl bg-slate-500/5 animate-pulse">
+                          <div className="space-y-2 w-1/2">
+                            <div className="h-4 bg-slate-500/10 rounded w-3/4" />
+                            <div className="h-3 bg-slate-500/10 rounded w-1/2" />
                           </div>
-                          <span className={cn("text-sm sm:text-base font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                          <div className="h-5 bg-slate-500/10 rounded w-1/4" />
                         </div>
-                      ))}
-                    {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
-                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-white/5 flex items-center justify-center">
-                           <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-slate-500" />
-                         </div>
-                         <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos Imediatos</p>
-                      </div>
+                      ))
+                    ) : (
+                      <>
+                        {loans
+                          .filter(l => l.status === 'Pendente' && !isOverdue(l))
+                          .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                          .slice(0, 4)
+                          .map(loan => (
+                            <div key={`upcoming-dash-${loan.id}`} className={cn(
+                              "flex items-center justify-between p-4 sm:p-5 rounded-2xl transition-all border border-transparent hover:border-brand-primary/20",
+                              isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-50"
+                            )}>
+                              <div className="flex flex-col">
+                                <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{loan.clientName}</span>
+                                <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">VENCE {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
+                              </div>
+                              <span className={cn("text-sm sm:text-base font-black font-mono", isDark ? "text-white" : "text-slate-900")}>R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
+                            </div>
+                          ))}
+                        {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
+                          <div className="flex flex-col items-center justify-center py-12 sm:py-16 gap-5 text-center opacity-40">
+                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl sm:rounded-[24px] bg-white/5 flex items-center justify-center">
+                               <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-slate-500" />
+                             </div>
+                             <p className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] text-slate-500">Sem Vencimentos Imediatos</p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 </motion.div>
@@ -3924,26 +3999,41 @@ export default function App() {
                       <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest hidden sm:block">Últimas Operações</span>
                   </div>
                   <div className="space-y-2 relative z-10">
-                      {actions.slice(0, 6).map((action) => (
-                        <div key={action.id} className={cn(
-                          "flex items-center justify-between p-4 rounded-2xl transition-all group/item border border-transparent",
-                          isDark ? "hover:bg-white/[0.02] hover:border-white/[0.03]" : "hover:bg-slate-50 hover:border-slate-100"
-                        )}>
-                          <div className="flex items-center gap-4">
-                            <div className="flex flex-col">
-                              <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{action.clientName}</span>
-                              <span className={cn("text-[10px] font-bold uppercase tracking-tight mt-1", isDark ? "text-slate-500" : "text-slate-400")}>{action.description}</span>
+                      {loading ? (
+                        Array.from({ length: 4 }).map((_, i) => (
+                          <div key={`timeline-ske-${i}`} className="flex justify-between items-center p-4 rounded-2xl bg-slate-500/5 animate-pulse">
+                            <div className="space-y-2 w-1/2">
+                              <div className="h-4 bg-slate-500/10 rounded w-2/3" />
+                              <div className="h-3 bg-slate-500/10 rounded w-1/3" />
+                            </div>
+                            <div className="space-y-1 w-1/6 flex flex-col items-end">
+                              <div className="h-3 bg-slate-500/10 rounded w-full" />
+                              <div className="h-2 bg-slate-500/10 rounded w-1/2" />
                             </div>
                           </div>
-                          <div className="text-right">
-                            <span className="text-[10px] font-black text-slate-400 block mb-1 font-mono uppercase tracking-tighter">{safeFormatDate(action.date, 'dd/MM HH:mm')}</span>
-                            <div className="flex items-center justify-end gap-1 opacity-20">
-                              <div className="w-1 h-1 rounded-full bg-slate-500" />
-                              <div className="w-1 h-1 rounded-full bg-slate-500" />
+                        ))
+                      ) : (
+                        actions.slice(0, 6).map((action) => (
+                          <div key={action.id} className={cn(
+                            "flex items-center justify-between p-4 rounded-2xl transition-all group/item border border-transparent",
+                            isDark ? "hover:bg-white/[0.02] hover:border-white/[0.03]" : "hover:bg-slate-50 hover:border-slate-100"
+                          )}>
+                            <div className="flex items-center gap-4">
+                              <div className="flex flex-col">
+                                <span className={cn("text-sm font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>{action.clientName}</span>
+                                <span className={cn("text-[10px] font-bold uppercase tracking-tight mt-1", isDark ? "text-slate-500" : "text-slate-400")}>{action.description}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[10px] font-black text-slate-400 block mb-1 font-mono uppercase tracking-tighter">{safeFormatDate(action.date, 'dd/MM HH:mm')}</span>
+                              <div className="flex items-center justify-end gap-1 opacity-20">
+                                <div className="w-1 h-1 rounded-full bg-slate-500" />
+                                <div className="w-1 h-1 rounded-full bg-slate-500" />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                   </div>
               </div>
               </motion.div>
@@ -4272,7 +4362,16 @@ export default function App() {
                                 </h3>
                                 <div className="flex items-center gap-3">
                                   <button 
-                                    onClick={() => setShowOnlyCapital(!showOnlyCapital)}
+                                    onClick={handleToggleInterest}
+                                    className={cn(
+                                      "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                                      showOnlyInterest ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500 hover:text-white"
+                                    )}
+                                  >
+                                    Juros
+                                  </button>
+                                  <button 
+                                    onClick={handleToggleCapital}
                                     className={cn(
                                       "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
                                       showOnlyCapital ? "bg-brand-primary text-black" : "bg-white/5 text-slate-500 hover:text-white"
@@ -4281,13 +4380,13 @@ export default function App() {
                                     Amortizações
                                   </button>
                                   <button 
-                                    onClick={() => setShowOnlyInterest(!showOnlyInterest)}
+                                    onClick={handleTogglePayoff}
                                     className={cn(
                                       "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
-                                      showOnlyInterest ? "bg-emerald-500 text-white" : "bg-white/5 text-slate-500 hover:text-white"
+                                      showOnlyPayoff ? "bg-amber-500 text-white" : "bg-white/5 text-slate-500 hover:text-white"
                                     )}
                                   >
-                                    Juros
+                                    Quitados
                                   </button>
                                 </div>
                               </div>
@@ -4306,14 +4405,25 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-white/[0.05]">
                         {loading ? (
-                          <tr>
-                            <td colSpan={5} className="px-8 py-20 text-center">
-                              <div className="flex flex-col items-center gap-3">
-                                <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                                <span className="text-slate-500 font-medium">Sincronizando transações...</span>
-                              </div>
-                            </td>
-                          </tr>
+                          Array.from({ length: 5 }).map((_, rowIndex) => (
+                            <tr key={`trans-ske-${rowIndex}`} className="animate-pulse">
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-2/3" />
+                              </td>
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-3/4" />
+                              </td>
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-1/2" />
+                              </td>
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-1/3" />
+                              </td>
+                              <td className="px-8 py-5 text-right">
+                                <div className="h-8 bg-slate-500/10 rounded w-24 ml-auto" />
+                              </td>
+                            </tr>
+                          ))
                         ) : filteredTransactions.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="px-8 py-20 text-center">
@@ -4383,12 +4493,19 @@ export default function App() {
                   {/* Mobile Cards */}
                   <div className="lg:hidden grid grid-cols-1 gap-4">
                     {loading ? (
-                      <div className="py-20 text-center glass-card">
-                         <div className="flex flex-col items-center gap-3">
-                            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                            <span className="text-slate-500 font-medium">Sincronizando...</span>
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <div key={`trans-ske-mob-${i}`} className="glass-card p-5 space-y-4 border border-white/5 animate-pulse">
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-2 w-1/2">
+                              <div className="h-3 bg-slate-500/10 rounded w-1/3" />
+                              <div className="h-4 bg-slate-500/10 rounded w-3/4" />
+                              <div className="h-3 bg-slate-500/10 rounded w-2/3" />
+                            </div>
+                            <div className="h-5 bg-slate-500/10 rounded w-1/4" />
                           </div>
-                      </div>
+                          <div className="h-8 bg-slate-500/10 rounded w-full" />
+                        </div>
+                      ))
                     ) : filteredTransactions.length === 0 ? (
                       <div className="py-20 text-center text-slate-500 font-medium glass-card">
                          {command.trim() ? 'Nenhuma transação encontrada.' : 'Nenhuma transação registrada.'}
@@ -5532,6 +5649,113 @@ export default function App() {
                     </motion.div>
                   )}
                 </motion.div>
+              ) : activeTab === 'Suporte' ? (
+                <motion.div 
+                  key="tab-suporte"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.3 }}
+                  className="max-w-xl mx-auto py-8 px-4 sm:px-6"
+                >
+                  <div className={cn(
+                    "p-8 sm:p-12 rounded-[40px] border transition-all relative overflow-hidden",
+                    isDark ? "bg-white/[0.02] border-white/5 shadow-2xl" : "bg-white border-slate-200 shadow-xl shadow-slate-200/50"
+                  )}>
+                    {/* Background gold glow */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-primary/5 rounded-full blur-[80px] pointer-events-none" />
+
+                    <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start">
+                      <div className="w-full md:w-2/5 flex flex-col items-center text-center p-6 rounded-3xl bg-black/20 border border-white/5">
+                        <div className="relative w-24 h-24 mb-4 rounded-full p-1 bg-gradient-to-tr from-brand-primary to-amber-500 shadow-xl">
+                          <div className={cn(
+                            "w-full h-full rounded-full flex items-center justify-center font-black text-2xl uppercase",
+                            isDark ? "bg-black text-white" : "bg-white text-slate-900"
+                          )}>
+                            RL
+                          </div>
+                          {/* Crown / Founder badge */}
+                          <div className="absolute -bottom-1 -right-1 bg-brand-primary text-black p-1.5 rounded-full shadow-lg border border-black">
+                            <ShieldCheck className="w-4 h-4" />
+                          </div>
+                        </div>
+
+                        <h3 className={cn("text-lg font-black uppercase tracking-tight", isDark ? "text-white" : "text-slate-900")}>
+                          Reyne Lucas
+                        </h3>
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-brand-primary mt-1">
+                          Criador do Sistema
+                        </span>
+                        
+                        <div className="mt-4 px-3 py-1 bg-brand-primary/10 rounded-full border border-brand-primary/20">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-brand-primary">Founder</span>
+                        </div>
+                      </div>
+
+                      <div className="w-full md:w-3/5 space-y-6">
+                        <div>
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Suporte do Sistema</h4>
+                          <p className={cn("text-xs font-bold leading-relaxed", isDark ? "text-slate-400" : "text-slate-600")}>
+                            "Todo sistema tem seu criador." Projetado para proporcionar o mais alto nível de performance, controle financeiro e inteligência de crédito, o ecossistema Nexus Private foi integralmente planejado e desenvolvido por Reyne Lucas.
+                          </p>
+                        </div>
+
+                        <div className="border-t border-white/5 pt-6 space-y-4">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Canais de Atendimento</h4>
+                          
+                          {/* E-mail Contact */}
+                          <div className={cn("flex items-center gap-4 p-4 rounded-2xl border", isDark ? "bg-white/[0.01] border-white/5" : "bg-slate-50 border-slate-100")}>
+                            <div className="p-3 rounded-xl bg-brand-primary/10 text-brand-primary">
+                              <Mail className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-[8px] font-black uppercase tracking-widest text-slate-500">E-mail Direto</p>
+                              <a href="mailto:reyneperdigao@gmail.com" className={cn("text-xs font-black hover:text-brand-primary transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                reyneperdigao@gmail.com
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* WhatsApp Contact */}
+                          <a 
+                            href="https://wa.me/5591993805974?text=Ol%C3%A1%20Reyne%20Lucas!%20Estou%20utilizando%20o%20sistema%20de%20gest%C3%A3o%20Nexus%20Private%20e%20gostaria%20de%20solicitar%20aux%C3%ADlio%20t%C3%A9cnico%20sobre%20o%20sistema."
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              "flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98] hover:border-brand-primary/30 group",
+                              isDark ? "bg-white/[0.01] border-white/5 hover:bg-white/[0.03]" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
+                            )}
+                          >
+                            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-500 group-hover:scale-110 transition-transform">
+                              <MessageCircle className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[8px] font-black uppercase tracking-widest text-slate-500">WhatsApp Suporte</p>
+                              <span className={cn("text-xs font-black group-hover:text-brand-primary transition-colors", isDark ? "text-white" : "text-slate-900")}>
+                                (91) 99380-5974
+                              </span>
+                            </div>
+                            <div className="text-[9px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+                              Online
+                            </div>
+                          </a>
+                        </div>
+
+                        <div className="pt-2">
+                          <a 
+                            href="https://wa.me/5591993805974?text=Ol%C3%A1%20Reyne%20Lucas!%20Estou%20utilizando%20o%20sistema%20de%20gest%C3%A3o%20Nexus%20Private%20e%20gostaria%20de%20solicitar%20aux%C3%ADlio%20t%C3%A9cnico%20sobre%20o%20sistema."
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-4 bg-gradient-to-r from-brand-primary to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-brand-primary/20 flex items-center justify-center gap-2"
+                          >
+                            <MessageCircle className="w-4 h-4 fill-black" />
+                            Falar no WhatsApp
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
               ) : (
 
 
@@ -5575,14 +5799,37 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-white/[0.05]">
                         {loading ? (
-                          <tr>
-                            <td colSpan={activeTab === 'Agendados' ? 4 : activeTab === 'Quitados' ? 3 : 7} className="px-8 py-20 text-center">
-                              <div className="flex flex-col items-center gap-3">
-                                <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                                <span className="text-slate-500 font-medium">Sincronizando dados...</span>
-                              </div>
-                            </td>
-                          </tr>
+                          Array.from({ length: 5 }).map((_, rowIndex) => (
+                            <tr key={`loan-ske-${rowIndex}`} className="animate-pulse">
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-2/3" />
+                              </td>
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-1/2" />
+                              </td>
+                              <td className="px-8 py-5">
+                                <div className="h-4 bg-slate-500/10 rounded w-1/3" />
+                              </td>
+                              {activeTab !== 'Agendados' && activeTab !== 'Quitados' && (
+                                <>
+                                  <td className="px-8 py-5">
+                                    <div className="h-4 bg-slate-500/10 rounded w-1/4" />
+                                  </td>
+                                  <td className="px-8 py-5">
+                                    <div className="h-4 bg-slate-500/10 rounded w-1/4" />
+                                  </td>
+                                  <td className="px-8 py-5">
+                                    <div className="h-4 bg-slate-500/10 rounded w-16" />
+                                  </td>
+                                </>
+                              )}
+                              {activeTab !== 'Quitados' && (
+                                <td className="px-8 py-5 text-right">
+                                  <div className="h-8 bg-slate-500/10 rounded w-24 ml-auto" />
+                                </td>
+                              )}
+                            </tr>
+                          ))
                         ) : filteredLoans.length === 0 ? (
                           <tr>
                             <td colSpan={activeTab === 'Agendados' ? 4 : activeTab === 'Quitados' ? 3 : 7} className="px-8 py-20 text-center">
@@ -5780,12 +6027,23 @@ export default function App() {
                   {/* Mobile Cards */}
                   <div className="lg:hidden grid grid-cols-1 gap-4">
                     {loading ? (
-                      <div className="py-20 text-center glass-card">
-                         <div className="flex flex-col items-center gap-3">
-                            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                            <span className="text-slate-500 font-medium">Sincronizando...</span>
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <div key={`loan-ske-mob-${i}`} className="glass-card p-5 space-y-4 border border-white/5 animate-pulse">
+                          <div className="flex justify-between items-start">
+                            <div className="space-y-2 w-1/2">
+                              <div className="h-4 bg-slate-500/10 rounded w-3/4" />
+                              <div className="h-3 bg-slate-500/10 rounded w-1/2" />
+                            </div>
+                            <div className="h-5 bg-slate-500/10 rounded w-1/4" />
                           </div>
-                      </div>
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/[0.03]">
+                            <div className="h-3 bg-slate-500/10 rounded w-2/3" />
+                            <div className="h-3 bg-slate-500/10 rounded w-1/2" />
+                            <div className="h-3 bg-slate-500/10 rounded w-3/4" />
+                          </div>
+                          <div className="h-8 bg-slate-500/10 rounded w-full" />
+                        </div>
+                      ))
                     ) : filteredLoans.length === 0 ? (
                       <div className="py-20 text-center text-slate-500 font-medium glass-card">
                          {filterDate ? 'Nenhum Empréstimo Encontrado' : 
@@ -6842,18 +7100,16 @@ export default function App() {
                               >
                                 <FileText className="w-4 h-4" />
                               </button>
-                              {loan.status !== 'Pago' && (
-                                 <button 
-                                   onClick={() => {
-                                     setViewingClientLoans(null);
-                                     openEditModal(loan);
-                                   }}
-                                   className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
-                                   title="Editar"
-                                 >
-                                   <Edit2 className="w-4 h-4" />
-                                 </button>
-                               )}
+                              <button 
+                                onClick={() => {
+                                  setViewingClientLoans(null);
+                                  openEditModal(loan);
+                                }}
+                                className="p-2 bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white rounded-xl transition-all active:scale-95 border border-brand-primary/20"
+                                title="Editar"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
@@ -6883,13 +7139,19 @@ export default function App() {
             <div id="printable-contract" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
-                <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
+                <div 
+                  className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
+                    backgroundColor: '#D4AF37'
+                  }}
+                >
+                  <div 
+                    className="w-full h-full rounded-xl flex items-center justify-center"
+                    style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
+                  >
+                    <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
+                  </div>
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -7282,13 +7544,19 @@ export default function App() {
             <div id="printable-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
-                <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
+                <div 
+                  className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
+                    backgroundColor: '#D4AF37'
+                  }}
+                >
+                  <div 
+                    className="w-full h-full rounded-xl flex items-center justify-center"
+                    style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
+                  >
+                    <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
+                  </div>
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -7407,13 +7675,19 @@ export default function App() {
             <div id="printable-schedule-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
-                <div className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden bg-slate-900">
-                  <img 
-                    src="https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop" 
-                    className="w-full h-full object-cover grayscale brightness-125" 
-                    alt="Nexus Logo"
-                    referrerPolicy="no-referrer"
-                  />
+                <div 
+                  className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
+                    backgroundColor: '#D4AF37'
+                  }}
+                >
+                  <div 
+                    className="w-full h-full rounded-xl flex items-center justify-center"
+                    style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
+                  >
+                    <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
+                  </div>
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -7655,7 +7929,7 @@ export default function App() {
 
 // --- Sub-components ---
 
-function StatCard({ title, value, icon, color, trend, onClick, isDark, isMini }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger' | 'success', trend?: string, onClick?: () => void, isDark: boolean, isMini?: boolean }) {
+function StatCard({ title, value, icon, color, trend, onClick, isDark, isMini, loading }: { title: string, value: string, icon: React.ReactNode, color: 'primary' | 'secondary' | 'accent' | 'danger' | 'success', trend?: string, onClick?: () => void, isDark: boolean, isMini?: boolean, loading?: boolean }) {
   const colors = {
     primary: 'text-brand-primary bg-brand-primary/5 border-brand-primary/10',
     secondary: cn(isDark ? 'text-white bg-white/5 border-white/10' : 'text-black bg-slate-100 border-slate-200'),
@@ -7690,19 +7964,27 @@ function StatCard({ title, value, icon, color, trend, onClick, isDark, isMini }:
           {React.cloneElement(icon as React.ReactElement, { className: isMini ? "w-4 h-4 sm:w-5 sm:h-5" : "w-5 h-5 sm:w-6 sm:h-6" })}
         </div>
         {trend && (
-          <span className={cn("font-black uppercase border", 
-            isMini ? "text-[7px] sm:text-[8px] tracking-widest px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg" : "text-[8px] sm:text-[9px] tracking-[0.1em] sm:tracking-[0.2em] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl",
-            colors[color])}>
-            {trend}
-          </span>
+          loading ? (
+            <div className="h-4 w-12 bg-slate-500/15 rounded-md animate-pulse" />
+          ) : (
+            <span className={cn("font-black uppercase border", 
+              isMini ? "text-[7px] sm:text-[8px] tracking-widest px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg" : "text-[8px] sm:text-[9px] tracking-[0.1em] sm:tracking-[0.2em] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl",
+              colors[color])}>
+              {trend}
+            </span>
+          )
         )}
       </div>
       <div className="relative z-10">
         <span className={cn("font-bold text-slate-500 uppercase block transition-colors",
           isMini ? "text-[8px] tracking-[0.15em] mb-0.5 sm:mb-1" : "text-[9px] sm:text-[10px] tracking-[0.2em] sm:tracking-[0.3em] mb-1 sm:mb-1.5")}>{title}</span>
-        <div className={cn("font-black tracking-tight group-hover:text-brand-primary transition-colors duration-500", 
-          isMini ? "text-base sm:text-lg" : "text-xl sm:text-2xl",
-          isDark ? "text-white" : "text-black")}>{value}</div>
+        {loading ? (
+          <div className="h-7 w-24 bg-slate-500/15 rounded-lg animate-pulse mt-1" />
+        ) : (
+          <div className={cn("font-black tracking-tight group-hover:text-brand-primary transition-colors duration-500", 
+            isMini ? "text-base sm:text-lg" : "text-xl sm:text-2xl",
+            isDark ? "text-white" : "text-black")}>{value}</div>
+        )}
       </div>
     </div>
   );
