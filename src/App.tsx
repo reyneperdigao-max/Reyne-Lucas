@@ -6217,9 +6217,7 @@ export default function App() {
                               <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Status</th>
                             </>
                           )}
-                          {activeTab !== 'Quitados' && (
-                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
-                          )}
+                          <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] text-right">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.05]">
@@ -6248,16 +6246,14 @@ export default function App() {
                                   </td>
                                 </>
                               )}
-                              {activeTab !== 'Quitados' && (
-                                <td className="px-8 py-5 text-right">
-                                  <div className="h-8 bg-slate-500/10 rounded w-24 ml-auto" />
-                                </td>
-                              )}
+                              <td className="px-8 py-5 text-right">
+                                <div className="h-8 bg-slate-500/10 rounded w-24 ml-auto" />
+                              </td>
                             </tr>
                           ))
                         ) : filteredLoans.length === 0 ? (
                           <tr>
-                            <td colSpan={activeTab === 'Agendados' ? 4 : activeTab === 'Quitados' ? 3 : 7} className="px-8 py-20 text-center">
+                            <td colSpan={activeTab === 'Agendados' ? 4 : activeTab === 'Quitados' ? 4 : 7} className="px-8 py-20 text-center">
                               <div className="flex flex-col items-center gap-4">
                                 <div className="p-5 bg-white/[0.03] rounded-[32px] border border-white/[0.05]">
                                   <Users className="w-8 h-8 text-slate-600" />
@@ -6361,7 +6357,7 @@ export default function App() {
                                   </td>
                                 </>
                               )}
-                              {activeTab !== 'Quitados' && (
+                              {true && (
                                 <td className="px-8 py-6 text-right">
                                 <div className="flex items-center justify-end gap-2">
                                   {loan.status !== 'Agendado' && (
@@ -6501,6 +6497,39 @@ export default function App() {
                                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-1">Data</span>
                                   <div className={cn("font-black text-xs tracking-tight", isDark ? "text-slate-300" : "text-slate-700")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</div>
                                 </div>
+                              </div>
+                              <div className="flex gap-2 pt-2">
+                                <button 
+                                  onClick={() => setViewingClientLoans(loan.clientName)}
+                                  className="p-3.5 bg-white/5 text-slate-400 rounded-xl border border-white/10 active:scale-95 transition-all"
+                                  title="Ver Histórico"
+                                >
+                                  <History className="w-5 h-5" />
+                                </button>
+                                <button 
+                                  onClick={() => setViewingContract([loan])}
+                                  className="p-3.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 active:scale-95 transition-all"
+                                  title="Emitir Comprovante"
+                                >
+                                  <FileText className="w-5 h-5" />
+                                </button>
+                                <button 
+                                  onClick={() => sendWhatsAppCollection(loan)}
+                                  className="p-3.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 active:scale-95 transition-all"
+                                  title="Cobrança WhatsApp"
+                                >
+                                  <MessageCircle className="w-5 h-5" />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setPayingLoan(loan); 
+                                    setLastAction(null);
+                                  }}
+                                  className="flex-1 flex items-center justify-center gap-3 py-3.5 bg-gradient-to-r from-brand-accent to-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-accent/20 active:scale-95 transition-all"
+                                >
+                                  <DollarSign className="w-5 h-5" />
+                                  <span>Amortizar</span>
+                                </button>
                               </div>
                             </>
                           ) : (
@@ -7493,19 +7522,17 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {loan.status !== 'Pago' && (
-                                 <button 
-                                   onClick={() => {
-                                     setViewingClientLoans(null);
-                                     setPayingLoan(loan);
-                                     setLastAction(null);
-                                   }}
-                                   className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
-                                   title="Pagamento"
-                                 >
-                                   <DollarSign className="w-4 h-4" />
-                                 </button>
-                               )}
+                              <button 
+                                onClick={() => {
+                                  setViewingClientLoans(null);
+                                  setPayingLoan(loan);
+                                  setLastAction(null);
+                                }}
+                                className="p-2 bg-brand-accent/10 text-brand-accent hover:bg-brand-accent hover:text-white rounded-xl transition-all active:scale-95 border border-brand-accent/20"
+                                title="Pagamento"
+                              >
+                                <DollarSign className="w-4 h-4" />
+                              </button>
                               {loan.status !== 'Pago' && (
                                  <button 
                                    onClick={() => sendWhatsAppCollection(loan)}
