@@ -8005,142 +8005,106 @@ export default function App() {
               "w-full max-w-2xl sm:rounded-[40px] overflow-hidden shadow-2xl relative my-auto sm:my-8",
               isDark ? "bg-[#0a0a0a]" : "bg-white"
             )}>
-              <div id="printable-receipt" className="p-4 sm:p-8 printable-content bg-white text-slate-900 font-sans relative">
-                {/* Luxury Double Border */}
-                <div className="border-[3px] border-[#D4AF37]/30 p-2 sm:p-4 rounded-[32px] relative overflow-hidden bg-white">
-                  <div className="border border-[#D4AF37]/15 p-6 sm:p-12 rounded-[24px] relative bg-white">
-                    
-                    {/* Subtle Guilloche Watermark */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none z-0">
-                      <svg className="w-80 h-80 text-[#D4AF37]" fill="currentColor" viewBox="0 0 100 100">
-                        <path d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="1 1" />
-                        <path d="M50 10 L85 28 L85 72 L50 90 L15 72 L15 28 Z" fill="none" stroke="currentColor" strokeWidth="1" />
-                        <circle cx="50" cy="50" r="25" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                        <text x="50" y="55" fontFamily="serif" fontSize="16" fontWeight="bold" textAnchor="middle" fill="currentColor">NEXUS</text>
-                      </svg>
+              <div id="printable-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
+                {/* Elegant Header */}
+                <div className="flex flex-col items-center mb-12 relative z-10">
+                  <div 
+                    className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
+                    style={{
+                      background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
+                      backgroundColor: '#D4AF37'
+                    }}
+                  >
+                    <div 
+                      className="w-full h-full rounded-xl flex items-center justify-center"
+                      style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
+                    >
+                      <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
                     </div>
+                  </div>
+                  <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
+                  <div className="h-px w-12 bg-brand-primary my-4" />
+                  <p className="text-[9px] font-bold uppercase tracking-[0.4em] text-slate-400">Comprovante de Recebimento</p>
+                </div>
 
-                    {/* Elegant Header */}
-                    <div className="flex flex-col items-center mb-10 relative z-10 text-center">
-                      <div 
-                        className="w-16 h-16 flex items-center justify-center rounded-2xl mb-4 shadow-xl overflow-hidden p-3"
-                        style={{
-                          background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
-                          backgroundColor: '#D4AF37'
-                        }}
-                      >
-                        <div 
-                          className="w-full h-full rounded-lg flex items-center justify-center"
-                          style={{ border: '1.5px solid rgba(255, 255, 255, 0.25)' }}
-                        >
-                          <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
-                        </div>
-                      </div>
-                      <h1 className="text-lg font-black uppercase tracking-[0.25em] text-slate-900 leading-none">
-                        {userProfile?.displayName || 'Nexus Private'}
-                      </h1>
-                      <p className="text-[7px] font-bold uppercase tracking-[0.4em] text-slate-400 mt-2">
-                        Private Wealth &amp; Asset Management
+                {/* Amount Centerpiece */}
+                <div className="text-center mb-12 relative z-10">
+                  <p className="text-[9px] font-black uppercase tracking-widest mb-4 text-slate-400">Valor Liquidado</p>
+                  <h2 className="text-5xl font-black tracking-tighter text-slate-900">
+                    <span className="text-xl mr-2 text-slate-300">R$</span>
+                    {(viewingReceipt?.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </h2>
+                  <div className="mt-3 flex items-center justify-center gap-1.5 text-emerald-600">
+                    <div className="w-4 h-4 rounded-full flex items-center justify-center bg-emerald-100">
+                      <Check className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="text-[8px] font-black uppercase tracking-[0.2em]">EFETIVADO E CONCILIADO</span>
+                  </div>
+                </div>
+
+                {/* Essential Details Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 sm:gap-x-12 mb-12 relative z-10 border-t pt-8 border-slate-100">
+                  <div className="col-span-1 sm:col-span-2 pb-4 border-b border-slate-50">
+                    <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Pagador</span>
+                    <p className="text-xl font-black uppercase tracking-tight text-slate-900">
+                      {viewingReceipt?.clientName || 'Cliente'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Data e Hora</span>
+                    <p className="font-black uppercase text-sm leading-tight text-slate-900">
+                      {viewingReceipt?.date ? safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm') : '---'}
+                    </p>
+                  </div>
+                  <div className="sm:text-right">
+                    <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Operacional</span>
+                    <p className="font-black text-brand-primary uppercase text-sm leading-tight">
+                      {viewingReceipt?.description?.toLowerCase()?.includes('juros') ? 'Rendimento / Juros' : 
+                       viewingReceipt?.description?.toLowerCase()?.includes('capital') ? 'Amortização' : 
+                       'Recebimento'}
+                    </p>
+                  </div>
+
+                  {viewingReceipt?.paymentMethod && (
+                    <div>
+                      <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Meio de Pagamento</span>
+                      <p className="font-black uppercase text-sm leading-tight text-slate-900">
+                        {viewingReceipt.paymentMethod}
                       </p>
-                      <div className="h-0.5 w-10 bg-[#D4AF37]/50 my-4" />
-                      <span className="px-3 py-1 bg-[#D4AF37]/10 text-[#AA7C11] text-[8px] font-black uppercase tracking-[0.2em] rounded-full">
-                        COMPROVANTE OFICIAL DE RECEBIMENTO
-                      </span>
                     </div>
+                  )}
+                  <div className={cn(!viewingReceipt?.paymentMethod ? "col-span-1 sm:col-span-2" : "sm:text-right")}>
+                    <span className="text-[8px] font-black uppercase tracking-widest block mb-1 text-slate-400">Status da Conciliação</span>
+                    <p className="font-black text-emerald-600 uppercase text-sm leading-tight">
+                      CONFIRMADO
+                    </p>
+                  </div>
 
-                    {/* Amount Centerpiece */}
-                    <div className="text-center mb-10 relative z-10 bg-slate-50/50 rounded-2xl p-6 border border-slate-100">
-                      <p className="text-[8px] font-black uppercase tracking-[0.15em] mb-2 text-slate-400">VALOR LIQUIDADO</p>
-                      <h2 className="text-4xl sm:text-5xl font-black tracking-tight text-slate-900 font-mono">
-                        <span className="text-lg font-bold mr-1 text-[#AA7C11]">R$</span>
-                        {(viewingReceipt?.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </h2>
-                      <div className="mt-3 flex items-center justify-center gap-1.5 text-emerald-600">
-                        <div className="w-4 h-4 rounded-full flex items-center justify-center bg-emerald-100">
-                          <Check className="w-2.5 h-2.5" />
-                        </div>
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em]">EFETIVADO E CONCILIADO</span>
-                      </div>
+                  <div className="col-span-1 sm:col-span-2 pt-6 border-t border-slate-50">
+                    <span className="text-[8px] font-black uppercase tracking-widest block mb-2 text-slate-400">Histórico / Descrição</span>
+                    <p className="text-xs leading-relaxed font-medium uppercase tracking-tight text-slate-600 font-mono">
+                      {viewingReceipt?.description || 'Recebimento de parcelas'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Footer Authentication */}
+                <div className="pt-8 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-slate-100">
+                  <div className="flex items-center gap-4 w-full sm:w-auto">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
+                      <QrCode className="w-full h-full text-slate-200" />
                     </div>
-
-                    {/* Essential Details Grid */}
-                    <div className="space-y-6 relative z-10">
-                      
-                      {/* Pagador block */}
-                      <div className="border-b border-slate-100 pb-4">
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em] block mb-1.5 text-slate-400">PAGADOR</span>
-                        <p className="text-base font-black uppercase tracking-tight text-slate-900">
-                          {viewingReceipt?.clientName || 'Cliente'}
-                        </p>
-                      </div>
-
-                      {/* Meta info grid */}
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-xs">
-                        <div>
-                          <span className="text-[8px] font-black uppercase tracking-[0.2em] block mb-1 text-slate-400">DATA E HORA</span>
-                          <p className="font-black text-slate-800 font-mono">
-                            {viewingReceipt?.date ? safeFormatDate(viewingReceipt.date, 'dd/MM/yyyy HH:mm') : '---'}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[8px] font-black uppercase tracking-[0.2em] block mb-1 text-slate-400">OPERACIONAL</span>
-                          <span className={cn(
-                            "px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-[0.15em] w-fit block mt-0.5",
-                            viewingReceipt?.description?.toLowerCase()?.includes('juros') ? "bg-emerald-500/10 text-emerald-700" : 
-                            viewingReceipt?.description?.toLowerCase()?.includes('capital') ? "bg-brand-primary/10 text-brand-primary" : 
-                            "bg-slate-100 text-slate-700"
-                          )}>
-                            {viewingReceipt?.description?.toLowerCase()?.includes('juros') ? 'Rendimento / Juros' : 
-                             viewingReceipt?.description?.toLowerCase()?.includes('capital') ? 'Amortização' : 
-                             'Recebimento'}
-                          </span>
-                        </div>
-                        {viewingReceipt?.paymentMethod && (
-                          <div>
-                            <span className="text-[8px] font-black uppercase tracking-[0.2em] block mb-1 text-slate-400">MEIO DE PAGAMENTO</span>
-                            <span className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">
-                              {viewingReceipt.paymentMethod}
-                            </span>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-[8px] font-black uppercase tracking-[0.2em] block mb-1 text-slate-400">STATUS DA CONCILIAÇÃO</span>
-                          <span className="font-bold text-emerald-600 text-[10px] tracking-wide uppercase">
-                            CONFIRMADO
-                          </span>
-                        </div>
-                      </div>
-
-
-                      {/* Description Detail */}
-                      <div className="border-t border-slate-100 pt-4">
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em] block mb-1 text-slate-400 font-sans">HISTÓRICO</span>
-                        <p className="text-[10px] leading-relaxed font-bold uppercase tracking-tight text-slate-500 font-mono">
-                          {viewingReceipt?.description || 'Recebimento de parcelas'}
-                        </p>
-                      </div>
-
+                    <div>
+                      <p className="text-[8px] font-black uppercase mb-1 text-slate-900">Autenticação Digital</p>
+                      <p className="text-[7px] font-mono text-slate-500 uppercase tracking-tighter">
+                        {viewingReceipt?.id ? viewingReceipt.id.toUpperCase() : 'NEXUS'}-{viewingReceipt?.date ? toDate(viewingReceipt.date).getTime() : new Date().getTime()}
+                      </p>
                     </div>
-
-                    {/* Footer Authentication */}
-                    <div className="pt-8 mt-8 border-t relative z-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-slate-100">
-                      <div className="flex items-center gap-4 w-full sm:w-auto">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center border p-2 shrink-0 bg-slate-50 border-slate-100">
-                          <QrCode className="w-full h-full text-slate-300" />
-                        </div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase mb-0.5 text-slate-900">Autenticação de Segurança</p>
-                          <p className="text-[7px] font-mono text-slate-400 uppercase tracking-tighter">
-                            {viewingReceipt?.id ? viewingReceipt.id.toUpperCase() : 'NEXUS'}-{viewingReceipt?.date ? toDate(viewingReceipt.date).getTime() : new Date().getTime()}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-center sm:text-right opacity-60 w-full sm:w-auto">
-                        <p className="text-[8px] font-black uppercase tracking-[0.25em] text-[#AA7C11]">NEXUS PRIVATE</p>
-                        <p className="text-[6px] font-bold text-slate-400 uppercase mt-0.5 tracking-widest">SISTEMA INTEGRADO DE AUDITORIA</p>
-                      </div>
-                    </div>
-
+                  </div>
+                  <div className="text-center sm:text-right opacity-40 w-full sm:w-auto">
+                    <p className="text-[8px] font-black uppercase tracking-[0.3em] text-slate-900">Nexus Private</p>
+                    <p className="text-[6px] font-bold text-slate-500 uppercase mt-1 tracking-widest">Asset Management</p>
                   </div>
                 </div>
               </div>
