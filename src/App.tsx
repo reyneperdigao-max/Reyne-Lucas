@@ -623,6 +623,7 @@ export default function App() {
   
   // Form State
   const [isAdding, setIsAdding] = useState(false);
+  const [showMobileFabMenu, setShowMobileFabMenu] = useState(false);
   const [editingLoanId, setEditingLoanId] = useState<string | null>(null);
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
   const [viewingContract, setViewingContract] = useState<Loan[] | null>(null);
@@ -3809,7 +3810,7 @@ export default function App() {
                   </div>
                 )}
               </button>
-              <h1 className={cn("text-xs font-black tracking-[0.2em] uppercase ml-1", isDark ? "text-white" : "text-slate-900")}>Nexus</h1>
+              <h1 className={cn("text-xs font-black tracking-[0.2em] uppercase ml-1", isDark ? "text-white" : "text-slate-900")}>Nexus Private</h1>
             </div>
 
             <div className="hidden lg:flex items-center gap-6">
@@ -7998,20 +7999,6 @@ export default function App() {
       )}
 
       {viewingReceipt && (() => {
-        const associatedLoan = loans.find(l => l.id === viewingReceipt?.loanId);
-        let capitalPaid = viewingReceipt?.capitalAmount || 0;
-        let interestPaid = viewingReceipt?.interestAmount || 0;
-        const totalAmount = viewingReceipt?.amount || 0;
-
-        if (capitalPaid === 0 && interestPaid === 0) {
-          const descLower = (viewingReceipt?.description || '').toLowerCase();
-          if (descLower.includes('juros') && !descLower.includes('capital') && !descLower.includes('quitação')) {
-            interestPaid = totalAmount;
-          } else if (descLower.includes('amortização') || descLower.includes('capital')) {
-            capitalPaid = totalAmount;
-          }
-        }
-
         return (
           <div className="fixed inset-0 z-[100] flex justify-center items-start p-4 sm:p-8 bg-black/95 overflow-y-auto">
             <div className={cn(
@@ -8124,52 +8111,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Detalhamento de Amortização / Rendimento */}
-                      <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-4 space-y-3">
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em] block text-slate-400">DEMONSTRATIVO DE DESTINAÇÃO</span>
-                        
-                        <div className="space-y-2 text-xs">
-                          {interestPaid > 0 && (
-                            <div className="flex items-center justify-between border-b border-dashed border-slate-100 pb-2">
-                              <span className="text-slate-500 font-medium">Rendimentos de Juros (Lucro Líquido):</span>
-                              <span className="font-black text-slate-800 font-mono">
-                                R$ {interestPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                          )}
-                          {capitalPaid > 0 && (
-                            <div className="flex items-center justify-between border-b border-dashed border-slate-100 pb-2">
-                              <span className="text-slate-500 font-medium">Amortização de Capital (Principal):</span>
-                              <span className="font-black text-[#AA7C11] font-mono">
-                                R$ {capitalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </span>
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between pt-1">
-                            <span className="text-slate-800 font-black uppercase tracking-tight text-[10px]">Total Destinado:</span>
-                            <span className="font-black text-slate-900 font-mono text-sm">
-                              R$ {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Associated Loan info if present */}
-                      {associatedLoan && (
-                        <div className="border-t border-slate-100 pt-4 text-xs space-y-2">
-                          <span className="text-[8px] font-black uppercase tracking-[0.2em] block text-slate-400">RESUMO DO CONTRATO ASSOCIADO</span>
-                          <div className="grid grid-cols-2 gap-x-6 text-[10px]">
-                            <div>
-                              <span className="text-slate-400 uppercase tracking-tighter text-[8px] block">Capital Inicial do Contrato</span>
-                              <p className="font-bold text-slate-700 font-mono">R$ {associatedLoan.totalBruto?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 uppercase tracking-tighter text-[8px] block">Saldo de Capital de Giro Devedor</span>
-                              <p className="font-bold text-slate-700 font-mono">R$ {associatedLoan.capital?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
                       {/* Description Detail */}
                       <div className="border-t border-slate-100 pt-4">
@@ -8637,15 +8578,117 @@ export default function App() {
 
       {/* Floating Action Button - Mobile */}
       {['Principal', 'Empréstimos', 'Clientes'].includes(activeTab) && (
-        <button 
-          onClick={() => setIsAdding(true)}
-          className={cn(
-            "fixed bottom-24 right-6 lg:hidden z-[85] p-5 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.3)] transition-all active:scale-90 animate-in zoom-in slide-in-from-bottom-10 duration-500",
-            isDark ? "bg-brand-primary text-black" : "bg-slate-900 text-white"
-          )}
-        >
-          <Plus className="w-6 h-6 stroke-[3]" />
-        </button>
+        <>
+          {/* Backdrop when menu is open */}
+          <AnimatePresence>
+            {showMobileFabMenu && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowMobileFabMenu(false)}
+                className="fixed inset-0 bg-black/60 z-[84] backdrop-blur-sm lg:hidden"
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Speed Dial Menu Container */}
+          <div className="fixed bottom-24 right-6 lg:hidden z-[85] flex flex-col items-end gap-3">
+            <AnimatePresence>
+              {showMobileFabMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="flex flex-col items-end gap-3 mb-2"
+                >
+                  {/* Option 1: Agendar Empréstimo */}
+                  <div className="flex items-center gap-3">
+                    <span className={cn(
+                      "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg border",
+                      isDark ? "bg-[#0f0f0f] text-[#D4AF37] border-white/10" : "bg-white text-[#AA7C11] border-slate-100"
+                    )}>
+                      Agendar Empréstimo
+                    </span>
+                    <button
+                      onClick={() => {
+                        setEditingLoanId(null);
+                        setNewLoan({
+                          clientName: '',
+                          clientPhone: '',
+                          clientAddress: '',
+                          capital: '',
+                          interestRate: '',
+                          date: format(new Date(), 'yyyy-MM-dd'),
+                          dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                          status: 'Agendado'
+                        });
+                        setIsAdding(true);
+                        setShowMobileFabMenu(false);
+                      }}
+                      className={cn(
+                        "p-3.5 rounded-full shadow-lg transition-transform active:scale-95 border flex items-center justify-center",
+                        isDark ? "bg-[#0f0f0f] border-white/10 text-[#D4AF37]" : "bg-white border-slate-100 text-[#AA7C11]"
+                      )}
+                    >
+                      <Clock className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                  </div>
+
+                  {/* Option 2: Novo Empréstimo */}
+                  <div className="flex items-center gap-3">
+                    <span className={cn(
+                      "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg border",
+                      isDark ? "bg-[#0f0f0f] text-white border-white/10" : "bg-white text-slate-800 border-slate-100"
+                    )}>
+                      Novo Empréstimo
+                    </span>
+                    <button
+                      onClick={() => {
+                        setEditingLoanId(null);
+                        setNewLoan({
+                          clientName: '',
+                          clientPhone: '',
+                          clientAddress: '',
+                          capital: '',
+                          interestRate: '',
+                          date: format(new Date(), 'yyyy-MM-dd'),
+                          dueDate: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
+                          status: 'Pendente'
+                        });
+                        setIsAdding(true);
+                        setShowMobileFabMenu(false);
+                      }}
+                      className={cn(
+                        "p-3.5 rounded-full shadow-lg transition-transform active:scale-95 border flex items-center justify-center",
+                        isDark ? "bg-brand-primary border-transparent text-black" : "bg-slate-900 border-transparent text-white"
+                      )}
+                    >
+                      <Plus className="w-5 h-5 stroke-[2.5]" />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Main Toggle Button */}
+            <button
+              onClick={() => setShowMobileFabMenu(!showMobileFabMenu)}
+              className={cn(
+                "p-5 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.35)] transition-all active:scale-90 flex items-center justify-center relative overflow-hidden",
+                isDark ? "bg-brand-primary text-black" : "bg-slate-900 text-white"
+              )}
+            >
+              <motion.div
+                animate={{ rotate: showMobileFabMenu ? 45 : 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+              >
+                <Plus className="w-6 h-6 stroke-[3]" />
+              </motion.div>
+            </button>
+          </div>
+        </>
       )}
 
       {/* Bottom Navigation - Mobile only */}
@@ -8682,12 +8725,12 @@ export default function App() {
                   )}
                   <Icon className={cn("w-5 h-5", isActive ? "text-black scale-110" : "text-slate-400")} />
                 </div>
-                <span className={cn("text-[8px] font-black uppercase tracking-widest", isActive ? "opacity-100" : "opacity-50")}>
+                <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", isActive ? "opacity-100 font-extrabold text-[#D4AF37]" : "opacity-60")}>
                   {item.label === 'Principal' ? 'Início' : 
-                   item.label === 'Empréstimos' ? 'Giro' :
+                   item.label === 'Empréstimos' ? 'Empréstimos' :
                    item.label === 'Quitados' ? 'Pagos' :
-                   item.label === 'Clientes' ? 'Base' : 
-                   item.label === 'Transações' ? 'Fluxo' : item.label}
+                   item.label === 'Clientes' ? 'Clientes' : 
+                   item.label === 'Transações' ? 'Transações' : item.label}
                 </span>
               </button>
             );
@@ -8715,7 +8758,7 @@ export default function App() {
               )}
               <Settings className={cn("w-5 h-5", activeTab === 'Configurações' ? "text-black scale-110" : "text-slate-400")} />
             </div>
-            <span className={cn("text-[8px] font-black uppercase tracking-widest", activeTab === 'Configurações' ? "opacity-100" : "opacity-50")}>
+            <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", activeTab === 'Configurações' ? "opacity-100 font-extrabold text-[#D4AF37]" : "opacity-60")}>
               Ajustes
             </span>
           </button>
