@@ -3064,7 +3064,10 @@ export default function App() {
 
     // Overdue Loans
     loans.forEach(l => {
-      if (l.status === 'Atrasado' || isOverdue(l)) {
+      const days = getDaysDiff(l.dueDate);
+      const isDueToday = days === 0;
+
+      if ((l.status === 'Atrasado' || isOverdue(l)) && !isDueToday) {
         list.push({
           id: `overdue-${l.id}`,
           type: 'overdue',
@@ -3073,8 +3076,7 @@ export default function App() {
           date: l.dueDate,
           item: l
         });
-      } else if (l.status === 'Pendente') {
-        const days = getDaysDiff(l.dueDate);
+      } else if (l.status === 'Pendente' || (l.status === 'Atrasado' && isDueToday)) {
         if (days >= 0 && days <= 3) {
           list.push({
             id: `upcoming-${l.id}`,
@@ -4383,7 +4385,7 @@ export default function App() {
                     ) : (
                       <>
                         {loans
-                          .filter(l => l.status === 'Pendente' && !isOverdue(l))
+                          .filter(l => (l.status === 'Pendente' && !isOverdue(l)) || (l.status === 'Atrasado' && getDaysDiff(l.dueDate) === 0))
                           .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
                           .slice(0, 3)
                           .map(loan => (
@@ -4400,7 +4402,7 @@ export default function App() {
                               <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-emerald-400 font-mono">R$ {loan.totalBruto.toLocaleString('pt-BR')}</span>
                             </div>
                           ))}
-                        {loans.filter(l => l.status === 'Pendente' && !isOverdue(l)).length === 0 && (
+                        {loans.filter(l => (l.status === 'Pendente' && !isOverdue(l)) || (l.status === 'Atrasado' && getDaysDiff(l.dueDate) === 0)).length === 0 && (
                           <div className="flex flex-col items-center justify-center py-6 gap-3 text-center opacity-70">
                              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center border border-slate-200/50 dark:border-white/10">
                                <Calendar className="w-5 h-5 text-slate-500" />
@@ -6345,10 +6347,10 @@ export default function App() {
                                           {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
                                         </span>
                                       </div>
-                                      {loan.status === 'Pendente' && (
+                                      {(loan.status === 'Pendente' || loan.status === 'Atrasado') && (
                                         <span className={cn(
                                           "text-[9px] font-bold uppercase tracking-wider",
-                                          isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
+                                          (isOverdue(loan) || (loan.status === 'Atrasado' && getDaysDiff(loan.dueDate) !== 0)) ? "text-neon-red" : "text-brand-accent"
                                         )}>
                                           {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
                                            getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
@@ -6576,10 +6578,10 @@ export default function App() {
                                   <span className="text-[8px] font-black text-slate-600 uppercase tracking-[0.2em] block mb-1">Vencimento</span>
                                   <div className="flex flex-col">
                                     <span className={cn("font-bold text-sm tracking-tight transition-colors", isDark ? "text-white" : "text-slate-900")}>{safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}</span>
-                                    {loan.status === 'Pendente' && (
+                                    {(loan.status === 'Pendente' || loan.status === 'Atrasado') && (
                                       <span className={cn(
                                         "text-[9px] font-bold uppercase mt-0.5",
-                                        isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
+                                        (isOverdue(loan) || (loan.status === 'Atrasado' && getDaysDiff(loan.dueDate) !== 0)) ? "text-neon-red" : "text-brand-accent"
                                       )}>
                                         {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
                                          getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
@@ -7513,10 +7515,10 @@ export default function App() {
                                   {safeFormatDate(loan.dueDate, 'dd/MM/yyyy')}
                                 </span>
                               </div>
-                              {loan.status === 'Pendente' && (
+                              {(loan.status === 'Pendente' || loan.status === 'Atrasado') && (
                                 <span className={cn(
                                   "text-[9px] font-bold uppercase tracking-wider",
-                                  isOverdue(loan) ? "text-neon-red" : "text-brand-accent"
+                                  (isOverdue(loan) || (loan.status === 'Atrasado' && getDaysDiff(loan.dueDate) !== 0)) ? "text-neon-red" : "text-brand-accent"
                                 )}>
                                   {getDaysDiff(loan.dueDate) === 0 ? 'Vence hoje' :
                                    getDaysDiff(loan.dueDate) > 0 ? `Faltam ${getDaysDiff(loan.dueDate)} dias` :
