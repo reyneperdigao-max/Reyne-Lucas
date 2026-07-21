@@ -637,7 +637,8 @@ export default function App() {
     activeCapital: number, 
     activeDebt: number, 
     loanCount: number,
-    totalLoans: number 
+    totalLoans: number,
+    score: number
   } | null>(null);
 
   useEffect(() => {
@@ -1772,6 +1773,47 @@ export default function App() {
     }
   };
 
+  const getClientScoreData = (score: number) => {
+    if (score >= 800) {
+      return {
+        label: 'Excelente',
+        color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
+        textColor: 'text-emerald-500',
+        bgColor: 'bg-emerald-500/10'
+      };
+    }
+    if (score >= 600) {
+      return {
+        label: 'Bom',
+        color: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
+        textColor: 'text-cyan-500',
+        bgColor: 'bg-cyan-500/10'
+      };
+    }
+    if (score >= 400) {
+      return {
+        label: 'Regular',
+        color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
+        textColor: 'text-amber-500',
+        bgColor: 'bg-amber-500/10'
+      };
+    }
+    return {
+      label: 'Risco Alto',
+      color: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
+      textColor: 'text-rose-500',
+      bgColor: 'bg-rose-500/10'
+    };
+  };
+
+  const normalizeString = (str: string): string => {
+    if (!str) return '';
+    return str
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  };
+
   const processImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -2749,10 +2791,10 @@ export default function App() {
     }
     
     if (command.trim()) {
-      const search = command.toLowerCase();
+      const searchNormalized = normalizeString(command);
       result = result.filter(l => 
-        l.clientName.toLowerCase().includes(search) || 
-        (l.clientPhone && l.clientPhone.includes(search))
+        normalizeString(l.clientName).includes(searchNormalized) || 
+        (l.clientPhone && l.clientPhone.includes(command.trim()))
       );
     }
     
@@ -2767,7 +2809,11 @@ export default function App() {
       activeCapital: number, 
       activeDebt: number, 
       loanCount: number,
-      totalLoans: number 
+      totalLoans: number,
+      paidCount: number,
+      overdueCount: number,
+      pendingCount: number,
+      score: number
     }>();
     
     const sortedLoans = [...loans].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -2780,12 +2826,24 @@ export default function App() {
         activeCapital: 0, 
         activeDebt: 0, 
         loanCount: 0,
-        totalLoans: 0
+        totalLoans: 0,
+        paidCount: 0,
+        overdueCount: 0,
+        pendingCount: 0,
+        score: 0
       };
 
       if (loan.status !== 'Agendado') {
         existing.totalLoans += 1;
-        if (loan.status !== 'Pago' || loan.capital > 0) {
+        if (loan.status === 'Pago' && loan.capital <= 0) {
+          existing.paidCount += 1;
+        } else if (loan.status === 'Atrasado' || isOverdue(loan)) {
+          existing.overdueCount += 1;
+          existing.activeCapital += (loan.capital || 0);
+          existing.activeDebt += (loan.totalBruto || 0);
+          existing.loanCount += 1;
+        } else {
+          existing.pendingCount += 1;
           existing.activeCapital += (loan.capital || 0);
           existing.activeDebt += (loan.totalBruto || 0);
           existing.loanCount += 1;
@@ -2797,6 +2855,24 @@ export default function App() {
       if (!existing.address && loan.clientAddress) existing.address = loan.clientAddress;
       
       clientMap.set(loan.clientName, existing);
+    });
+
+    // Calculate dynamic credit score for each client
+    clientMap.forEach(client => {
+      let scoreVal = 700; // base score
+      
+      if (client.totalLoans === 0) {
+        scoreVal = 750;
+      } else {
+        scoreVal += client.paidCount * 45;
+        scoreVal += client.pendingCount * 15;
+        if (client.overdueCount > 0) {
+          scoreVal -= client.overdueCount * 220;
+          scoreVal = Math.min(scoreVal, 550);
+        }
+      }
+      
+      client.score = Math.max(100, Math.min(1000, scoreVal));
     });
     
     return Array.from(clientMap.values());
@@ -2830,12 +2906,12 @@ export default function App() {
     }
     
     if (command.trim()) {
-      const search = command.toLowerCase();
-      const cleanSearch = search.startsWith('cobrança ') ? search.substring(9).trim() : search;
-      if (cleanSearch) {
+      const searchNormalized = normalizeString(command);
+      const cleanSearchNormalized = searchNormalized.startsWith('cobranca ') ? searchNormalized.substring(9).trim() : searchNormalized;
+      if (cleanSearchNormalized) {
         result = result.filter(c => 
-          c.name.toLowerCase().includes(cleanSearch) || 
-          (c.phone && c.phone.includes(cleanSearch))
+          normalizeString(c.name).includes(cleanSearchNormalized) || 
+          (c.phone && c.phone.includes(command.trim()))
         );
       }
     }
@@ -2845,12 +2921,12 @@ export default function App() {
 
   const filteredActions = useMemo(() => {
     if (command.trim()) {
-      const search = command.toLowerCase();
-      const cleanSearch = search.startsWith('cobrança ') ? search.substring(9).trim() : search;
-      if (cleanSearch) {
+      const searchNormalized = normalizeString(command);
+      const cleanSearchNormalized = searchNormalized.startsWith('cobranca ') ? searchNormalized.substring(9).trim() : searchNormalized;
+      if (cleanSearchNormalized) {
         return actions.filter(a => 
-          a.clientName.toLowerCase().includes(cleanSearch) || 
-          a.description.toLowerCase().includes(cleanSearch)
+          normalizeString(a.clientName).includes(cleanSearchNormalized) || 
+          normalizeString(a.description).includes(cleanSearchNormalized)
         );
       }
     }
@@ -4557,6 +4633,7 @@ export default function App() {
                          <tr className={cn("border-b transition-colors", isDark ? "bg-white/[0.02] border-white/[0.05]" : "bg-slate-50 border-slate-100")}>
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cliente</th>
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Contratos Ativos</th>
+                           <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Score de Crédito</th>
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Capital em Aberto</th>
                            <th className="px-8 py-6 text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Total a Receber</th>
                            <th className="px-8 py-6 text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] text-right">Ações (Total: {stats.totalClients})</th>
@@ -4565,7 +4642,7 @@ export default function App() {
                        <tbody className={cn("divide-y transition-colors", isDark ? "divide-white/[0.05]" : "divide-slate-100")}>
                          {clients.length === 0 ? (
                            <tr>
-                             <td colSpan={5} className="px-8 py-20 text-center text-slate-500 font-medium font-mono uppercase tracking-widest text-[10px]">
+                             <td colSpan={6} className="px-8 py-20 text-center text-slate-500 font-medium font-mono uppercase tracking-widest text-[10px]">
                                {command.trim() ? 'Nenhum cliente encontrado para esta busca.' : 'Nenhum cliente cadastrado.'}
                              </td>
                            </tr>
@@ -4602,6 +4679,30 @@ export default function App() {
                                        / {client.totalLoans} total
                                      </span>
                                    )}
+                                 </div>
+                               </td>
+                               <td className="px-8 py-6">
+                                 <div className="flex flex-col gap-1">
+                                   <div className="flex items-center gap-2">
+                                     <span className={cn("text-sm font-black font-mono tracking-tight", isDark ? "text-white" : "text-slate-900")}>
+                                       {client.score}
+                                     </span>
+                                     <span className={cn(
+                                       "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border",
+                                       getClientScoreData(client.score).color
+                                     )}>
+                                       {getClientScoreData(client.score).label}
+                                     </span>
+                                   </div>
+                                   <div className="w-24 h-1 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
+                                     <div 
+                                       className="h-full rounded-full transition-all"
+                                       style={{ 
+                                         width: `${(client.score / 1000) * 100}%`,
+                                         backgroundColor: client.score >= 800 ? '#10b981' : client.score >= 600 ? '#06b6d4' : client.score >= 400 ? '#f59e0b' : '#f43f5e'
+                                       }}
+                                     />
+                                   </div>
                                  </div>
                                </td>
                                <td className="px-8 py-6">
@@ -4685,6 +4786,18 @@ export default function App() {
                                     </span>
                                     <span className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">
                                       {client.totalLoans} Total
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-2">
+                                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Score:</span>
+                                    <span className={cn("text-[10px] font-black font-mono", isDark ? "text-white" : "text-slate-900")}>
+                                      {client.score}
+                                    </span>
+                                    <span className={cn(
+                                      "px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-widest border",
+                                      getClientScoreData(client.score).color
+                                    )}>
+                                      {getClientScoreData(client.score).label}
                                     </span>
                                   </div>
                                 </div>
@@ -7798,7 +7911,32 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full md:w-auto">
+                  <div className={cn("p-6 rounded-3xl border transition-all flex flex-col justify-between", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+                    <div>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Score de Crédito</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className={cn("text-xl font-black font-mono", isDark ? "text-white" : "text-slate-900")}>
+                          {viewingClientDetail.score}
+                        </span>
+                        <span className={cn(
+                          "px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border",
+                          getClientScoreData(viewingClientDetail.score).color
+                        )}>
+                          {getClientScoreData(viewingClientDetail.score).label}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 w-full h-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ 
+                          width: `${(viewingClientDetail.score / 1000) * 100}%`,
+                          backgroundColor: viewingClientDetail.score >= 800 ? '#10b981' : viewingClientDetail.score >= 600 ? '#06b6d4' : viewingClientDetail.score >= 400 ? '#f59e0b' : '#f43f5e'
+                        }}
+                      />
+                    </div>
+                  </div>
                   <div className={cn("p-6 rounded-3xl border transition-all", isDark ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
                     <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Dívida Ativa</span>
                     <p className="text-xl font-black text-brand-primary font-mono">R$ {viewingClientDetail.activeDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
@@ -7895,7 +8033,7 @@ export default function App() {
                       )}
                     >
                       <Plus className="w-6 h-6 text-brand-primary group-hover:scale-110 transition-transform" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Novo Loan</span>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">Novo Empréstimo</span>
                     </button>
                     <button 
                       onClick={() => {
