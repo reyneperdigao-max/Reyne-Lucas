@@ -3457,23 +3457,23 @@ export default function App() {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-[440px] p-8 sm:p-14 relative z-10 rounded-[32px] sm:rounded-[48px] bg-black/45 backdrop-blur-2xl border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
+            className="w-full max-w-[360px] sm:max-w-[440px] p-6 sm:p-14 relative z-10 rounded-[28px] sm:rounded-[48px] bg-black/35 backdrop-blur-xl border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
           >
             {/* Mobile Header Branding */}
-            <div className="lg:hidden flex flex-col items-center mb-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#8a660a] p-3 shadow-2xl shadow-[#D4AF37]/20 flex items-center justify-center mb-3">
-                <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
+            <div className="lg:hidden flex flex-col items-center mb-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#8a660a] p-2.5 shadow-2xl shadow-[#D4AF37]/20 flex items-center justify-center mb-2.5">
+                <span className="text-white font-black text-lg italic tracking-tighter">NP</span>
               </div>
-              <h3 className="text-lg font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+              <h3 className="text-base font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 Nexus Private
               </h3>
-              <p className="text-[9px] font-black text-[#D4AF37] uppercase tracking-[0.3em] mt-0.5">
+              <p className="text-[8px] font-black text-[#D4AF37] uppercase tracking-[0.3em] mt-0.5">
                 Crédito e Gestão
               </p>
               
               {/* Slogan for mobile */}
-              <div className="mt-4 px-4 py-2 rounded-2xl bg-black/40 border border-[#D4AF37]/30 backdrop-blur-md">
-                <p className="text-[10px] font-extrabold italic text-[#f3e5ab] tracking-wider">
+              <div className="mt-3 px-3.5 py-1.5 rounded-xl bg-black/40 border border-[#D4AF37]/20 backdrop-blur-md">
+                <p className="text-[9px] font-extrabold italic text-[#f3e5ab] tracking-wider">
                   "Sem dinheiro, sem graça"
                 </p>
               </div>
@@ -3493,7 +3493,7 @@ export default function App() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="mb-8 p-4 rounded-2xl bg-brand-danger/10 border border-brand-danger/20 text-brand-danger text-[10px] font-black uppercase tracking-widest flex items-center gap-3 overflow-hidden"
+                className="mb-6 p-4 rounded-2xl bg-brand-danger/10 border border-brand-danger/20 text-brand-danger text-[10px] font-black uppercase tracking-widest flex items-center gap-3 overflow-hidden"
               >
                 <div className="w-6 h-6 rounded-lg bg-brand-danger/20 flex items-center justify-center shrink-0">
                   <AlertCircle className="w-3.5 h-3.5" />
@@ -3502,9 +3502,9 @@ export default function App() {
               </motion.div>
             )}
 
-            <form onSubmit={handleEmailLogin} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+            <form onSubmit={handleEmailLogin} className="space-y-4 sm:space-y-6">
+              <div className="space-y-1.5 sm:space-y-2">
+                <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
                 <div className="relative group">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
                   <input
@@ -3512,14 +3512,14 @@ export default function App() {
                     placeholder="email@nexusprivate.com"
                     value={email || ""}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-[20px] py-4 pl-12 pr-4 text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                    className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
                     required
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
                 <div className="relative group">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
                   <input
@@ -3527,20 +3527,20 @@ export default function App() {
                     placeholder="••••••••••••"
                     value={password || ""}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-[20px] py-4 pl-12 pr-4 text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                    className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
                     required
                   />
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-2 sm:pt-4">
                 <button
                   type="submit"
                   disabled={isSubmitting}
                   className="w-full relative group"
                 >
-                  <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
-                  <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[11px] py-5 rounded-[20px] shadow-2xl hover:shadow-[#D4AF37]/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[18px] sm:rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
+                  <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 sm:py-5 rounded-[16px] sm:rounded-[20px] shadow-2xl hover:shadow-[#D4AF37]/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
                     {isSubmitting ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
@@ -3644,10 +3644,10 @@ export default function App() {
       {/* Sidebar - Desktop */}
       <aside className={cn(
         "hidden lg:flex flex-col shrink-0 sticky top-0 h-dvh border-r transition-all duration-300 z-50 overflow-hidden",
-        isSidebarCollapsed ? "w-20" : "w-72",
+        isSidebarCollapsed ? "w-20" : "w-60",
         isDark ? "bg-black border-surface-border" : "bg-white border-slate-200"
       )}>
-        <div className={cn("p-8 flex items-center gap-4 transition-all", isSidebarCollapsed ? "p-5 justify-center" : "")}>
+        <div className={cn("p-6 flex items-center gap-3 transition-all", isSidebarCollapsed ? "p-5 justify-center" : "")}>
           <div className="p-0.5 rounded-2xl shrink-0">
             {userProfile?.profilePicture ? (
               <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
@@ -3765,7 +3765,7 @@ export default function App() {
             onClick={() => setIsMobileSidebarOpen(false)}
           />
           <aside className={cn(
-            "absolute inset-y-0 left-0 w-80 p-6 flex flex-col animate-in slide-in-from-left duration-500",
+            "absolute inset-y-0 left-0 w-72 p-6 flex flex-col animate-in slide-in-from-left duration-500",
             isDark ? "bg-[#050505] border-r border-surface-border" : "bg-white"
           )}>
             <div className="flex items-center justify-between mb-10">
