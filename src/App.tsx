@@ -3457,7 +3457,7 @@ export default function App() {
             initial={{ opacity: 0, y: 20, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full max-w-[360px] sm:max-w-[440px] p-6 sm:p-14 relative z-10 rounded-[28px] sm:rounded-[48px] bg-black/35 backdrop-blur-xl border border-white/10 shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
+            className="w-full max-w-[360px] sm:max-w-[440px] p-6 sm:p-14 relative z-10 rounded-[28px] sm:rounded-[48px] bg-transparent sm:bg-black/35 backdrop-blur-none sm:backdrop-blur-xl border-none sm:border sm:border-white/10 shadow-none sm:shadow-[0_25px_60px_rgba(0,0,0,0.7)]"
           >
             {/* Mobile Header Branding */}
             <div className="lg:hidden flex flex-col items-center mb-6 text-center">
