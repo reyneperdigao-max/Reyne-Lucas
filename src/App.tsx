@@ -1774,7 +1774,7 @@ export default function App() {
   };
 
   const getClientScoreData = (score: number) => {
-    if (score >= 800) {
+    if (score >= 850) {
       return {
         label: 'Excelente',
         color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
@@ -1782,7 +1782,7 @@ export default function App() {
         bgColor: 'bg-emerald-500/10'
       };
     }
-    if (score >= 600) {
+    if (score >= 700) {
       return {
         label: 'Bom',
         color: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
@@ -1790,7 +1790,7 @@ export default function App() {
         bgColor: 'bg-cyan-500/10'
       };
     }
-    if (score >= 400) {
+    if (score >= 500) {
       return {
         label: 'Regular',
         color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
@@ -2857,18 +2857,36 @@ export default function App() {
       clientMap.set(loan.clientName, existing);
     });
 
-    // Calculate dynamic credit score for each client
+    // Calculate dynamic credit score for each client (rigorous evaluation)
     clientMap.forEach(client => {
-      let scoreVal = 700; // base score
+      // Base score for new clients with no loan history starts at 500 (Regular baseline)
+      let scoreVal = 500;
       
-      if (client.totalLoans === 0) {
-        scoreVal = 750;
-      } else {
-        scoreVal += client.paidCount * 45;
-        scoreVal += client.pendingCount * 15;
+      if (client.totalLoans > 0) {
+        // Base score for clients with active history
+        scoreVal = 550;
+
+        // Reward for fully paid contracts (+35 points per paid loan)
+        scoreVal += client.paidCount * 35;
+        
+        // Active pending loan count deduction (-10 points per active loan)
+        scoreVal -= client.pendingCount * 10;
+        
+        // Active debt burden penalty (-20 points per R$ 1.000 in active debt)
+        if (client.activeDebt > 0) {
+          scoreVal -= Math.floor(client.activeDebt / 1000) * 20;
+        }
+
+        // Severe penalty for overdue / delayed payments (-250 points per overdue loan)
         if (client.overdueCount > 0) {
-          scoreVal -= client.overdueCount * 220;
-          scoreVal = Math.min(scoreVal, 550);
+          scoreVal -= client.overdueCount * 250;
+          // Strictly cap score at max 400 if there is any overdue contract
+          scoreVal = Math.min(scoreVal, 400);
+        }
+        
+        // Strict cap at 250 (High Risk) for multiple overdue contracts
+        if (client.overdueCount >= 2) {
+          scoreVal = Math.min(scoreVal, 250);
         }
       }
       
@@ -3007,20 +3025,10 @@ export default function App() {
   }, [loans, actions, userProfile]);
 
   const monthlyReportStats = useMemo(() => {
-    // If there is an archived closure for this specific month & year, use its saved stats
-    const archivedClosure = [...monthlyClosures].find(c => c.month === reportMonth && c.year === reportYear);
-    if (archivedClosure && archivedClosure.stats) {
-      return {
-        totalLent: archivedClosure.stats.totalLent || 0,
-        totalPayments: archivedClosure.stats.totalPayments || 0,
-        capitalPayments: archivedClosure.stats.capitalPayments || 0,
-        interestPayments: archivedClosure.stats.interestPayments || 0,
-        currentOutstanding: archivedClosure.stats.currentOutstanding || 0,
-        estimatedInterest: archivedClosure.stats.estimatedInterest || 0,
-        loanCount: archivedClosure.stats.loanCount || 0,
-        paymentCount: archivedClosure.stats.paymentCount || 0
-      };
-    }
+    // Active loans (not fully paid and not scheduled)
+    const activeLoansList = loans.filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado');
+    const pendingCapital = Math.round(activeLoansList.reduce((acc, curr) => acc + (curr.capital || 0), 0) * 100) / 100;
+    const currentOutstanding = Math.round(activeLoansList.reduce((acc, curr) => acc + Math.max(0, (curr.totalBruto - (curr.capitalPago || 0))), 0) * 100) / 100;
 
     const periodActions = actions.filter(a => {
       const d = toDate(a.date);
@@ -3044,14 +3052,32 @@ export default function App() {
     const interestPayments = Math.round(paymentActions
       .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
 
-    // Outstanding balance is everything not paid yet as of now
-    const currentOutstanding = Math.round(loans
-      .filter(l => (l.status !== 'Pago' || l.capital > 0) && l.status !== 'Agendado')
-      .reduce((acc, curr) => acc + (curr.totalBruto - (curr.capitalPago || 0)), 0) * 100) / 100;
-
     const estimatedInterest = Math.round(loans
       .filter(l => l.status !== 'Agendado')
       .reduce((acc, curr) => acc + (curr.capital * (curr.interestRate || 0)), 0) * 100) / 100;
+
+    // Remaining monthly interest to be received in the current report cycle
+    const pendingInterest = Math.max(0, Math.round((estimatedInterest - interestPayments) * 100) / 100);
+
+    // If there is an archived closure for this specific month & year, use its saved stats
+    const archivedClosure = [...monthlyClosures].find(c => c.month === reportMonth && c.year === reportYear);
+    if (archivedClosure && archivedClosure.stats) {
+      const savedInterestPayments = archivedClosure.stats.interestPayments || 0;
+      const savedEstimatedInterest = archivedClosure.stats.estimatedInterest || 0;
+      const savedPendingInterest = Math.max(0, Math.round((savedEstimatedInterest - savedInterestPayments) * 100) / 100);
+      return {
+        totalLent: archivedClosure.stats.totalLent || 0,
+        totalPayments: archivedClosure.stats.totalPayments || 0,
+        capitalPayments: archivedClosure.stats.capitalPayments || 0,
+        interestPayments: savedInterestPayments,
+        currentOutstanding: archivedClosure.stats.currentOutstanding || currentOutstanding,
+        estimatedInterest: savedEstimatedInterest,
+        loanCount: archivedClosure.stats.loanCount || 0,
+        paymentCount: archivedClosure.stats.paymentCount || 0,
+        pendingCapital,
+        pendingInterest: savedPendingInterest
+      };
+    }
 
     return {
       totalLent,
@@ -3060,6 +3086,8 @@ export default function App() {
       interestPayments,
       currentOutstanding,
       estimatedInterest,
+      pendingCapital,
+      pendingInterest,
       loanCount: releasedActions.length,
       paymentCount: paymentActions.length
     };
@@ -4699,7 +4727,7 @@ export default function App() {
                                        className="h-full rounded-full transition-all"
                                        style={{ 
                                          width: `${(client.score / 1000) * 100}%`,
-                                         backgroundColor: client.score >= 800 ? '#10b981' : client.score >= 600 ? '#06b6d4' : client.score >= 400 ? '#f59e0b' : '#f43f5e'
+                                         backgroundColor: client.score >= 850 ? '#10b981' : client.score >= 700 ? '#06b6d4' : client.score >= 500 ? '#f59e0b' : '#f43f5e'
                                        }}
                                      />
                                    </div>
@@ -5445,28 +5473,53 @@ export default function App() {
                             </div>
 
                             {/* Clean Stats Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-14">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
                               {[
                                 { label: 'Capital Liberado', value: monthlyReportStats.totalLent, sub: `${monthlyReportStats.loanCount} Contratos`, color: 'slate-900' },
                                 { label: 'Total Recebido', value: monthlyReportStats.totalPayments, sub: `${monthlyReportStats.paymentCount} Transações`, color: 'emerald-600' },
+                                { label: 'Falta Receber (Juros)', value: monthlyReportStats.pendingInterest, sub: 'Juros do Mês Pendentes', color: 'rose-600' },
                                 { label: 'Lucro (Juros)', value: monthlyReportStats.interestPayments, sub: 'Rendimentos Reais', color: 'emerald-600' },
                                 { label: 'Renda Estimada', value: monthlyReportStats.estimatedInterest, sub: 'Expectativa de Juros', color: 'amber-600' },
-                                { label: 'Saldo Ativo', value: monthlyReportStats.currentOutstanding, sub: 'Em Aberto', color: 'slate-900' }
+                                { label: 'Capital Aberto', value: monthlyReportStats.pendingCapital || 0, sub: 'Principal a Cobrar', color: 'slate-900' }
                               ].map((stat, i) => (
-                                <div key={i} className="border p-6 rounded-xl flex flex-col justify-between items-center text-center bg-white border-slate-100">
+                                <div key={i} className={cn(
+                                  "border p-5 rounded-2xl flex flex-col justify-between items-center text-center bg-white border-slate-100 shadow-sm",
+                                  stat.color === 'rose-600' ? "border-rose-200 bg-rose-50/30" : ""
+                                )}>
                                   <span className="text-[9px] font-black uppercase tracking-widest mb-3 text-slate-400">{stat.label}</span>
                                   <div>
                                     <div className={cn(
-                                      "text-xl font-black tracking-tight", 
+                                      "text-lg sm:text-xl font-black tracking-tight font-mono", 
                                       stat.color === 'emerald-600' ? "text-emerald-600" : 
-                                      stat.color === 'amber-600' ? "text-amber-600" : "text-slate-900"
+                                      stat.color === 'amber-600' ? "text-amber-600" : 
+                                      stat.color === 'rose-600' ? "text-rose-600" : "text-slate-900"
                                     )}>
                                       {formatCurrency(stat.value)}
                                     </div>
-                                    <span className={cn("text-[8px] font-bold uppercase tracking-wider mt-1", isDark ? "text-white/20" : "text-slate-300")}>{stat.sub}</span>
+                                    <span className="text-[8px] font-bold uppercase tracking-wider mt-1 block text-slate-400">{stat.sub}</span>
                                   </div>
                                 </div>
                               ))}
+                            </div>
+
+                            {/* Highlighted Banner for Valor que Falta Receber (Juros do Mês) */}
+                            <div className="mb-14 p-6 sm:p-8 rounded-[28px] bg-slate-900 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-xl">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                                  <span className="text-[9px] font-black uppercase tracking-[0.25em] text-rose-400">Detalhamento de Rendimentos</span>
+                                </div>
+                                <h4 className="text-base sm:text-lg font-black tracking-tight uppercase">Juros do Mês que Falta Receber</h4>
+                                <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
+                                  Soma pendente referente exclusivamente aos juros do mês atual (Renda Estimada de Juros do Mês − Juros Já Recebidos).
+                                </p>
+                              </div>
+                              <div className="text-left sm:text-right bg-white/10 p-5 rounded-2xl border border-white/10 w-full sm:w-auto shrink-0">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-300 block mb-1">Juros Pendentes do Mês</span>
+                                <span className="text-2xl sm:text-3xl font-black text-rose-400 font-mono tracking-tight">
+                                  {formatCurrency(monthlyReportStats.pendingInterest)}
+                                </span>
+                              </div>
                             </div>
 
                              {/* Performance Chart & Distribution Section */}
@@ -7932,7 +7985,7 @@ export default function App() {
                         className="h-full rounded-full transition-all duration-500"
                         style={{ 
                           width: `${(viewingClientDetail.score / 1000) * 100}%`,
-                          backgroundColor: viewingClientDetail.score >= 800 ? '#10b981' : viewingClientDetail.score >= 600 ? '#06b6d4' : viewingClientDetail.score >= 400 ? '#f59e0b' : '#f43f5e'
+                          backgroundColor: viewingClientDetail.score >= 850 ? '#10b981' : viewingClientDetail.score >= 700 ? '#06b6d4' : viewingClientDetail.score >= 500 ? '#f59e0b' : '#f43f5e'
                         }}
                       />
                     </div>
