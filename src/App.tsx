@@ -1774,7 +1774,7 @@ export default function App() {
   };
 
   const getClientScoreData = (score: number) => {
-    if (score >= 850) {
+    if (score >= 800) {
       return {
         label: 'Excelente',
         color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
@@ -1782,7 +1782,7 @@ export default function App() {
         bgColor: 'bg-emerald-500/10'
       };
     }
-    if (score >= 700) {
+    if (score >= 600) {
       return {
         label: 'Bom',
         color: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
@@ -1790,7 +1790,7 @@ export default function App() {
         bgColor: 'bg-cyan-500/10'
       };
     }
-    if (score >= 500) {
+    if (score >= 400) {
       return {
         label: 'Regular',
         color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
@@ -2857,36 +2857,15 @@ export default function App() {
       clientMap.set(loan.clientName, existing);
     });
 
-    // Calculate dynamic credit score for each client (rigorous evaluation)
+    // Calculate dynamic credit score for each client based on payment history
     clientMap.forEach(client => {
-      // Base score for new clients with no loan history starts at 500 (Regular baseline)
-      let scoreVal = 500;
+      let scoreVal = 700; // Base score
       
       if (client.totalLoans > 0) {
-        // Base score for clients with active history
-        scoreVal = 550;
-
-        // Reward for fully paid contracts (+35 points per paid loan)
-        scoreVal += client.paidCount * 35;
-        
-        // Active pending loan count deduction (-10 points per active loan)
-        scoreVal -= client.pendingCount * 10;
-        
-        // Active debt burden penalty (-20 points per R$ 1.000 in active debt)
-        if (client.activeDebt > 0) {
-          scoreVal -= Math.floor(client.activeDebt / 1000) * 20;
-        }
-
-        // Severe penalty for overdue / delayed payments (-250 points per overdue loan)
+        scoreVal += client.paidCount * 45; // Reward per completed payment/contract
+        scoreVal += client.pendingCount * 15; // Active credit relationship
         if (client.overdueCount > 0) {
-          scoreVal -= client.overdueCount * 250;
-          // Strictly cap score at max 400 if there is any overdue contract
-          scoreVal = Math.min(scoreVal, 400);
-        }
-        
-        // Strict cap at 250 (High Risk) for multiple overdue contracts
-        if (client.overdueCount >= 2) {
-          scoreVal = Math.min(scoreVal, 250);
+          scoreVal -= client.overdueCount * 110; // Moderate deduction for overdue contracts
         }
       }
       
@@ -4727,7 +4706,7 @@ export default function App() {
                                        className="h-full rounded-full transition-all"
                                        style={{ 
                                          width: `${(client.score / 1000) * 100}%`,
-                                         backgroundColor: client.score >= 850 ? '#10b981' : client.score >= 700 ? '#06b6d4' : client.score >= 500 ? '#f59e0b' : '#f43f5e'
+                                         backgroundColor: client.score >= 800 ? '#10b981' : client.score >= 600 ? '#06b6d4' : client.score >= 400 ? '#f59e0b' : '#f43f5e'
                                        }}
                                      />
                                    </div>
@@ -7985,7 +7964,7 @@ export default function App() {
                         className="h-full rounded-full transition-all duration-500"
                         style={{ 
                           width: `${(viewingClientDetail.score / 1000) * 100}%`,
-                          backgroundColor: viewingClientDetail.score >= 850 ? '#10b981' : viewingClientDetail.score >= 700 ? '#06b6d4' : viewingClientDetail.score >= 500 ? '#f59e0b' : '#f43f5e'
+                          backgroundColor: viewingClientDetail.score >= 800 ? '#10b981' : viewingClientDetail.score >= 600 ? '#06b6d4' : viewingClientDetail.score >= 400 ? '#f59e0b' : '#f43f5e'
                         }}
                       />
                     </div>
