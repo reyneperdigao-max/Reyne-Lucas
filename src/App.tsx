@@ -1773,6 +1773,53 @@ export default function App() {
     }
   };
 
+  const formatPhoneInput = (value: string) => {
+    if (!value) return '';
+    const trimmed = value.trim();
+    const hasPlus = trimmed.startsWith('+');
+    let digits = value.replace(/\D/g, '');
+
+    if (digits.length === 0) return hasPlus ? '+' : '';
+
+    // E.164 max length is 15 digits
+    if (digits.length > 15) digits = digits.substring(0, 15);
+
+    // Check if international (has '+', or starts with '55' and has >= 12 digits, or digits > 11)
+    const isInternational = hasPlus || (digits.length >= 12 && digits.startsWith('55')) || (digits.length > 11);
+
+    if (isInternational) {
+      if (digits.startsWith('55')) {
+        const ddi = '55';
+        const rest = digits.substring(2);
+        if (rest.length === 0) return `+${ddi}`;
+        if (rest.length <= 2) return `+${ddi} (${rest}`;
+        if (rest.length <= 6) return `+${ddi} (${rest.substring(0, 2)}) ${rest.substring(2)}`;
+        if (rest.length <= 10) return `+${ddi} (${rest.substring(0, 2)}) ${rest.substring(2, 6)}-${rest.substring(6)}`;
+        return `+${ddi} (${rest.substring(0, 2)}) ${rest.substring(2, 7)}-${rest.substring(7, 11)}`;
+      } else {
+        // Non-BR country code
+        if (digits.length <= 3) return `+${digits}`;
+        if (digits.length <= 5) return `+${digits.substring(0, 2)} (${digits.substring(2)}`;
+        if (digits.length <= 9) return `+${digits.substring(0, 2)} (${digits.substring(2, 4)}) ${digits.substring(4)}`;
+        if (digits.length <= 13) return `+${digits.substring(0, 2)} (${digits.substring(2, 4)}) ${digits.substring(4, 9)}-${digits.substring(9)}`;
+        return `+${digits.substring(0, 2)} (${digits.substring(2, 4)}) ${digits.substring(4, 9)}-${digits.substring(9, 13)}`;
+      }
+    }
+
+    // Standard 10 or 11 digits national phone
+    if (digits.length > 10) {
+      return `(${digits.substring(0, 2)}) ${digits.substring(2, 7)}-${digits.substring(7)}`;
+    } else if (digits.length > 6) {
+      return `(${digits.substring(0, 2)}) ${digits.substring(2, 6)}-${digits.substring(6)}`;
+    } else if (digits.length > 2) {
+      return `(${digits.substring(0, 2)}) ${digits.substring(2)}`;
+    } else if (digits.length > 0) {
+      return `(${digits}`;
+    }
+
+    return digits;
+  };
+
   const getClientScoreData = (score: number) => {
     if (score >= 800) {
       return {
@@ -6920,21 +6967,11 @@ export default function App() {
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Número de Telefone</label>
                     <input 
                       type="text"
-                      placeholder="(00) 00000-0000"
+                      placeholder="+55 (00) 00000-0000"
                       className="w-full glass-input py-3 sm:py-4"
                       value={newLoan.clientPhone || ""}
                       onChange={(e) => {
-                        let val = e.target.value.replace(/\D/g, '');
-                        if (val.length > 11) val = val.substring(0, 11);
-                        if (val.length > 10) {
-                          val = `(${val.substring(0, 2)}) ${val.substring(2, 7)}-${val.substring(7)}`;
-                        } else if (val.length > 6) {
-                          val = `(${val.substring(0, 2)}) ${val.substring(2, 6)}-${val.substring(6)}`;
-                        } else if (val.length > 2) {
-                          val = `(${val.substring(0, 2)}) ${val.substring(2)}`;
-                        } else if (val.length > 0) {
-                          val = `(${val}`;
-                        }
+                        const val = formatPhoneInput(e.target.value);
                         setNewLoan({...newLoan, clientPhone: val});
                       }}
                     />
@@ -7994,9 +8031,9 @@ export default function App() {
                           <input 
                             type="text"
                             value={editClientData.phone}
-                            onChange={(e) => setEditClientData(prev => ({ ...prev, phone: e.target.value }))}
+                            onChange={(e) => setEditClientData(prev => ({ ...prev, phone: formatPhoneInput(e.target.value) }))}
                             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-brand-primary outline-none transition-all"
-                            placeholder="Telefone"
+                            placeholder="+55 (00) 00000-0000"
                           />
                         ) : (
                           <p className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-slate-900")}>
