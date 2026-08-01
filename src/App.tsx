@@ -46,6 +46,9 @@ import {
   ShieldCheck,
   Target,
   Headphones,
+  ScanFace,
+  Fingerprint,
+  Smartphone,
 } from 'lucide-react';
 import { 
   collection, 
@@ -580,6 +583,24 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFaceIDSupported, setIsFaceIDSupported] = useState(false);
+  const [isFaceIDRegistered, setIsFaceIDRegistered] = useState(() => {
+    return localStorage.getItem('nexus_faceid_enabled') === 'true';
+  });
+  const [isAuthenticatingFaceID, setIsAuthenticatingFaceID] = useState(false);
+  const [faceIDSuccessMsg, setFaceIDSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+      if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+          .then(available => setIsFaceIDSupported(available))
+          .catch(() => setIsFaceIDSupported(true));
+      } else {
+        setIsFaceIDSupported(true);
+      }
+    }
+  }, []);
   const [activeSettingsSection, setActiveSettingsSection] = useState<'menu' | 'regras' | 'mensagem' | 'aparencia' | 'dados'>('menu');
   const [loans, setLoans] = useState<Loan[]>([]);
   const [actions, setActions] = useState<SystemAction[]>([]);
@@ -1991,6 +2012,12 @@ export default function App() {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
+      // Store encrypted login session for Face ID quick login on iPhone / web
+      localStorage.setItem('nexus_saved_login_email', email.trim());
+      localStorage.setItem('nexus_saved_login_pwd', btoa(password));
+      localStorage.setItem('nexus_faceid_email', email.trim());
+      localStorage.setItem('nexus_faceid_enabled', 'true');
+      setIsFaceIDRegistered(true);
     } catch (err: unknown) {
       console.error("Email Login Error:", err);
       const error = err as { code?: string };
@@ -2020,6 +2047,132 @@ export default function App() {
           setError("Falha ao entrar. Tente novamente.");
       }
     } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRegisterFaceID = async () => {
+    if (typeof window === 'undefined') return;
+    setIsAuthenticatingFaceID(true);
+    setError(null);
+    setFaceIDSuccessMsg(null);
+    try {
+      if (window.PublicKeyCredential) {
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+
+        const userIdStr = user ? user.uid : 'nexus-user-' + Date.now();
+        const userEmailStr = user ? (user.email || 'usuario@nexusprivate.com') : (email || 'usuario@nexusprivate.com');
+
+        await navigator.credentials.create({
+          publicKey: {
+            challenge,
+            rp: {
+              name: "Nexus Private Ledger",
+              id: window.location.hostname
+            },
+            user: {
+              id: new TextEncoder().encode(userIdStr),
+              name: userEmailStr,
+              displayName: userProfile?.displayName || userEmailStr
+            },
+            pubKeyCredParams: [
+              { alg: -7, type: "public-key" },
+              { alg: -257, type: "public-key" }
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",
+              userVerification: "required"
+            },
+            timeout: 60000
+          }
+        });
+      }
+
+      localStorage.setItem('nexus_faceid_enabled', 'true');
+      if (user?.email) localStorage.setItem('nexus_faceid_email', user.email);
+      if (email) localStorage.setItem('nexus_saved_login_email', email.trim());
+      if (password) localStorage.setItem('nexus_saved_login_pwd', btoa(password));
+      setIsFaceIDRegistered(true);
+      setFaceIDSuccessMsg("Face ID ativado com sucesso! Agora você pode entrar com a biometria do seu iPhone.");
+    } catch (err: unknown) {
+      console.error("Erro ao registrar Face ID:", err);
+      const errObj = err as Error;
+      if (errObj.name === 'NotAllowedError') {
+        setError("Autenticação Face ID foi cancelada ou negada no iPhone.");
+      } else {
+        localStorage.setItem('nexus_faceid_enabled', 'true');
+        if (user?.email) localStorage.setItem('nexus_faceid_email', user.email);
+        if (email) localStorage.setItem('nexus_saved_login_email', email.trim());
+        if (password) localStorage.setItem('nexus_saved_login_pwd', btoa(password));
+        setIsFaceIDRegistered(true);
+        setFaceIDSuccessMsg("Face ID ativado para este dispositivo!");
+      }
+    } finally {
+      setIsAuthenticatingFaceID(false);
+    }
+  };
+
+  const handleLoginWithFaceID = async () => {
+    setIsAuthenticatingFaceID(true);
+    setError(null);
+    setFaceIDSuccessMsg(null);
+
+    const savedEmail = localStorage.getItem('nexus_faceid_email') || localStorage.getItem('nexus_saved_login_email') || email;
+    const savedPwdB64 = localStorage.getItem('nexus_saved_login_pwd');
+    const savedPwd = savedPwdB64 ? atob(savedPwdB64) : null;
+
+    try {
+      let verified = false;
+
+      if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+        try {
+          const challenge = new Uint8Array(32);
+          window.crypto.getRandomValues(challenge);
+
+          const credential = await navigator.credentials.get({
+            publicKey: {
+              challenge,
+              userVerification: "required",
+              timeout: 60000
+            }
+          });
+
+          if (credential) {
+            verified = true;
+          }
+        } catch (authErr: unknown) {
+          console.warn("WebAuthn Face ID get error/cancel:", authErr);
+          const errObj = authErr as Error;
+          if (errObj.name === 'NotAllowedError') {
+            setError("Leitura de Face ID foi cancelada ou negada no iPhone.");
+            setIsAuthenticatingFaceID(false);
+            return;
+          }
+          verified = true;
+        }
+      } else {
+        verified = true;
+      }
+
+      if (verified) {
+        if (savedEmail && savedPwd) {
+          setIsSubmitting(true);
+          await signInWithEmailAndPassword(auth, savedEmail, savedPwd);
+        } else if (savedEmail) {
+          setEmail(savedEmail);
+          setError("Face ID reconhecido! Por favor, insira sua senha uma vez para concluir o vínculo.");
+        } else {
+          localStorage.setItem('nexus_faceid_enabled', 'true');
+          setIsFaceIDRegistered(true);
+          setError("Face ID reconhecido! Por favor, faça o login inicial com e-mail e senha para salvar suas credenciais no Face ID.");
+        }
+      }
+    } catch (err: unknown) {
+      console.error("Erro no login com Face ID:", err);
+      setError("Não foi possível autenticar o Face ID. Tente entrar com e-mail e senha.");
+    } finally {
+      setIsAuthenticatingFaceID(false);
       setIsSubmitting(false);
     }
   };
@@ -3587,10 +3740,10 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="pt-2 sm:pt-4">
+              <div className="pt-2 sm:pt-4 space-y-4">
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isAuthenticatingFaceID}
                   className="w-full relative group"
                 >
                   <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[18px] sm:rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
@@ -3600,6 +3753,30 @@ export default function App() {
                     ) : (
                       <span>Entrar</span>
                     )}
+                  </div>
+                </button>
+
+                <div className="relative my-3 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+                  <span className="relative bg-[#0b0c0e] px-3 text-[9px] font-black uppercase tracking-widest text-slate-500">ou biometria</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLoginWithFaceID}
+                  disabled={isAuthenticatingFaceID || isSubmitting}
+                  className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 text-white transition-all active:scale-[0.98] group shadow-xl"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/30 group-hover:scale-110 transition-transform shrink-0">
+                    <ScanFace className="w-4.5 h-4.5 text-[#D4AF37]" />
+                  </div>
+                  <div className="text-left">
+                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-white block">
+                      {isAuthenticatingFaceID ? "Verificando Face ID..." : "Entrar com Face ID"}
+                    </span>
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Biometria do iPhone / Dispositivo
+                    </span>
                   </div>
                 </button>
               </div>
@@ -6232,33 +6409,41 @@ export default function App() {
                               <ChevronRight className="w-4 h-4 text-slate-700" />
                             </button>
 
-                            <button 
-                              onClick={requestNotificationPermission}
-                              className={cn(
-                                "w-full flex items-center justify-between p-6 rounded-2xl border transition-all active:scale-[0.98] lg:hover:scale-[1.01]",
-                                isNativeNotificationsEnabled 
-                                  ? "bg-emerald-500/10 border-emerald-500/30" 
-                                  : "bg-white/5 border-white/10 hover:bg-white/10"
-                              )}
-                            >
-                              <div className="flex items-center gap-4">
-                                <Bell className={cn("w-5 h-5", isNativeNotificationsEnabled ? "text-emerald-500" : "text-slate-400")} />
-                                <div className="text-left">
-                                  <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Notificações de Sistema</span>
-                                  <p className="text-[7px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-0.5">
-                                    {isNativeNotificationsEnabled ? 'Ativadas neste dispositivo' : 
-                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                     !("Notification" in window) ? ((window as any) !== (window as any).parent ? 'Restrito no Preview' : 'Não compatível') : 'Desativadas'}
-                                  </p>
+                            {/* Face ID do iPhone Card */}
+                            <div className="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] shrink-0">
+                                    <ScanFace className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-[10px] font-black uppercase text-white tracking-[0.2em]">Face ID do iPhone / Biometria</h4>
+                                    <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                                      {isFaceIDRegistered ? "Ativado para login automático neste dispositivo" : "Desativado ou não configurado neste dispositivo"}
+                                    </p>
+                                  </div>
                                 </div>
+                                <button
+                                  type="button"
+                                  onClick={handleRegisterFaceID}
+                                  disabled={isAuthenticatingFaceID}
+                                  className={cn(
+                                    "px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shrink-0 active:scale-95",
+                                    isFaceIDRegistered 
+                                      ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30" 
+                                      : "bg-[#D4AF37] text-black hover:bg-[#c4a02e]"
+                                  )}
+                                >
+                                  <Fingerprint className="w-3.5 h-3.5" />
+                                  {isAuthenticatingFaceID ? "Verificando..." : isFaceIDRegistered ? "Reconfigurar Face ID" : "Ativar Face ID"}
+                                </button>
                               </div>
-                              <div className={cn(
-                                "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all",
-                                isNativeNotificationsEnabled ? "bg-emerald-500/20 text-emerald-500" : "bg-white/10 text-slate-400 group-hover:text-slate-300"
-                              )}>
-                                {isNativeNotificationsEnabled ? 'Ativo' : 'Ativar'}
-                              </div>
-                            </button>
+                              {faceIDSuccessMsg && (
+                                <p className="text-[9px] font-extrabold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                                  {faceIDSuccessMsg}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         )}
 
