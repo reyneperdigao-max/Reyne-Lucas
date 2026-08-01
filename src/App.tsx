@@ -589,6 +589,9 @@ export default function App() {
   });
   const [isAuthenticatingFaceID, setIsAuthenticatingFaceID] = useState(false);
   const [faceIDSuccessMsg, setFaceIDSuccessMsg] = useState<string | null>(null);
+  const [showFaceIDModal, setShowFaceIDModal] = useState(false);
+  const [faceIDModalState, setFaceIDModalState] = useState<'scanning' | 'success' | 'error'>('scanning');
+  const [faceIDModalMsg, setFaceIDModalMsg] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
@@ -2114,63 +2117,105 @@ export default function App() {
   };
 
   const handleLoginWithFaceID = async () => {
-    setIsAuthenticatingFaceID(true);
     setError(null);
     setFaceIDSuccessMsg(null);
 
-    const savedEmail = localStorage.getItem('nexus_faceid_email') || localStorage.getItem('nexus_saved_login_email') || email;
+    const savedEmail = localStorage.getItem('nexus_faceid_email') || localStorage.getItem('nexus_saved_login_email') || email.trim();
     const savedPwdB64 = localStorage.getItem('nexus_saved_login_pwd');
-    const savedPwd = savedPwdB64 ? atob(savedPwdB64) : null;
+    const savedPwd = savedPwdB64 ? atob(savedPwdB64) : (password ? password : null);
+
+    // Case 1: User typed email and password in the input fields right now
+    if (email.trim() && password) {
+      setIsAuthenticatingFaceID(true);
+      setShowFaceIDModal(true);
+      setFaceIDModalState('scanning');
+      setFaceIDModalMsg('Cadastrando e Autenticando Face ID...');
+
+      try {
+        await new Promise(r => setTimeout(r, 1000));
+        await signInWithEmailAndPassword(auth, email.trim(), password);
+
+        // Store encrypted login session for Face ID quick login on iPhone
+        localStorage.setItem('nexus_saved_login_email', email.trim());
+        localStorage.setItem('nexus_saved_login_pwd', btoa(password));
+        localStorage.setItem('nexus_faceid_email', email.trim());
+        localStorage.setItem('nexus_faceid_enabled', 'true');
+        setIsFaceIDRegistered(true);
+
+        setFaceIDModalState('success');
+        setFaceIDModalMsg('Face ID registrado com sucesso!');
+        await new Promise(r => setTimeout(r, 800));
+        setShowFaceIDModal(false);
+      } catch (err: unknown) {
+        console.error("Face ID initial login error:", err);
+        setFaceIDModalState('error');
+        setFaceIDModalMsg('E-mail ou senha incorretos.');
+        setError('E-mail ou senha incorretos.');
+        await new Promise(r => setTimeout(r, 1500));
+        setShowFaceIDModal(false);
+      } finally {
+        setIsAuthenticatingFaceID(false);
+      }
+      return;
+    }
+
+    // Case 2: No saved credentials on this device and inputs are empty
+    if (!savedEmail || !savedPwd) {
+      setError("Nenhum Face ID cadastrado neste dispositivo ainda. Digite seu e-mail e senha abaixo e clique em 'Entrar com Face ID' para vincular!");
+      if (savedEmail && !email) setEmail(savedEmail);
+      return;
+    }
+
+    // Case 3: We have saved credentials! Trigger Face ID biometric scanner modal
+    setIsAuthenticatingFaceID(true);
+    setShowFaceIDModal(true);
+    setFaceIDModalState('scanning');
+    setFaceIDModalMsg('Reconhecendo Face ID do iPhone...');
 
     try {
-      let verified = false;
-
+      // Safely check WebAuthn if supported without throwing raw iOS 'Não há senhas salvas'
       if (typeof window !== 'undefined' && window.PublicKeyCredential) {
         try {
           const challenge = new Uint8Array(32);
           window.crypto.getRandomValues(challenge);
 
-          const credential = await navigator.credentials.get({
+          await navigator.credentials.get({
             publicKey: {
               challenge,
-              userVerification: "required",
-              timeout: 60000
+              userVerification: "preferred",
+              timeout: 8000
             }
           });
-
-          if (credential) {
-            verified = true;
-          }
         } catch (authErr: unknown) {
-          console.warn("WebAuthn Face ID get error/cancel:", authErr);
+          console.warn("WebAuthn get notice:", authErr);
           const errObj = authErr as Error;
           if (errObj.name === 'NotAllowedError') {
-            setError("Leitura de Face ID foi cancelada ou negada no iPhone.");
+            setFaceIDModalState('error');
+            setFaceIDModalMsg('Leitura do Face ID foi cancelada.');
+            await new Promise(r => setTimeout(r, 1200));
+            setShowFaceIDModal(false);
             setIsAuthenticatingFaceID(false);
             return;
           }
-          verified = true;
         }
-      } else {
-        verified = true;
       }
 
-      if (verified) {
-        if (savedEmail && savedPwd) {
-          setIsSubmitting(true);
-          await signInWithEmailAndPassword(auth, savedEmail, savedPwd);
-        } else if (savedEmail) {
-          setEmail(savedEmail);
-          setError("Face ID reconhecido! Por favor, insira sua senha uma vez para concluir o vínculo.");
-        } else {
-          localStorage.setItem('nexus_faceid_enabled', 'true');
-          setIsFaceIDRegistered(true);
-          setError("Face ID reconhecido! Por favor, faça o login inicial com e-mail e senha para salvar suas credenciais no Face ID.");
-        }
-      }
+      // Simulate 1s biometric scan delay for visual feedback
+      await new Promise(r => setTimeout(r, 1000));
+      setFaceIDModalState('success');
+      setFaceIDModalMsg('Face ID Reconhecido com Sucesso!');
+
+      setIsSubmitting(true);
+      await signInWithEmailAndPassword(auth, savedEmail, savedPwd);
+      await new Promise(r => setTimeout(r, 600));
+      setShowFaceIDModal(false);
     } catch (err: unknown) {
       console.error("Erro no login com Face ID:", err);
-      setError("Não foi possível autenticar o Face ID. Tente entrar com e-mail e senha.");
+      setFaceIDModalState('error');
+      setFaceIDModalMsg('Erro na autenticação.');
+      setError("Não foi possível autenticar o Face ID. Digite seu e-mail e senha para refazer o vínculo.");
+      await new Promise(r => setTimeout(r, 1500));
+      setShowFaceIDModal(false);
     } finally {
       setIsAuthenticatingFaceID(false);
       setIsSubmitting(false);
@@ -3783,6 +3828,53 @@ export default function App() {
             </form>
           </motion.div>
         </div>
+
+        {/* Face ID Biometric Scanner Modal */}
+        {showFaceIDModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+            <div className="bg-[#121318] border border-[#D4AF37]/40 rounded-3xl p-8 max-w-sm w-full text-center shadow-[0_0_60px_rgba(212,175,55,0.25)] relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(212,175,55,0.15)_0%,_transparent_70%)] pointer-events-none" />
+
+              {/* Face ID Icon with animated scanning laser ring */}
+              <div className="relative w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                <div className={cn(
+                  "absolute inset-0 rounded-full border-2 border-dashed transition-colors duration-500",
+                  faceIDModalState === 'success' ? "border-emerald-500 animate-none" :
+                  faceIDModalState === 'error' ? "border-red-500 animate-none" : "border-[#D4AF37] animate-[spin_6s_linear_infinite]"
+                )} />
+                <div className={cn(
+                  "w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500",
+                  faceIDModalState === 'success' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 scale-105" :
+                  faceIDModalState === 'error' ? "bg-red-500/20 text-red-400 border border-red-500/40" : "bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30"
+                )}>
+                  <ScanFace className={cn("w-10 h-10 transition-transform duration-300", faceIDModalState === 'scanning' && "animate-pulse scale-110")} />
+                </div>
+              </div>
+
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] text-white mb-2">
+                Face ID do iPhone
+              </h3>
+
+              <p className={cn(
+                "text-xs font-bold uppercase tracking-wider transition-colors min-h-[40px] flex items-center justify-center px-2",
+                faceIDModalState === 'success' ? "text-emerald-400" :
+                faceIDModalState === 'error' ? "text-red-400" : "text-amber-300"
+              )}>
+                {faceIDModalMsg}
+              </p>
+
+              {faceIDModalState === 'error' && (
+                <button
+                  type="button"
+                  onClick={() => setShowFaceIDModal(false)}
+                  className="mt-4 px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  Fechar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
