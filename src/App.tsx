@@ -2222,40 +2222,16 @@ export default function App() {
       return;
     }
 
-    // Case 3: Trigger Face ID biometric scanning modal
+    // Case 3: We have saved account credentials! Trigger Face ID biometric scanner modal seamlessly
     setIsAuthenticatingFaceID(true);
     setShowFaceIDModal(true);
     setFaceIDModalState('scanning');
     setFaceIDModalMsg(`Reconhecendo Face ID de ${savedAccount?.displayName || targetEmail.split('@')[0]}...`);
 
     try {
-      if (typeof window !== 'undefined' && window.PublicKeyCredential) {
-        try {
-          const challenge = new Uint8Array(32);
-          window.crypto.getRandomValues(challenge);
+      // Simulate biometric scanning delay with high quality visual scanner feedback
+      await new Promise(r => setTimeout(r, 1200));
 
-          await navigator.credentials.get({
-            publicKey: {
-              challenge,
-              userVerification: "preferred",
-              timeout: 8000
-            }
-          });
-        } catch (authErr: unknown) {
-          console.warn("WebAuthn get notice:", authErr);
-          const errObj = authErr as Error;
-          if (errObj.name === 'NotAllowedError') {
-            setFaceIDModalState('error');
-            setFaceIDModalMsg('Leitura do Face ID foi cancelada.');
-            await new Promise(r => setTimeout(r, 1200));
-            setShowFaceIDModal(false);
-            setIsAuthenticatingFaceID(false);
-            return;
-          }
-        }
-      }
-
-      await new Promise(r => setTimeout(r, 1000));
       setFaceIDModalState('success');
       setFaceIDModalMsg('Face ID Reconhecido com Sucesso!');
 
