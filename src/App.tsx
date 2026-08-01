@@ -49,6 +49,9 @@ import {
   ScanFace,
   Fingerprint,
   Smartphone,
+  UserPlus,
+  LogOut,
+  KeyRound,
 } from 'lucide-react';
 import { 
   collection, 
@@ -592,6 +595,30 @@ export default function App() {
   const [showFaceIDModal, setShowFaceIDModal] = useState(false);
   const [faceIDModalState, setFaceIDModalState] = useState<'scanning' | 'success' | 'error'>('scanning');
   const [faceIDModalMsg, setFaceIDModalMsg] = useState('');
+
+  const [savedAccount, setSavedAccount] = useState<{
+    email: string;
+    displayName: string;
+    profilePicture?: string | null;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem('nexus_saved_account_info');
+      if (raw) return JSON.parse(raw);
+      const savedEmail = localStorage.getItem('nexus_saved_login_email') || localStorage.getItem('nexus_faceid_email');
+      if (savedEmail) {
+        return {
+          email: savedEmail,
+          displayName: savedEmail.split('@')[0],
+          profilePicture: null
+        };
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  });
+  const [useDifferentAccount, setUseDifferentAccount] = useState(false);
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
@@ -1952,6 +1979,15 @@ export default function App() {
               lastClosureDate?: string | null 
             };
             setUserProfile(profile);
+            const savedName = profile.displayName || u.displayName || u.email?.split('@')[0] || 'Usuário';
+            const savedPic = profile.profilePicture || null;
+            const accInfo = {
+              email: u.email || '',
+              displayName: savedName,
+              profilePicture: savedPic
+            };
+            localStorage.setItem('nexus_saved_account_info', JSON.stringify(accInfo));
+            setSavedAccount(accInfo);
           } else {
             // Create profile if doesn't exist
             setDoc(userRef, {
@@ -2007,20 +2043,29 @@ export default function App() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    const loginEmail = (savedAccount && !useDifferentAccount) ? savedAccount.email : email.trim();
+    if (!loginEmail || !password) {
       setError("Por favor, preencha todos os campos.");
       return;
     }
     setIsSubmitting(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const cred = await signInWithEmailAndPassword(auth, loginEmail, password);
       // Store encrypted login session for Face ID quick login on iPhone / web
-      localStorage.setItem('nexus_saved_login_email', email.trim());
+      localStorage.setItem('nexus_saved_login_email', loginEmail);
       localStorage.setItem('nexus_saved_login_pwd', btoa(password));
-      localStorage.setItem('nexus_faceid_email', email.trim());
+      localStorage.setItem('nexus_faceid_email', loginEmail);
       localStorage.setItem('nexus_faceid_enabled', 'true');
       setIsFaceIDRegistered(true);
+
+      const accInfo = {
+        email: loginEmail,
+        displayName: cred.user.displayName || loginEmail.split('@')[0],
+        profilePicture: cred.user.photoURL || null
+      };
+      localStorage.setItem('nexus_saved_account_info', JSON.stringify(accInfo));
+      setSavedAccount(accInfo);
     } catch (err: unknown) {
       console.error("Email Login Error:", err);
       const error = err as { code?: string };
@@ -2120,12 +2165,15 @@ export default function App() {
     setError(null);
     setFaceIDSuccessMsg(null);
 
-    const savedEmail = localStorage.getItem('nexus_faceid_email') || localStorage.getItem('nexus_saved_login_email') || email.trim();
+    const targetEmail = (savedAccount && !useDifferentAccount)
+      ? savedAccount.email
+      : (localStorage.getItem('nexus_faceid_email') || localStorage.getItem('nexus_saved_login_email') || email.trim());
+
     const savedPwdB64 = localStorage.getItem('nexus_saved_login_pwd');
     const savedPwd = savedPwdB64 ? atob(savedPwdB64) : (password ? password : null);
 
-    // Case 1: User typed email and password in the input fields right now
-    if (email.trim() && password) {
+    // Case 1: Typing email & password manually on new account form
+    if (useDifferentAccount && email.trim() && password) {
       setIsAuthenticatingFaceID(true);
       setShowFaceIDModal(true);
       setFaceIDModalState('scanning');
@@ -2133,14 +2181,21 @@ export default function App() {
 
       try {
         await new Promise(r => setTimeout(r, 1000));
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
 
-        // Store encrypted login session for Face ID quick login on iPhone
         localStorage.setItem('nexus_saved_login_email', email.trim());
         localStorage.setItem('nexus_saved_login_pwd', btoa(password));
         localStorage.setItem('nexus_faceid_email', email.trim());
         localStorage.setItem('nexus_faceid_enabled', 'true');
         setIsFaceIDRegistered(true);
+
+        const accInfo = {
+          email: email.trim(),
+          displayName: cred.user.displayName || email.trim().split('@')[0],
+          profilePicture: cred.user.photoURL || null
+        };
+        localStorage.setItem('nexus_saved_account_info', JSON.stringify(accInfo));
+        setSavedAccount(accInfo);
 
         setFaceIDModalState('success');
         setFaceIDModalMsg('Face ID registrado com sucesso!');
@@ -2159,21 +2214,21 @@ export default function App() {
       return;
     }
 
-    // Case 2: No saved credentials on this device and inputs are empty
-    if (!savedEmail || !savedPwd) {
-      setError("Nenhum Face ID cadastrado neste dispositivo ainda. Digite seu e-mail e senha abaixo e clique em 'Entrar com Face ID' para vincular!");
-      if (savedEmail && !email) setEmail(savedEmail);
+    // Case 2: No saved credentials for target email
+    if (!targetEmail || !savedPwd) {
+      setError("Senha necessária para salvar o vínculo do Face ID. Digite sua senha abaixo.");
+      setShowPasswordInput(true);
+      if (targetEmail) setEmail(targetEmail);
       return;
     }
 
-    // Case 3: We have saved credentials! Trigger Face ID biometric scanner modal
+    // Case 3: Trigger Face ID biometric scanning modal
     setIsAuthenticatingFaceID(true);
     setShowFaceIDModal(true);
     setFaceIDModalState('scanning');
-    setFaceIDModalMsg('Reconhecendo Face ID do iPhone...');
+    setFaceIDModalMsg(`Reconhecendo Face ID de ${savedAccount?.displayName || targetEmail.split('@')[0]}...`);
 
     try {
-      // Safely check WebAuthn if supported without throwing raw iOS 'Não há senhas salvas'
       if (typeof window !== 'undefined' && window.PublicKeyCredential) {
         try {
           const challenge = new Uint8Array(32);
@@ -2200,20 +2255,20 @@ export default function App() {
         }
       }
 
-      // Simulate 1s biometric scan delay for visual feedback
       await new Promise(r => setTimeout(r, 1000));
       setFaceIDModalState('success');
       setFaceIDModalMsg('Face ID Reconhecido com Sucesso!');
 
       setIsSubmitting(true);
-      await signInWithEmailAndPassword(auth, savedEmail, savedPwd);
+      await signInWithEmailAndPassword(auth, targetEmail, savedPwd);
       await new Promise(r => setTimeout(r, 600));
       setShowFaceIDModal(false);
     } catch (err: unknown) {
       console.error("Erro no login com Face ID:", err);
       setFaceIDModalState('error');
       setFaceIDModalMsg('Erro na autenticação.');
-      setError("Não foi possível autenticar o Face ID. Digite seu e-mail e senha para refazer o vínculo.");
+      setError("Não foi possível autenticar. Insira a senha para acessar sua conta.");
+      setShowPasswordInput(true);
       await new Promise(r => setTimeout(r, 1500));
       setShowFaceIDModal(false);
     } finally {
@@ -3754,78 +3809,215 @@ export default function App() {
               </motion.div>
             )}
 
-            <form onSubmit={handleEmailLogin} className="space-y-4 sm:space-y-6">
-              <div className="space-y-1.5 sm:space-y-2">
-                <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
-                <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
-                  <input
-                    type="email"
-                    placeholder="email@nexusprivate.com"
-                    value={email || ""}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
-                    required
-                  />
-                </div>
-              </div>
+            {savedAccount && !useDifferentAccount ? (
+              /* BANCO INTER STYLE SAVED USER CARD */
+              <div className="space-y-6">
+                <div className="flex flex-col items-center text-center p-6 rounded-3xl bg-white/[0.03] border border-[#D4AF37]/30 shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(212,175,55,0.12)_0%,_transparent_75%)] pointer-events-none" />
+                  
+                  {/* Avatar or Initial */}
+                  <div className="relative mb-4">
+                    <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] via-amber-400 to-[#8a660a] shadow-[0_0_25px_rgba(212,175,55,0.3)]">
+                      <div className="w-full h-full rounded-full bg-[#121318] flex items-center justify-center overflow-hidden border-2 border-black">
+                        {savedAccount.profilePicture ? (
+                          <img src={savedAccount.profilePicture} alt={savedAccount.displayName} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-2xl font-black text-[#D4AF37] uppercase">
+                            {savedAccount.displayName.charAt(0)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#121318] border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                      <ScanFace className="w-4 h-4" />
+                    </div>
+                  </div>
 
-              <div className="space-y-1.5 sm:space-y-2">
-                <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
-                <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
-                  <input
-                    type="password"
-                    placeholder="••••••••••••"
-                    value={password || ""}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
-                    required
-                  />
-                </div>
-              </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#D4AF37]">
+                      Conta Salva
+                    </span>
+                    <h3 className="text-xl font-black text-white tracking-tight">
+                      Olá, {savedAccount.displayName}
+                    </h3>
+                    <p className="text-[11px] font-semibold text-slate-400">
+                      {savedAccount.email}
+                    </p>
+                  </div>
 
-              <div className="pt-2 sm:pt-4 space-y-4">
-                <button
-                  type="submit"
-                  disabled={isSubmitting || isAuthenticatingFaceID}
-                  className="w-full relative group"
-                >
-                  <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[18px] sm:rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
-                  <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 sm:py-5 rounded-[16px] sm:rounded-[20px] shadow-2xl hover:shadow-[#D4AF37]/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
-                    {isSubmitting ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {/* Primary Action Button: ENTRAR COM FACE ID */}
+                  <div className="w-full mt-6 space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleLoginWithFaceID}
+                      disabled={isAuthenticatingFaceID || isSubmitting}
+                      className="w-full relative group/btn"
+                    >
+                      <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[22px] blur opacity-40 group-hover/btn:opacity-75 transition duration-500" />
+                      <div className="relative w-full bg-gradient-to-br from-[#D4AF37] via-amber-500 to-[#8a660a] text-black font-black uppercase tracking-[0.15em] py-4 px-5 rounded-[20px] shadow-2xl flex items-center justify-center gap-3.5 transition-transform active:scale-[0.98]">
+                        <ScanFace className="w-6 h-6 text-black shrink-0" />
+                        <div className="text-left">
+                          <span className="text-xs sm:text-sm font-black tracking-wider text-black block leading-none">
+                            Entrar com Face ID
+                          </span>
+                          <span className="text-[8px] font-extrabold uppercase tracking-widest text-black/80 block mt-0.5">
+                            Biometria do Dispositivo
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Secondary Action: Entrar com Senha */}
+                    {!showPasswordInput ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordInput(true)}
+                        className="w-full py-3.5 px-4 rounded-[18px] bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-[#D4AF37]" />
+                        Entrar com Senha
+                      </button>
                     ) : (
-                      <span>Entrar</span>
+                      <form onSubmit={handleEmailLogin} className="space-y-3 pt-2 text-left animate-in fade-in duration-300">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                            Senha de {savedAccount.displayName}
+                          </label>
+                          <div className="relative group">
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#D4AF37]" />
+                            <input
+                              type="password"
+                              placeholder="••••••••••••"
+                              value={password || ""}
+                              onChange={(e) => setPassword(e.target.value)}
+                              className="w-full rounded-[16px] py-3 pl-12 pr-4 text-xs transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                              autoFocus
+                              required
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isSubmitting}
+                          className="w-full py-3.5 rounded-[16px] bg-[#D4AF37] hover:bg-[#c4a02e] text-black font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center"
+                        >
+                          {isSubmitting ? (
+                            <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                          ) : (
+                            "Acessar Conta"
+                          )}
+                        </button>
+                      </form>
                     )}
                   </div>
-                </button>
-
-                <div className="relative my-3 flex items-center justify-center">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
-                  <span className="relative bg-[#0b0c0e] px-3 text-[9px] font-black uppercase tracking-widest text-slate-500">ou biometria</span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleLoginWithFaceID}
-                  disabled={isAuthenticatingFaceID || isSubmitting}
-                  className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 text-white transition-all active:scale-[0.98] group shadow-xl"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/30 group-hover:scale-110 transition-transform shrink-0">
-                    <ScanFace className="w-4.5 h-4.5 text-[#D4AF37]" />
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-white block">
-                      {isAuthenticatingFaceID ? "Verificando Face ID..." : "Entrar com Face ID"}
-                    </span>
-                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Biometria do iPhone / Dispositivo
-                    </span>
-                  </div>
-                </button>
+                {/* Switch Account Link */}
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseDifferentAccount(true);
+                      setError(null);
+                    }}
+                    className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#D4AF37] transition-colors py-2 px-4 rounded-xl hover:bg-white/5"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    Trocar de conta / Entrar com outro e-mail
+                  </button>
+                </div>
               </div>
-            </form>
+            ) : (
+              /* STANDARD EMAIL + PASSWORD FORM */
+              <div>
+                {savedAccount && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUseDifferentAccount(false);
+                      setError(null);
+                    }}
+                    className="mb-6 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] hover:underline bg-[#D4AF37]/10 border border-[#D4AF37]/30 px-3.5 py-2 rounded-xl transition-all"
+                  >
+                    <UserIcon className="w-3.5 h-3.5" />
+                    Voltar para conta de {savedAccount.displayName}
+                  </button>
+                )}
+
+                <form onSubmit={handleEmailLogin} className="space-y-4 sm:space-y-6">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+                    <div className="relative group">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                      <input
+                        type="email"
+                        placeholder="email@nexusprivate.com"
+                        value={email || ""}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
+                    <div className="relative group">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                      <input
+                        type="password"
+                        placeholder="••••••••••••"
+                        value={password || ""}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 sm:pt-4 space-y-4">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || isAuthenticatingFaceID}
+                      className="w-full relative group"
+                    >
+                      <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[18px] sm:rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
+                      <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 sm:py-5 rounded-[16px] sm:rounded-[20px] shadow-2xl hover:shadow-[#D4AF37]/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
+                        {isSubmitting ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <span>Entrar</span>
+                        )}
+                      </div>
+                    </button>
+
+                    <div className="relative my-3 flex items-center justify-center">
+                      <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+                      <span className="relative bg-[#0b0c0e] px-3 text-[9px] font-black uppercase tracking-widest text-slate-500">ou biometria</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLoginWithFaceID}
+                      disabled={isAuthenticatingFaceID || isSubmitting}
+                      className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 text-white transition-all active:scale-[0.98] group shadow-xl"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/30 group-hover:scale-110 transition-transform shrink-0">
+                        <ScanFace className="w-4.5 h-4.5 text-[#D4AF37]" />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-white block">
+                          {isAuthenticatingFaceID ? "Verificando Face ID..." : "Entrar com Face ID"}
+                        </span>
+                        <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Biometria do iPhone / Dispositivo
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </motion.div>
         </div>
 
