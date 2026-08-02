@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Plus, 
@@ -637,6 +637,7 @@ export default function App() {
   });
   const [useDifferentAccount, setUseDifferentAccount] = useState(false);
   const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const hasAutoTriggeredFaceID = useRef(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
@@ -2397,6 +2398,17 @@ export default function App() {
       setIsSubmitting(false);
     }
   };
+
+  // Auto-trigger Face ID biometric scanner immediately upon opening app with saved account (Banco Inter style)
+  useEffect(() => {
+    if (isAuthReady && !user && savedAccount && !useDifferentAccount && !hasAutoTriggeredFaceID.current) {
+      hasAutoTriggeredFaceID.current = true;
+      const timer = setTimeout(() => {
+        handleLoginWithFaceID();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthReady, user, savedAccount, useDifferentAccount]);
 
 
   // Keep payingLoan in sync with loans array
