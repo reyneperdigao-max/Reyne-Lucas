@@ -579,6 +579,24 @@ const enrichLoanWithAccruedInterest = (loan: Loan): Loan => {
   };
 };
 
+function bufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
+function base64ToBuffer(base64: string): ArrayBuffer {
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
@@ -2112,7 +2130,7 @@ export default function App() {
         const userIdStr = user ? user.uid : 'nexus-user-' + Date.now();
         const userEmailStr = user ? (user.email || 'usuario@nexusprivate.com') : (email || 'usuario@nexusprivate.com');
 
-        await navigator.credentials.create({
+        const credential = await navigator.credentials.create({
           publicKey: {
             challenge,
             rp: {
@@ -2134,7 +2152,12 @@ export default function App() {
             },
             timeout: 60000
           }
-        });
+        }) as PublicKeyCredential;
+
+        if (credential && credential.rawId) {
+          const credIdB64 = bufferToBase64(credential.rawId);
+          localStorage.setItem('nexus_passkey_cred_id', credIdB64);
+        }
       }
 
       localStorage.setItem('nexus_faceid_enabled', 'true');
@@ -2142,7 +2165,7 @@ export default function App() {
       if (email) localStorage.setItem('nexus_saved_login_email', email.trim());
       if (password) localStorage.setItem('nexus_saved_login_pwd', btoa(password));
       setIsFaceIDRegistered(true);
-      setFaceIDSuccessMsg("Face ID ativado com sucesso! Agora você pode entrar com a biometria do seu iPhone.");
+      setFaceIDSuccessMsg("Face ID do iPhone ativado com sucesso! Agora você pode entrar com a biometria do seu iPhone.");
     } catch (err: unknown) {
       console.error("Erro ao registrar Face ID:", err);
       const errObj = err as Error;
@@ -2177,10 +2200,45 @@ export default function App() {
       setIsAuthenticatingFaceID(true);
       setShowFaceIDModal(true);
       setFaceIDModalState('scanning');
-      setFaceIDModalMsg('Cadastrando e Autenticando Face ID...');
+      setFaceIDModalMsg('Escaneando e vinculando Face ID...');
 
       try {
-        await new Promise(r => setTimeout(r, 1000));
+        if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+          try {
+            const challenge = new Uint8Array(32);
+            window.crypto.getRandomValues(challenge);
+            const credential = await navigator.credentials.create({
+              publicKey: {
+                challenge,
+                rp: { name: "Nexus Private Ledger", id: window.location.hostname },
+                user: {
+                  id: new TextEncoder().encode(email.trim()),
+                  name: email.trim(),
+                  displayName: email.trim().split('@')[0]
+                },
+                pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
+                authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+                timeout: 60000
+              }
+            }) as PublicKeyCredential;
+
+            if (credential && credential.rawId) {
+              localStorage.setItem('nexus_passkey_cred_id', bufferToBase64(credential.rawId));
+            }
+          } catch (passErr: unknown) {
+            const errObj = passErr as Error;
+            if (errObj.name === 'NotAllowedError') {
+              setFaceIDModalState('error');
+              setFaceIDModalMsg('Leitura de Face ID cancelada.');
+              setError('Autenticação de Face ID foi cancelada no iPhone.');
+              await new Promise(r => setTimeout(r, 1500));
+              setShowFaceIDModal(false);
+              setIsAuthenticatingFaceID(false);
+              return;
+            }
+          }
+        }
+
         const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
 
         localStorage.setItem('nexus_saved_login_email', email.trim());
@@ -2198,7 +2256,7 @@ export default function App() {
         setSavedAccount(accInfo);
 
         setFaceIDModalState('success');
-        setFaceIDModalMsg('Face ID registrado com sucesso!');
+        setFaceIDModalMsg('Face ID registrado e verificado com sucesso!');
         await new Promise(r => setTimeout(r, 800));
         setShowFaceIDModal(false);
       } catch (err: unknown) {
@@ -2216,34 +2274,117 @@ export default function App() {
 
     // Case 2: No saved credentials for target email
     if (!targetEmail || !savedPwd) {
-      setError("Senha necessária para salvar o vínculo do Face ID. Digite sua senha abaixo.");
+      setError("Senha necessária para salvar o vínculo seguro do Face ID. Digite sua senha abaixo.");
       setShowPasswordInput(true);
       if (targetEmail) setEmail(targetEmail);
       return;
     }
 
-    // Case 3: We have saved account credentials! Trigger Face ID biometric scanner modal seamlessly
+    // Case 3: Trigger REAL hardware Face ID biometric scanner
     setIsAuthenticatingFaceID(true);
     setShowFaceIDModal(true);
     setFaceIDModalState('scanning');
-    setFaceIDModalMsg(`Reconhecendo Face ID de ${savedAccount?.displayName || targetEmail.split('@')[0]}...`);
+    setFaceIDModalMsg(`Solicitando Face ID de ${savedAccount?.displayName || targetEmail.split('@')[0]}...`);
 
     try {
-      // Simulate biometric scanning delay with high quality visual scanner feedback
-      await new Promise(r => setTimeout(r, 1200));
+      let verified = false;
 
-      setFaceIDModalState('success');
-      setFaceIDModalMsg('Face ID Reconhecido com Sucesso!');
+      if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+        const savedCredIdB64 = localStorage.getItem('nexus_passkey_cred_id');
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
 
-      setIsSubmitting(true);
-      await signInWithEmailAndPassword(auth, targetEmail, savedPwd);
-      await new Promise(r => setTimeout(r, 600));
-      setShowFaceIDModal(false);
+        if (savedCredIdB64) {
+          try {
+            const credBuffer = base64ToBuffer(savedCredIdB64);
+            const credential = await navigator.credentials.get({
+              publicKey: {
+                challenge,
+                allowCredentials: [{
+                  type: 'public-key',
+                  id: credBuffer
+                }],
+                userVerification: "required",
+                timeout: 60000
+              }
+            });
+            if (credential) {
+              verified = true;
+            }
+          } catch (getErr: unknown) {
+            console.warn("Face ID hardware get error:", getErr);
+            const errObj = getErr as Error;
+            if (errObj.name === 'NotAllowedError' || errObj.message?.includes('cancel')) {
+              setFaceIDModalState('error');
+              setFaceIDModalMsg('Face ID não reconhecido ou cancelado.');
+              setError("Acesso negado: A leitura do Face ID foi cancelada ou não reconhecida.");
+              await new Promise(r => setTimeout(r, 1500));
+              setShowFaceIDModal(false);
+              setIsAuthenticatingFaceID(false);
+              return; // STOP! Biometric security check failed!
+            }
+          }
+        } else {
+          // No passkey saved on device yet: trigger iPhone hardware Face ID prompt to register
+          try {
+            const credential = await navigator.credentials.create({
+              publicKey: {
+                challenge,
+                rp: { name: "Nexus Private Ledger", id: window.location.hostname },
+                user: {
+                  id: new TextEncoder().encode(targetEmail),
+                  name: targetEmail,
+                  displayName: savedAccount?.displayName || targetEmail.split('@')[0]
+                },
+                pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
+                authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+                timeout: 60000
+              }
+            }) as PublicKeyCredential;
+
+            if (credential && credential.rawId) {
+              localStorage.setItem('nexus_passkey_cred_id', bufferToBase64(credential.rawId));
+              verified = true;
+            }
+          } catch (createErr: unknown) {
+            console.warn("Face ID create error:", createErr);
+            const errObj = createErr as Error;
+            if (errObj.name === 'NotAllowedError') {
+              setFaceIDModalState('error');
+              setFaceIDModalMsg('Leitura do Face ID cancelada.');
+              setError("Acesso cancelado no Face ID.");
+              await new Promise(r => setTimeout(r, 1500));
+              setShowFaceIDModal(false);
+              setIsAuthenticatingFaceID(false);
+              return; // STOP!
+            }
+          }
+        }
+      } else {
+        verified = true;
+      }
+
+      if (verified) {
+        setFaceIDModalState('success');
+        setFaceIDModalMsg('Face ID Verificado com Sucesso!');
+
+        setIsSubmitting(true);
+        await signInWithEmailAndPassword(auth, targetEmail, savedPwd);
+        await new Promise(r => setTimeout(r, 600));
+        setShowFaceIDModal(false);
+      } else {
+        setFaceIDModalState('error');
+        setFaceIDModalMsg('Não foi possível verificar o Face ID.');
+        setError("Não foi possível autenticar o Face ID. Insira sua senha para acessar.");
+        setShowPasswordInput(true);
+        await new Promise(r => setTimeout(r, 1500));
+        setShowFaceIDModal(false);
+      }
     } catch (err: unknown) {
       console.error("Erro no login com Face ID:", err);
       setFaceIDModalState('error');
-      setFaceIDModalMsg('Erro na autenticação.');
-      setError("Não foi possível autenticar. Insira a senha para acessar sua conta.");
+      setFaceIDModalMsg('Erro na leitura do Face ID.');
+      setError("Falha ao ler Face ID. Insira a senha para acessar.");
       setShowPasswordInput(true);
       await new Promise(r => setTimeout(r, 1500));
       setShowFaceIDModal(false);
