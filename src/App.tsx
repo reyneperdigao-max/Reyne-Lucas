@@ -597,6 +597,79 @@ function base64ToBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function NexusLogo({ className = "w-10 h-10" }: { className?: string }) {
+  return (
+    <div className={cn("relative shrink-0 flex items-center justify-center group", className)}>
+      <svg
+        viewBox="0 0 100 100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-full filter drop-shadow-[0_4px_14px_rgba(212,175,55,0.4)] transition-transform duration-300 group-hover:scale-105"
+      >
+        <defs>
+          <linearGradient id="nexusGoldPrimary" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FFF5C0" />
+            <stop offset="35%" stopColor="#FFD700" />
+            <stop offset="70%" stopColor="#D4AF37" />
+            <stop offset="100%" stopColor="#8A660A" />
+          </linearGradient>
+          <linearGradient id="nexusGoldDark" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#D4AF37" />
+            <stop offset="50%" stopColor="#664B06" />
+            <stop offset="100%" stopColor="#1A1201" />
+          </linearGradient>
+          <linearGradient id="nexusInnerGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#FFD700" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#000000" stopOpacity="0.8" />
+          </linearGradient>
+        </defs>
+
+        {/* Outer Shield Hexagon */}
+        <polygon
+          points="50,4 92,25 92,75 50,96 8,75 8,25"
+          fill="url(#nexusGoldDark)"
+          stroke="url(#nexusGoldPrimary)"
+          strokeWidth="3.5"
+          strokeLinejoin="round"
+        />
+        
+        {/* Inner Shield Facet */}
+        <polygon
+          points="50,10 85,28 85,72 50,90 15,72 15,28"
+          fill="url(#nexusInnerGlow)"
+          stroke="url(#nexusGoldPrimary)"
+          strokeWidth="1.5"
+          strokeOpacity="0.6"
+        />
+
+        {/* High-end Geometric N & P Interlocking Crest */}
+        {/* N Pillar Left */}
+        <path
+          d="M 28 28 L 37 28 L 37 72 L 28 72 Z"
+          fill="url(#nexusGoldPrimary)"
+        />
+        {/* N Diagonal */}
+        <path
+          d="M 37 28 L 59 62 L 59 72 L 50 72 L 28 39 L 28 28 Z"
+          fill="url(#nexusGoldPrimary)"
+          opacity="0.9"
+        />
+        {/* P Right Arch & Loop */}
+        <path
+          d="M 50 28 L 65 28 C 74 28 79 33 79 41 C 79 49 74 53 65 53 L 50 53 L 50 72 L 59 72 L 59 53 L 65 53 C 71 53 79 49 79 41 C 79 33 71 28 65 28 Z"
+          fill="url(#nexusGoldPrimary)"
+        />
+        
+        {/* Top Diamond Crown Accent */}
+        <polygon
+          points="50,16 57,24 50,32 43,24"
+          fill="url(#nexusGoldPrimary)"
+        />
+      </svg>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
@@ -873,7 +946,7 @@ export default function App() {
     switch (systemSettings.accentColor) {
       case 'yellow': return '#FFD700';
       case 'green': return '#39FF14';
-      case 'blue': return '#00F0FF';
+      case 'blue': return '#FFD700'; // Default to yellow/gold if blue was saved
       case 'violet': return '#8B5CF6';
       case 'red': return '#EF4444';
       default: return '#FFD700';
@@ -1902,9 +1975,9 @@ export default function App() {
     if (score >= 600) {
       return {
         label: 'Bom',
-        color: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
-        textColor: 'text-cyan-500',
-        bgColor: 'bg-cyan-500/10'
+        color: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+        textColor: 'text-amber-400',
+        bgColor: 'bg-amber-400/10'
       };
     }
     if (score >= 400) {
@@ -2491,9 +2564,13 @@ export default function App() {
           loadedOverdueTemplate = DEFAULT_SETTINGS.whatsappOverdueTemplate;
         }
 
+        const rawAccent = data.accentColor;
+        const validAccent = (rawAccent === 'blue' || !rawAccent) ? 'yellow' : rawAccent;
+
         setSystemSettings({
           ...DEFAULT_SETTINGS,
           ...data,
+          accentColor: validAccent,
           whatsappOverdueTemplate: loadedOverdueTemplate
         } as SystemSettings);
       }
@@ -3822,11 +3899,7 @@ export default function App() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               className="flex items-center gap-4"
             >
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-amber-700 flex items-center justify-center shadow-2xl shadow-[#D4AF37]/20 p-2.5">
-                <div className="w-full h-full border-2 border-white/20 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-black text-xl italic tracking-tighter">NP</span>
-                </div>
-              </div>
+              <NexusLogo className="w-13 h-13" />
               <div>
                 <h1 className="text-2xl font-black tracking-tighter uppercase leading-none text-white">Nexus Private</h1>
                 <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.4em] mt-1">Crédito e Gestão</p>
@@ -3901,9 +3974,7 @@ export default function App() {
           >
             {/* Mobile Header Branding */}
             <div className="lg:hidden flex flex-col items-center mb-6 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#8a660a] p-2.5 shadow-2xl shadow-[#D4AF37]/20 flex items-center justify-center mb-2.5">
-                <span className="text-white font-black text-lg italic tracking-tighter">NP</span>
-              </div>
+              <NexusLogo className="w-14 h-14 mb-2" />
               <h3 className="text-base font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 Nexus Private
               </h3>
@@ -4298,13 +4369,9 @@ export default function App() {
         <div className={cn("p-6 flex items-center gap-3 transition-all", isSidebarCollapsed ? "p-5 justify-center" : "")}>
           <div className="p-0.5 rounded-2xl shrink-0">
             {userProfile?.profilePicture ? (
-              <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover" alt="Logo" />
+              <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover border border-[#D4AF37]/40 shadow-md" alt="Logo" />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-700 flex items-center justify-center p-1.5 shadow-md shrink-0">
-                <div className="w-full h-full border border-white/20 rounded-md flex items-center justify-center">
-                  <span className="text-white font-black text-sm italic tracking-tighter">NP</span>
-                </div>
-              </div>
+              <NexusLogo className="w-10 h-10" />
             )}
           </div>
           {!isSidebarCollapsed && (
@@ -4529,11 +4596,7 @@ export default function App() {
                     />
                   </div>
                 ) : (
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#D4AF37] to-amber-700 flex items-center justify-center p-0.5 shadow-md border border-white/20">
-                    <div className="w-full h-full border border-white/20 rounded-full flex items-center justify-center bg-black/20">
-                      <span className="text-white font-black text-xs italic tracking-tighter">NP</span>
-                    </div>
-                  </div>
+                  <NexusLogo className="w-9 h-9" />
                 )}
               </button>
               <h1 className={cn("text-xs font-black tracking-[0.2em] uppercase ml-1", isDark ? "text-white" : "text-slate-900")}>Nexus Private</h1>
@@ -7684,7 +7747,7 @@ export default function App() {
 
                 <button 
                   type="submit"
-                  className="w-full bg-gradient-to-r from-brand-primary to-indigo-600 text-white py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all text-base sm:text-lg uppercase tracking-widest active:scale-95"
+                  className="w-full bg-gradient-to-r from-brand-primary via-amber-400 to-amber-500 text-black py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all text-base sm:text-lg uppercase tracking-widest active:scale-95"
                 >
                   {editingLoanId ? 'Salvar Alterações' : 'Confirmar Cadastro'}
                 </button>
@@ -8048,7 +8111,7 @@ export default function App() {
                             label: 'Pagar Juros e Renovar +30 dias',
                             method: 'PIX'
                           })}
-                          className="w-full py-5 bg-gradient-to-r from-brand-primary to-indigo-600 text-white rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
+                          className="w-full py-5 bg-gradient-to-r from-brand-primary via-amber-400 to-amber-500 text-black rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
                         >
                           <span className="text-sm">Pagar Juros e Renovar</span>
                           <span className="text-black font-black text-[10px] bg-white/90 px-2.5 py-1 rounded-lg uppercase tracking-tighter">
@@ -8388,19 +8451,8 @@ export default function App() {
             <div id="printable-contract" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
-                <div 
-                  className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
-                  style={{
-                    background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
-                    backgroundColor: '#D4AF37'
-                  }}
-                >
-                  <div 
-                    className="w-full h-full rounded-xl flex items-center justify-center"
-                    style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
-                  >
-                    <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
-                  </div>
+                <div className="mb-6 flex justify-center">
+                  <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(212,175,55,0.4)]" />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -8819,19 +8871,8 @@ export default function App() {
               <div id="printable-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
                 {/* Elegant Header */}
                 <div className="flex flex-col items-center mb-12 relative z-10">
-                  <div 
-                    className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
-                    style={{
-                      background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
-                      backgroundColor: '#D4AF37'
-                    }}
-                  >
-                    <div 
-                      className="w-full h-full rounded-xl flex items-center justify-center"
-                      style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
-                    >
-                      <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
-                    </div>
+                  <div className="mb-6 flex justify-center">
+                    <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(212,175,55,0.4)]" />
                   </div>
                   <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                   <div className="h-px w-12 bg-brand-primary my-4" />
@@ -8967,19 +9008,8 @@ export default function App() {
             <div id="printable-schedule-receipt" className="p-8 sm:p-16 printable-content bg-white text-slate-900">
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
-                <div 
-                  className="w-20 h-20 flex items-center justify-center rounded-3xl mb-6 shadow-xl overflow-hidden p-4"
-                  style={{
-                    background: 'linear-gradient(135deg, #D4AF37 0%, #AA7C11 100%)',
-                    backgroundColor: '#D4AF37'
-                  }}
-                >
-                  <div 
-                    className="w-full h-full rounded-xl flex items-center justify-center"
-                    style={{ border: '2px solid rgba(255, 255, 255, 0.2)' }}
-                  >
-                    <span className="text-white font-black text-2xl italic tracking-tighter">NP</span>
-                  </div>
+                <div className="mb-6 flex justify-center">
+                  <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(212,175,55,0.4)]" />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -9156,15 +9186,15 @@ export default function App() {
                   isDark ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
                 )}
               >
-                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:scale-110 transition-transform shrink-0">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
                   {copiedShareText ? (
                     <Check className="w-6 h-6 text-emerald-400" />
                   ) : (
-                    <Copy className="w-6 h-6 text-indigo-400" />
+                    <Copy className="w-6 h-6 text-amber-400" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black uppercase tracking-wider text-indigo-400 group-hover:text-indigo-300 transition-colors">
+                  <p className="text-sm font-black uppercase tracking-wider text-amber-400 group-hover:text-amber-300 transition-colors">
                     {copiedShareText ? "Copiado!" : "Copiar Texto do Comprovante"}
                   </p>
                   <p className="text-[10px] text-slate-400">Salvar dados organizados na área de transferência</p>
@@ -9258,11 +9288,11 @@ export default function App() {
                     isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/5" : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 group-hover:scale-110 transition-transform shrink-0">
-                    <Share2 className="w-6 h-6 text-blue-400" />
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
+                    <Share2 className="w-6 h-6 text-amber-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black uppercase tracking-wider text-blue-400 group-hover:text-blue-300 transition-colors">Compartilhamento do Aparelho</p>
+                    <p className="text-sm font-black uppercase tracking-wider text-amber-400 group-hover:text-amber-300 transition-colors">Compartilhamento do Aparelho</p>
                     <p className="text-[10px] text-slate-400">Usar o menu de compartilhamento padrão do sistema</p>
                   </div>
                 </button>
