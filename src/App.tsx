@@ -44,13 +44,10 @@ import {
   EyeOff,
   LayoutGrid,
   ShieldCheck,
-  Target,
   Headphones,
   ScanFace,
   Fingerprint,
-  Smartphone,
   UserPlus,
-  LogOut,
   KeyRound,
 } from 'lucide-react';
 import { 
@@ -524,6 +521,101 @@ const sanitizeCSSColorFunctions = (value: string): string => {
   });
 };
 
+const sanitizeCSSString = (css: string, accentHex = '#FFD700') => {
+  if (!css || (!css.toLowerCase().includes('oklch') && !css.toLowerCase().includes('oklab'))) {
+    return css;
+  }
+  let result = css;
+  const colorMap: Record<string, string> = {
+    'oklch(0.129 0.042 264.695)': '#0f172a',
+    'oklch(0.208 0.042 265.755)': '#1e293b',
+    'oklch(0.279 0.041 260.031)': '#334155',
+    'oklch(0.371 0.027 261.221)': '#475569',
+    'oklch(0.446 0.03 256.802)': '#64748b',
+    'oklch(0.614 0.225 25.74)': accentHex,
+    'oklch(0.615 0.165 159.252)': '#059669',
+    'oklch(0.61 0.25 24.3)': '#ff3131',
+    'oklch(0.627 0.265 14.5)': '#ff4d4d',
+    'oklch(0.704 0.191 22.216)': '#fca5a5',
+    'oklch(1 0 0)': '#ffffff',
+    'oklch(0 0 0)': '#000000',
+  };
+
+  Object.entries(colorMap).forEach(([oklch, hex]) => {
+    if (result.includes(oklch)) {
+      result = result.split(oklch).join(hex);
+    }
+  });
+
+  return sanitizeCSSColorFunctions(result);
+};
+
+function DesktopLiveClock({ isDark }: { isDark: boolean }) {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formattedDateStr = useMemo(() => {
+    const raw = format(currentTime, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }, [currentTime]);
+
+  return (
+    <div className={cn(
+      "flex items-center gap-3.5 py-2.5 px-4 rounded-2xl border backdrop-blur-xl transition-colors shadow-sm",
+      isDark ? "bg-white/[0.02] border-white/[0.06]" : "bg-slate-100/80 border-slate-200"
+    )}>
+      <div className="p-2 bg-brand-primary/15 rounded-xl border border-brand-primary/20 shrink-0">
+        <Clock className="w-4 h-4 text-brand-primary" />
+      </div>
+      <div className="flex items-center gap-3">
+        <span className={cn(
+          "text-sm font-black tracking-widest font-mono",
+          isDark ? "text-white" : "text-slate-900"
+        )}>
+          {format(currentTime, "HH:mm:ss")}
+        </span>
+        <span className={cn(
+          "w-1 h-3 rounded-full",
+          isDark ? "bg-white/20" : "bg-slate-300"
+        )} />
+        <span className={cn(
+          "text-xs font-bold capitalize tracking-wide",
+          isDark ? "text-slate-300" : "text-slate-700"
+        )}>
+          {formattedDateStr}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MobileLiveClock({ isDark }: { isDark: boolean }) {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className={cn(
+      "flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold leading-none w-fit transition-colors",
+      isDark ? "bg-white/[0.04] border-white/10 text-brand-primary" : "bg-slate-100 border-slate-200 text-slate-800"
+    )}>
+      <Clock className="w-2.5 h-2.5 text-brand-primary shrink-0" />
+      <span>{format(currentTime, "HH:mm:ss")}</span>
+      <span className={cn("w-0.5 h-2 rounded-full", isDark ? "bg-white/20" : "bg-slate-300")} />
+      <span className="font-sans text-[9px] font-bold text-slate-400 capitalize">
+        {format(currentTime, "dd MMM", { locale: ptBR })}
+      </span>
+    </div>
+  );
+}
+
 const pureToDate = (val: unknown): Date | null => {
   if (!val) return null;
   if (val instanceof Date) return val;
@@ -677,7 +769,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFaceIDSupported, setIsFaceIDSupported] = useState(false);
+  const [, setIsFaceIDSupported] = useState(false);
   const [isFaceIDRegistered, setIsFaceIDRegistered] = useState(() => {
     return localStorage.getItem('nexus_faceid_enabled') === 'true';
   });
@@ -712,6 +804,22 @@ export default function App() {
   const [showPasswordInput, setShowPasswordInput] = useState(false);
   const hasAutoTriggeredFaceID = useRef(false);
 
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobi/i.test(navigator.userAgent);
+  });
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(
+        window.innerWidth < 1024 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobi/i.test(navigator.userAgent)
+      );
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && window.PublicKeyCredential) {
       if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
@@ -740,7 +848,6 @@ export default function App() {
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
   const [visibleTransactionsCount, setVisibleTransactionsCount] = useState(50);
-  const currentDateText = useMemo(() => format(new Date(), "dd 'de' MMMM", { locale: ptBR }), []);
 
   const changeTab = (newTab: typeof activeTab) => {
     if (newTab !== activeTab) {
@@ -1050,310 +1157,38 @@ export default function App() {
     if (!element) return;
 
     setIsGeneratingPDF(true);
+
+    // Yield control to let React render loading state immediately
+    await new Promise(resolve => setTimeout(resolve, 80));
+
     let noPrintElements: NodeListOf<Element> | null = null;
     const originalDisplays: string[] = [];
 
-    const parentLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
-    const parentStyleTags = Array.from(document.querySelectorAll('style'));
-    const originalParentStyleContents = parentStyleTags.map(tag => tag.innerHTML);
-    const tempStylesToDestroy: HTMLStyleElement[] = [];
-    const disabledLinks: { link: HTMLLinkElement; originalRel: string }[] = [];
-
-    // Save original states to safely restore in finally block
-    const originalGetComputedStyle = window.getComputedStyle;
-    const originalContentWindowDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
-    const originalContentDocumentDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
-    const originalAppendChild = Element.prototype.appendChild;
-    const originalInsertBefore = Element.prototype.insertBefore;
-
-    // Helper to sanitize all CSS content of oklch/oklab to prevent html2canvas crashes
-    const sanitizeCSSString = (css: string) => {
-      let result = css;
-      const colorMap: Record<string, string> = {
-        'oklch(0.129 0.042 264.695)': '#0f172a',
-        'oklch(0.208 0.042 265.755)': '#1e293b',
-        'oklch(0.279 0.041 260.031)': '#334155',
-        'oklch(0.371 0.027 261.221)': '#475569',
-        'oklch(0.446 0.03 256.802)': '#64748b',
-        'oklch(0.614 0.225 25.74)': getAccentColorHex(),
-        'oklch(0.615 0.165 159.252)': '#059669',
-        'oklch(0.61 0.25 24.3)': '#ff3131',
-        'oklch(0.627 0.265 14.5)': '#ff4d4d',
-        'oklch(0.704 0.191 22.216)': '#fca5a5',
-        'oklch(1 0 0)': '#ffffff',
-        'oklch(0 0 0)': '#000000',
-      };
-
-      Object.entries(colorMap).forEach(([oklch, hex]) => {
-        result = result.replace(new RegExp(oklch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), hex);
-      });
-
-      // Fallback for any remaining oklch/oklab - very thorough regex
-      result = result.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
-        const matchParts = match.match(/[\d.]+/g);
-        if (matchParts && matchParts.length > 0) {
-          const l = parseFloat(matchParts[0]);
-          const gray = Math.round(Math.min(1, Math.max(0, l)) * 255);
-          const hexValue = gray.toString(16).padStart(2, '0');
-          return `#${hexValue}${hexValue}${hexValue}`;
-        }
-        return '#000000';
-      });
-
-      return result;
-    };
-
-    type PatchedWindow = Window & {
-      __getComputedStyleMocked?: boolean;
-      __cssStylePrototypesPatched?: boolean;
-      CSSStyleDeclaration?: { prototype: { getPropertyValue: (prop: string) => string } };
-      CSSRule?: { prototype: unknown };
-    };
-
-    const restoreList: { proto: unknown; prop: string; desc: PropertyDescriptor }[] = [];
-    const originalGetPropertyValueMap = new Map<unknown, (prop: string) => string>();
-
-    const patchCSSStylePrototypes = (win: PatchedWindow) => {
-      if (!win || win.__cssStylePrototypesPatched) return;
-      try {
-        win.__cssStylePrototypesPatched = true;
-        
-        // 1. Patch win.CSSStyleDeclaration.prototype gets
-        const proto = (win as unknown as { CSSStyleDeclaration?: { prototype: { getPropertyValue: (prop: string) => string } } }).CSSStyleDeclaration?.prototype;
-        if (proto) {
-          const originalGetPropertyValue = proto.getPropertyValue;
-          if (originalGetPropertyValue) {
-            originalGetPropertyValueMap.set(proto, originalGetPropertyValue);
-            proto.getPropertyValue = function (prop: string) {
-              const val = originalGetPropertyValue.call(this, prop);
-              if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
-                return sanitizeCSSColorFunctions(val);
-              }
-              return val;
-            };
-          }
-
-          Object.getOwnPropertyNames(proto).forEach((prop: string) => {
-            try {
-              const desc = Object.getOwnPropertyDescriptor(proto, prop);
-              if (desc && desc.get && typeof desc.get === 'function' && desc.configurable) {
-                const originalGet = desc.get;
-                restoreList.push({ proto, prop, desc });
-                Object.defineProperty(proto, prop, {
-                  ...desc,
-                  get() {
-                    const val = originalGet.call(this);
-                    if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
-                      return sanitizeCSSColorFunctions(val);
-                    }
-                    return val;
-                  }
-                });
-              }
-            } catch {}
-          });
-        }
-
-        // 2. Patch win.CSSRule.prototype cssText
-        const ruleProto = (win as unknown as { CSSRule?: { prototype: unknown } }).CSSRule?.prototype;
-        if (ruleProto) {
-          const desc = Object.getOwnPropertyDescriptor(ruleProto, 'cssText');
-          if (desc && desc.get && typeof desc.get === 'function' && desc.configurable) {
-            const originalGet = desc.get;
-            restoreList.push({ proto: ruleProto, prop: 'cssText', desc });
-            Object.defineProperty(ruleProto, 'cssText', {
-              ...desc,
-              get() {
-                const val = originalGet.call(this);
-                if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
-                  return sanitizeCSSString(val);
-                }
-                return val;
-              }
-            });
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to patch CSSStyle prototypes for window', err);
-      }
-    };
-
-    // Robust helper to setup proxy on getComputedStyle of any window (main or iframe contentWindow)
-    const setupIntercept = (win: PatchedWindow) => {
-      if (!win) return;
-
-      if (!win.__getComputedStyleMocked) {
-        try {
-          win.__getComputedStyleMocked = true;
-          const originalGetCS = win.getComputedStyle;
-          win.getComputedStyle = function (el: Element, pseudoEl?: string | null): CSSStyleDeclaration {
-            const style = originalGetCS(el, pseudoEl);
-            return new Proxy(style, {
-              get(target, property) {
-                if (property === 'getPropertyValue') {
-                  return function (propName: string) {
-                    const val = target.getPropertyValue(propName);
-                    if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
-                      return sanitizeCSSColorFunctions(val);
-                    }
-                    return val;
-                  };
-                }
-                const val = Reflect.get(target, property);
-                if (typeof val === 'string' && (val.toLowerCase().includes('oklch') || val.toLowerCase().includes('oklab'))) {
-                  return sanitizeCSSColorFunctions(val);
-                }
-                if (typeof val === 'function') {
-                  return val.bind(target);
-                }
-                return val;
-              }
-            }) as unknown as CSSStyleDeclaration;
-          };
-        } catch (err) {
-          console.warn('Failed to setup getComputedStyle mock', err);
-        }
-      }
-
-      patchCSSStylePrototypes(win);
-    };
-
     try {
-      // 1. Mock window.getComputedStyle with a Proxy for the main window
-      setupIntercept(window as unknown as PatchedWindow);
-
-      // 2. Overwrite prototype descriptors for iframe properties so that dynamically created iframes are intercepted
-      if (originalContentWindowDescriptor && originalContentWindowDescriptor.get) {
-        const originalGetter = originalContentWindowDescriptor.get;
-        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
-          get() {
-            const win = originalGetter.call(this);
-            if (win) setupIntercept(win as unknown as PatchedWindow);
-            return win;
-          },
-          configurable: true
-        });
-      }
-
-      if (originalContentDocumentDescriptor && originalContentDocumentDescriptor.get) {
-        const originalGetter = originalContentDocumentDescriptor.get;
-        Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
-          get() {
-            const doc = originalGetter.call(this);
-            if (doc && doc.defaultView) setupIntercept(doc.defaultView as unknown as PatchedWindow);
-            return doc;
-          },
-          configurable: true
-        });
-      }
-
-      // 3. Overwrite DOM insertion methods to immediately patch any appended iframes
-      Element.prototype.appendChild = function<T extends Node>(newChild: T): T {
-        const res = originalAppendChild.call(this, newChild);
-        if (newChild instanceof HTMLIFrameElement) {
-          try {
-            if (newChild.contentWindow) setupIntercept(newChild.contentWindow as unknown as PatchedWindow);
-          } catch {}
-        }
-        return res;
-      };
-
-      Element.prototype.insertBefore = function<T extends Node>(newChild: T, refChild: Node | null): T {
-        const res = originalInsertBefore.call(this, newChild, refChild);
-        if (newChild instanceof HTMLIFrameElement) {
-          try {
-            if (newChild.contentWindow) setupIntercept(newChild.contentWindow as unknown as PatchedWindow);
-          } catch {}
-        }
-        return res;
-      };
-
-      // Pre-fetch stylesheets to sanitize oklch/oklab before html2canvas processes link elements
-      const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
-      const linkStyleSheetsContent = await Promise.all(
-        links.map(async (link) => {
-          try {
-            const h = (link as HTMLLinkElement).href;
-            if (h.startsWith(window.location.origin) || h.startsWith('/') || !h.includes('://')) {
-              const response = await fetch(h);
-              if (response.ok) {
-                const text = await response.text();
-                return sanitizeCSSString(text);
-              }
-            }
-          } catch (err) {
-            console.warn('Failed to pre-fetch stylesheet', err);
-          }
-          return '';
-        })
-      );
-
-      // Disable live link stylesheets so html2canvas doesn't try to load their un-sanitized versions
-      parentLinks.forEach(link => {
-        const h = (link as HTMLLinkElement).href;
-        if (h.startsWith(window.location.origin) || h.startsWith('/') || !h.includes('://')) {
-          disabledLinks.push({ link: link as HTMLLinkElement, originalRel: link.getAttribute('rel') || 'stylesheet' });
-          link.setAttribute('rel', 'alternate'); // Disables the stylesheet temporarily for the browser
-        }
-      });
-
-      // Insert sanitized style blocks for those disabled links into the parent document
-      linkStyleSheetsContent.forEach(content => {
-        if (content) {
-          const s = document.createElement('style');
-          s.innerHTML = content;
-          document.head.appendChild(s);
-          tempStylesToDestroy.push(s);
-        }
-      });
-
-      // Sanitize all style tags in the parent document in-place
-      parentStyleTags.forEach(tag => {
-        try {
-          const css = tag.innerHTML;
-          if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
-            tag.innerHTML = sanitizeCSSString(css);
-          }
-        } catch (err) {
-          console.warn('Failed to sanitize live style tag', err);
-        }
-      });
-
-      // Wait for fonts to be fully loaded to ensure consistent typography
-      await document.fonts.ready;
-      
-      // Small delay to ensure all layout and styles are stabilized before capture
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Hide elements before capture
+      // Hide non-printable elements
       noPrintElements = element.querySelectorAll('.no-print, .no-print-section');
       noPrintElements.forEach(el => {
         originalDisplays.push((el as HTMLElement).style.display);
         (el as HTMLElement).style.display = 'none';
       });
 
+      // Render canvas cleanly without modifying parent window prototypes or links
       const canvas = await html2canvas(element, {
-        scale: 2, 
+        scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        imageTimeout: 15000, // Increase timeout for images
+        imageTimeout: 10000,
         onclone: (clonedDoc) => {
-          // Mock clonedDoc.defaultView style objects to dynamically intercept color requests from html2canvas within the iframe
-          if (clonedDoc.defaultView) {
-            setupIntercept(clonedDoc.defaultView as unknown as PatchedWindow);
-          }
-
-          // Remove link tags in the clone to bypass html2canvas trying to parse their un-sanitized content which crashes it
-          const clonedLinks = Array.from(clonedDoc.querySelectorAll('link[rel="stylesheet"]'));
-          clonedLinks.forEach(link => link.remove());
-
-          // Inject the pre-fetched and thoroughly sanitized sheets as style blocks
-          linkStyleSheetsContent.forEach(content => {
-            if (content) {
-              const s = clonedDoc.createElement('style');
-              s.innerHTML = content;
-              clonedDoc.head.appendChild(s);
+          // Sanitize oklch/oklab in cloned style tags
+          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
+          styleTags.forEach(tag => {
+            try {
+              if (tag.innerHTML.toLowerCase().includes('oklch') || tag.innerHTML.toLowerCase().includes('oklab')) {
+                tag.innerHTML = sanitizeCSSString(tag.innerHTML, getAccentColorHex());
+              }
+            } catch (e) {
+              console.warn('Could not sanitize style tag:', e);
             }
           });
 
@@ -1368,45 +1203,23 @@ export default function App() {
             clonedElement.style.left = '0';
             clonedElement.style.top = '0';
             clonedElement.style.width = '1000px';
-            clonedElement.style.padding = '80px'; 
+            clonedElement.style.padding = '80px';
             clonedElement.style.display = 'block';
             clonedElement.style.backgroundColor = '#ffffff';
             clonedElement.style.color = '#0f172a';
-            clonedElement.style.borderRadius = '0'; // Flat for capture
-            
-            // Force bold weights for html2canvas to ensure they are captured
+            clonedElement.style.borderRadius = '0';
+
             const boldElements = clonedElement.querySelectorAll('.font-bold, .font-extrabold, .font-black, b, strong');
             boldElements.forEach(el => {
               if (el instanceof HTMLElement) {
                 el.style.fontWeight = '800';
               }
             });
-
-            const allText = clonedElement.querySelectorAll('*');
-            allText.forEach(el => {
-              if (el instanceof HTMLElement) {
-                el.style.wordBreak = 'break-word';
-              }
-            });
           }
-          
-          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
-          styleTags.forEach(tag => {
-            try {
-              const css = tag.innerHTML;
-              // Remove ALL oklch and oklab occurrences, mapping known ones first
-              if (css.toLowerCase().includes('oklch') || css.toLowerCase().includes('oklab')) {
-                tag.innerHTML = sanitizeCSSString(css);
-              }
-            } catch (e) {
-              console.warn('Could not sanitize style tag', e);
-            }
-          });
 
-          const style = clonedDoc.createElement('style');
-          style.innerHTML = `
-            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
+          // Inject overrides into cloned head
+          const overrideStyle = clonedDoc.createElement('style');
+          overrideStyle.innerHTML = `
             :root {
               --color-slate-50: #f8fafc !important;
               --color-slate-100: #f1f5f9 !important;
@@ -1426,120 +1239,21 @@ export default function App() {
             * {
               transition: none !important;
               animation: none !important;
-              border-color: inherit;
-              -webkit-font-smoothing: antialiased !important;
               box-shadow: none !important;
               text-shadow: none !important;
             }
             body, .printable-content, .printable-content * {
-              font-family: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif !important;
               color-scheme: light !important;
               color: #0f172a !important;
               background-image: none !important;
               visibility: visible !important;
             }
-            .font-mono, .font-mono * {
-              font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace !important;
-            }
-            .flex { display: flex !important; }
-            .grid { display: grid !important; }
-            .hidden { display: none !important; }
-            
             .no-print, .no-print-section {
               display: none !important;
               visibility: hidden !important;
-              height: 0 !important;
-              width: 0 !important;
-              margin: 0 !important;
-              padding: 0 !important;
             }
-            
-            .bg-white { background-color: #ffffff !important; }
-            .bg-slate-900 { background-color: #0f172a !important; }
-            .bg-slate-50 { background-color: #f8fafc !important; }
-            .bg-black { background-color: #000000 !important; }
-            .bg-\\[\\#0a0a0a\\] { background-color: #0a0a0a !important; }
-            
-            .text-slate-900 { color: #0f172a !important; }
-            .text-slate-600 { color: #475569 !important; }
-            .text-slate-500 { color: #64748b !important; }
-            .text-slate-400 { color: #94a3b8 !important; }
-            .text-white { color: #ffffff !important; }
-            .text-slate-100 { color: #f1f5f9 !important; }
-            .text-brand-primary { color: ${getAccentColorHex()} !important; }
-            .text-neon-red { color: #ff3131 !important; }
-            .text-emerald-600 { color: #059669 !important; }
-            .bg-emerald-600 { background-color: #059669 !important; }
-            .bg-brand-primary { background-color: ${getAccentColorHex()} !important; }
-            .bg-neon-red { background-color: #ff3131 !important; }
-
-            /* Increase base font sizes for better legibility in high-res exports */
-            .text-\\[6px\\] { font-size: 11px !important; }
-            .text-\\[7px\\] { font-size: 12px !important; }
-            .text-\\[8px\\] { font-size: 16px !important; }
-            .text-\\[9px\\] { font-size: 17px !important; }
-            .text-\\[10px\\] { font-size: 19px !important; }
-            .text-xs { font-size: 20px !important; }
-            .text-sm { font-size: 26px !important; }
-            .text-xl { font-size: 38px !important; }
-            .text-2xl { font-size: 46px !important; }
-            .text-5xl { font-size: 76px !important; }
-            
-            /* Enhanced font weighting and spacing */
-            .font-bold { font-weight: 700 !important; }
-            .font-black { font-weight: 900 !important; }
-            .tracking-widest { letter-spacing: 0.18em !important; }
-            .tracking-\\[0\\.4em\\] { letter-spacing: 0.45em !important; }
-            .tracking-\\[0\\.3em\\] { letter-spacing: 0.35em !important; }
-            .tracking-\\[0\\.2em\\] { letter-spacing: 0.25em !important; }
-            
-            /* Ensure values have enough vertical space */
-            .mb-16 { margin-bottom: 96px !important; }
-            .mb-2 { margin-bottom: 14px !important; }
-            .gap-y-10 { row-gap: 64px !important; }
-            .pt-10 { padding-top: 60px !important; }
-            
-            /* Ensure images/logos are fully opaque and clear */
-            img { opacity: 1 !important; filter: contrast(1.1) !important; }
           `;
-          clonedDoc.head.appendChild(style);
-
-          const styledElements = clonedDoc.querySelectorAll('[style], [class*="bg-"], [class*="text-"]');
-          styledElements.forEach(el => {
-            const htmlEl = el as HTMLElement;
-            const styleAttr = htmlEl.getAttribute('style');
-            
-            if (styleAttr && (styleAttr.toLowerCase().includes('oklch') || styleAttr.toLowerCase().includes('oklab'))) {
-                let newStyle = styleAttr;
-                newStyle = newStyle.replace(/(oklch|oklab)\s*\([^)]+\)/gi, (match) => {
-                  const matchParts = match.match(/[\d.]+/g);
-                  if (matchParts && matchParts.length > 0) {
-                    const l = parseFloat(matchParts[0]);
-                    const gray = Math.round(Math.min(1, Math.max(0, l)) * 255);
-                    const hexValue = gray.toString(16).padStart(2, '0');
-                    return `#${hexValue}${hexValue}${hexValue}`;
-                  }
-                  return isDark ? '#ffffff' : '#000000';
-                });
-                htmlEl.setAttribute('style', newStyle);
-            }
-
-            if (htmlEl.style) {
-              htmlEl.style.filter = 'none';
-              htmlEl.style.transition = 'none';
-              htmlEl.style.animation = 'none';
-              
-              if (htmlEl.style.backgroundImage && (htmlEl.style.backgroundImage.includes('oklch') || htmlEl.style.backgroundImage.includes('oklab'))) {
-                htmlEl.style.backgroundImage = 'none';
-                htmlEl.style.backgroundColor = isDark ? '#000000' : '#ffffff';
-              }
-
-              if (htmlEl.classList.contains('bg-gradient-to-r') || htmlEl.classList.contains('bg-gradient-to-br')) {
-                htmlEl.style.backgroundImage = 'none';
-                htmlEl.style.backgroundColor = isDark ? '#111111' : '#f8fafc';
-              }
-            }
-          });
+          clonedDoc.head.appendChild(overrideStyle);
         }
       });
 
@@ -1563,7 +1277,6 @@ export default function App() {
           shareText = `Segue o relatório mensal de ${ptBrMonths[reportMonth]}/${reportYear}.`;
         }
 
-        // Construct structured WhatsApp and copy text
         let whatsappText = '';
         let detailsText = '';
 
@@ -1577,7 +1290,6 @@ export default function App() {
           const authId = (viewingReceipt.id ? viewingReceipt.id.toUpperCase() : 'NEXUS') + '-' + (viewingReceipt.date ? toDate(viewingReceipt.date).getTime() : new Date().getTime());
 
           whatsappText = `*COMPROVANTE DE RECEBIMENTO*%0A*NEXUS PRIVATE*%0A%0A*Pagador:* ${encodeURIComponent(nameStr)}%0A*Valor:* R$ ${encodeURIComponent(amountStr)}%0A*Data:* ${encodeURIComponent(dateStr)}%0A*Operação:* ${encodeURIComponent(opType)}%0A*Descrição:* ${encodeURIComponent(viewingReceipt.description || '')}%0A*Autenticação:* ${encodeURIComponent(authId)}%0A%0A_Enviado via Nexus Private_`;
-          
           detailsText = `COMPROVANTE DE RECEBIMENTO\nNEXUS PRIVATE\n\nPagador: ${nameStr}\nValor: R$ ${amountStr}\nData: ${dateStr}\nOperação: ${opType}\nDescrição: ${viewingReceipt.description || ''}\nAutenticação: ${authId}`;
         } else if (elementId === 'printable-schedule-receipt' && viewingScheduleReceipt) {
           const clientStr = viewingScheduleReceipt.clientName || 'Cliente';
@@ -1587,7 +1299,6 @@ export default function App() {
           const authId = `SCH-${viewingScheduleReceipt.id ? viewingScheduleReceipt.id.toUpperCase() : 'SCH'}-${viewingScheduleReceipt.createdAt ? toDate(viewingScheduleReceipt.createdAt).getTime() : new Date().getTime()}`;
 
           whatsappText = `*COMPROVANTE DE AGENDAMENTO*%0A*NEXUS PRIVATE*%0A%0A*Cliente:* ${encodeURIComponent(clientStr)}%0A*Capital:* R$ ${encodeURIComponent(capStr)}%0A*Taxa:* ${encodeURIComponent(rateStr)}%25 a.m.%0A*Vencimento:* ${encodeURIComponent(dueStr)}%0A*Identificador:* ${encodeURIComponent(authId)}%0A%0A_Enviado via Nexus Private_`;
-
           detailsText = `COMPROVANTE DE AGENDAMENTO\nNEXUS PRIVATE\n\nCliente: ${clientStr}\nCapital: R$ ${capStr}\nTaxa: ${rateStr}% a.m.\nVencimento: ${dueStr}\nIdentificador: ${authId}`;
         } else if (elementId === 'printable-contract' && viewingContract && viewingContract.length > 0) {
           const clientStr = viewingContract[0].clientName || 'Cliente';
@@ -1597,7 +1308,6 @@ export default function App() {
           const authId = `${viewingContract[0].id ? viewingContract[0].id.toUpperCase() : 'NEXUS'}-${viewingContract[0].date ? toDate(viewingContract[0].date).getTime() : new Date().getTime()}`;
 
           whatsappText = `*CONTRATO DE OPERAÇÃO*%0A*NEXUS PRIVATE*%0A%0A*Contratante:* ${encodeURIComponent(clientStr)}%0A*Contratos Ativos:* ${encodeURIComponent(countStr)}%0A*Valor Total:* R$ ${encodeURIComponent(capStr)}%0A*Autenticação:* ${encodeURIComponent(authId)}%0A%0A_Enviado via Nexus Private_`;
-
           detailsText = `CONTRATO DE OPERAÇÃO\nNEXUS PRIVATE\n\nContratante: ${clientStr}\nContratos Ativos: ${countStr}\nValor Total: R$ ${capStr}\nAutenticação: ${authId}`;
         } else if (elementId === 'printable-report') {
           const monthYearStr = `${ptBrMonths[reportMonth]} de ${reportYear}`;
@@ -1617,7 +1327,6 @@ export default function App() {
           whatsappText: whatsappText,
           detailsText: detailsText
         });
-        setIsGeneratingPDF(false);
         return;
       }
 
@@ -1644,7 +1353,6 @@ export default function App() {
           link.click();
         } else if (navigator.share) {
           try {
-            // Helper to convert dataURL to Blob
             const dataURLtoBlob = (dataurl: string) => {
               const arr = dataurl.split(',');
               const mime = arr[0].match(/:(.*?);/)?.[1];
@@ -1674,7 +1382,6 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
               const link = document.createElement('a');
               link.download = fileName;
               link.href = imgData;
@@ -1746,7 +1453,6 @@ export default function App() {
               error?.message?.includes('Abort due to cancellation');
             
             if (!isCancellation) {
-              console.warn('Native share failed or blocked by host, falling back to download:', shareError);
               pdf.save(fileName);
             }
           }
@@ -1763,7 +1469,7 @@ export default function App() {
         err?.message?.includes('Abort due to cancellation');
       
       if (!isCancellation) {
-        console.error('Erro ao gerar PDF:', error);
+        console.error('Erro ao gerar documento:', error);
       }
     } finally {
       if (noPrintElements) {
@@ -1773,51 +1479,6 @@ export default function App() {
           }
         });
       }
-
-      // Destroy temporary sanitize style tags in the parent document
-      tempStylesToDestroy.forEach(s => s.remove());
-
-      // Restore parent style tags to their original oklch/oklab styles
-      parentStyleTags.forEach((tag, idx) => {
-        try {
-          tag.innerHTML = originalParentStyleContents[idx];
-        } catch (err) {
-          console.warn('Failed to restore parent style tag', err);
-        }
-      });
-
-      // Re-enable original parent link stylesheets
-      disabledLinks.forEach(({ link, originalRel }) => {
-        link.setAttribute('rel', originalRel);
-      });
-
-      // Restore iframe properties
-      if (originalContentWindowDescriptor) {
-        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', originalContentWindowDescriptor);
-      }
-      if (originalContentDocumentDescriptor) {
-        Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', originalContentDocumentDescriptor);
-      }
-
-      // Restore insertion methods
-      Element.prototype.appendChild = originalAppendChild;
-      Element.prototype.insertBefore = originalInsertBefore;
-
-      // Restore all patched prototype getters
-      restoreList.forEach(({ proto, prop, desc }) => {
-        try {
-          Object.defineProperty(proto as object, prop, desc);
-        } catch {}
-      });
-      originalGetPropertyValueMap.forEach((originalFn, proto) => {
-        try {
-          (proto as { getPropertyValue: (prop: string) => string }).getPropertyValue = originalFn;
-        } catch {}
-      });
-
-      // Restore standard getComputedStyle
-      window.getComputedStyle = originalGetComputedStyle;
-
       setIsGeneratingPDF(false);
     }
   };
@@ -2472,16 +2133,16 @@ export default function App() {
     }
   };
 
-  // Auto-trigger Face ID biometric scanner immediately upon opening app with saved account (Banco Inter style)
+  // Auto-trigger Face ID biometric scanner immediately upon opening app on mobile with saved account (Banco Inter style)
   useEffect(() => {
-    if (isAuthReady && !user && savedAccount && !useDifferentAccount && !hasAutoTriggeredFaceID.current) {
+    if (isMobile && isAuthReady && !user && savedAccount && !useDifferentAccount && !hasAutoTriggeredFaceID.current) {
       hasAutoTriggeredFaceID.current = true;
       const timer = setTimeout(() => {
         handleLoginWithFaceID();
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [isAuthReady, user, savedAccount, useDifferentAccount]);
+  }, [isMobile, isAuthReady, user, savedAccount, useDifferentAccount]);
 
 
   // Keep payingLoan in sync with loans array
@@ -4032,9 +3693,11 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                    <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#121318] border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
-                      <ScanFace className="w-4 h-4" />
-                    </div>
+                    {isMobile && (
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#121318] border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                        <ScanFace className="w-4 h-4" />
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -4049,39 +3712,31 @@ export default function App() {
                     </p>
                   </div>
 
-                  {/* Primary Action Button: ENTRAR COM FACE ID */}
+                  {/* Primary Action: Face ID on Mobile, Direct Password Form on Desktop */}
                   <div className="w-full mt-6 space-y-3">
-                    <button
-                      type="button"
-                      onClick={handleLoginWithFaceID}
-                      disabled={isAuthenticatingFaceID || isSubmitting}
-                      className="w-full relative group/btn"
-                    >
-                      <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[22px] blur opacity-40 group-hover/btn:opacity-75 transition duration-500" />
-                      <div className="relative w-full bg-gradient-to-br from-[#D4AF37] via-amber-500 to-[#8a660a] text-black font-black uppercase tracking-[0.15em] py-4 px-5 rounded-[20px] shadow-2xl flex items-center justify-center gap-3.5 transition-transform active:scale-[0.98]">
-                        <ScanFace className="w-6 h-6 text-black shrink-0" />
-                        <div className="text-left">
-                          <span className="text-xs sm:text-sm font-black tracking-wider text-black block leading-none">
-                            Entrar com Face ID
-                          </span>
-                          <span className="text-[8px] font-extrabold uppercase tracking-widest text-black/80 block mt-0.5">
-                            Biometria do Dispositivo
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Secondary Action: Entrar com Senha */}
-                    {!showPasswordInput ? (
+                    {isMobile && (
                       <button
                         type="button"
-                        onClick={() => setShowPasswordInput(true)}
-                        className="w-full py-3.5 px-4 rounded-[18px] bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+                        onClick={handleLoginWithFaceID}
+                        disabled={isAuthenticatingFaceID || isSubmitting}
+                        className="w-full relative group/btn"
                       >
-                        <KeyRound className="w-3.5 h-3.5 text-[#D4AF37]" />
-                        Entrar com Senha
+                        <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[22px] blur opacity-40 group-hover/btn:opacity-75 transition duration-500" />
+                        <div className="relative w-full bg-gradient-to-br from-[#D4AF37] via-amber-500 to-[#8a660a] text-black font-black uppercase tracking-[0.15em] py-4 px-5 rounded-[20px] shadow-2xl flex items-center justify-center gap-3.5 transition-transform active:scale-[0.98]">
+                          <ScanFace className="w-6 h-6 text-black shrink-0" />
+                          <div className="text-left">
+                            <span className="text-xs sm:text-sm font-black tracking-wider text-black block leading-none">
+                              Entrar com Face ID
+                            </span>
+                            <span className="text-[8px] font-extrabold uppercase tracking-widest text-black/80 block mt-0.5">
+                              Biometria do Dispositivo
+                            </span>
+                          </div>
+                        </div>
                       </button>
-                    ) : (
+                    )}
+
+                    {(!isMobile || showPasswordInput) ? (
                       <form onSubmit={handleEmailLogin} className="space-y-3 pt-2 text-left animate-in fade-in duration-300">
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -4095,7 +3750,7 @@ export default function App() {
                               value={password || ""}
                               onChange={(e) => setPassword(e.target.value)}
                               className="w-full rounded-[16px] py-3 pl-12 pr-4 text-xs transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
-                              autoFocus
+                              autoFocus={!isMobile}
                               required
                             />
                           </div>
@@ -4112,6 +3767,15 @@ export default function App() {
                           )}
                         </button>
                       </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordInput(true)}
+                        className="w-full py-3.5 px-4 rounded-[18px] bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-[#D4AF37]" />
+                        Entrar com Senha
+                      </button>
                     )}
                   </div>
                 </div>
@@ -4195,29 +3859,33 @@ export default function App() {
                       </div>
                     </button>
 
-                    <div className="relative my-3 flex items-center justify-center">
-                      <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
-                      <span className="relative bg-[#0b0c0e] px-3 text-[9px] font-black uppercase tracking-widest text-slate-500">ou biometria</span>
-                    </div>
+                    {isMobile && (
+                      <>
+                        <div className="relative my-3 flex items-center justify-center">
+                          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+                          <span className="relative bg-[#0b0c0e] px-3 text-[9px] font-black uppercase tracking-widest text-slate-500">ou biometria</span>
+                        </div>
 
-                    <button
-                      type="button"
-                      onClick={handleLoginWithFaceID}
-                      disabled={isAuthenticatingFaceID || isSubmitting}
-                      className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 text-white transition-all active:scale-[0.98] group shadow-xl"
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/30 group-hover:scale-110 transition-transform shrink-0">
-                        <ScanFace className="w-4.5 h-4.5 text-[#D4AF37]" />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-white block">
-                          {isAuthenticatingFaceID ? "Verificando Face ID..." : "Entrar com Face ID"}
-                        </span>
-                        <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 block">
-                          Biometria do iPhone / Dispositivo
-                        </span>
-                      </div>
-                    </button>
+                        <button
+                          type="button"
+                          onClick={handleLoginWithFaceID}
+                          disabled={isAuthenticatingFaceID || isSubmitting}
+                          className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 text-white transition-all active:scale-[0.98] group shadow-xl"
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/30 group-hover:scale-110 transition-transform shrink-0">
+                            <ScanFace className="w-4.5 h-4.5 text-[#D4AF37]" />
+                          </div>
+                          <div className="text-left">
+                            <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-white block">
+                              {isAuthenticatingFaceID ? "Verificando Face ID..." : "Entrar com Face ID"}
+                            </span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 block">
+                              Biometria do iPhone / Dispositivo
+                            </span>
+                          </div>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </form>
               </div>
@@ -4580,11 +4248,11 @@ export default function App() {
           isDark ? "bg-black/95 backdrop-blur-md border-surface-border" : "bg-white/95 backdrop-blur-md border-slate-200"
         )}>
           <div className="w-full px-4 sm:px-6 h-16 sm:h-24 flex items-center justify-between">
-            {/* Mobile Sidebar Toggle */}
-            <div className="flex lg:hidden items-center gap-2">
+            {/* Mobile Sidebar Toggle & Live Clock */}
+            <div className="flex lg:hidden items-center gap-2.5">
               <button 
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="p-1 text-slate-400 hover:text-brand-primary active:scale-90 transition-all focus:outline-none"
+                className="p-0.5 text-slate-400 hover:text-brand-primary active:scale-90 transition-all focus:outline-none shrink-0"
               >
                 {userProfile?.profilePicture ? (
                   <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-brand-primary/60 shadow-md">
@@ -4599,10 +4267,15 @@ export default function App() {
                   <NexusLogo className="w-9 h-9" />
                 )}
               </button>
-              <h1 className={cn("text-xs font-black tracking-[0.2em] uppercase ml-1", isDark ? "text-white" : "text-slate-900")}>Nexus Private</h1>
+              <div className="flex flex-col justify-center">
+                <h1 className={cn("text-[11px] sm:text-xs font-black tracking-[0.18em] uppercase leading-none mb-1", isDark ? "text-white" : "text-slate-900")}>
+                  Nexus Private
+                </h1>
+                <MobileLiveClock isDark={isDark} />
+              </div>
             </div>
 
-            <div className="hidden lg:flex items-center gap-6">
+            <div className="hidden lg:flex items-center gap-4">
               <button 
                 onClick={() => {
                   const newValue = !isSidebarCollapsed;
@@ -4614,49 +4287,13 @@ export default function App() {
               >
                 <LayoutGrid className={cn("w-5 h-5 transition-transform duration-500", !isSidebarCollapsed ? "rotate-90" : "rotate-0")} />
               </button>
-              <div className="flex items-center gap-4 py-2 px-4 bg-white/[0.02] border border-white/[0.05] rounded-3xl backdrop-blur-xl">
-                <div className="p-2.5 bg-brand-primary/20 rounded-xl shadow-[0_0_15px_rgba(212,175,55,0.1)]">
-                   <Target className="w-5 h-5 text-brand-primary animate-pulse" />
-                </div>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <h2 className={cn("text-[11px] font-black uppercase tracking-[0.2em]", isDark ? "text-white" : "text-slate-900")}>
-                      {activeTab === 'Principal' ? 'ESTATÍSTICAS GERAIS' : activeTab.toUpperCase()}
-                    </h2>
-                    <span className="w-1 h-3 bg-slate-700/50 rounded-full" />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{currentDateText}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-[0.05em]">Nexus Managed Node <span className="opacity-40">#PX-041</span></p>
-                  </div>
-                </div>
-              </div>
+
+              {/* Professional Live Clock & Date */}
+              <DesktopLiveClock isDark={isDark} />
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-6">
-              <div className="hidden lg:flex items-center gap-4 py-2 px-3 bg-white/[0.03] border border-white/[0.05] rounded-2xl hover:bg-white/[0.06] transition-all cursor-default group">
-                <div className="flex flex-col items-end">
-                  <span className={cn(
-                    "text-[10px] font-black uppercase tracking-widest transition-colors",
-                    isDark ? "text-white" : "text-slate-900"
-                  )}>{user.displayName || 'Administrador'}</span>
-                  <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{user.email?.toLowerCase()}</span>
-                </div>
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-xl bg-brand-primary flex items-center justify-center font-black text-black text-xs shadow-[0_0_15px_rgba(212,175,55,0.2)]">
-                    {user.displayName?.charAt(0) || 'A'}
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-black rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)] flex items-center justify-center">
-                    <ShieldCheck className="w-2 h-2 text-white" />
-                  </div>
-                </div>
-              </div>
-            <div className={cn(
-              "h-8 w-px hidden lg:block",
-              isDark ? "bg-white/10" : "bg-slate-200"
-            )} />
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex items-center gap-1 sm:gap-2">
               <button 
                 onClick={() => setPrivacyMode(!privacyMode)}
                 className={cn(
@@ -6574,16 +6211,30 @@ export default function App() {
                         <p className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] mt-1">Nexus Private Intelligence</p>
                       </div>
                     </div>
-                    {notifications.length > 0 && (
-                      <button 
-                        onClick={() => {
-                          notifications.forEach(n => markNotificationAsRead(n.id));
-                        }}
-                        className="text-[10px] font-black text-brand-primary uppercase tracking-[0.2em] hover:underline"
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        onClick={requestNotificationPermission}
+                        className={cn(
+                          "px-4 py-2.5 rounded-2xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm active:scale-95",
+                          isNativeNotificationsEnabled 
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                            : "bg-brand-primary/10 border-brand-primary/20 text-brand-primary hover:bg-brand-primary/20"
+                        )}
                       >
-                        Arquivar Todas
+                        <Bell className="w-3.5 h-3.5" />
+                        {isNativeNotificationsEnabled ? "Notificações Ativas" : "Ativar Alertas Push"}
                       </button>
-                    )}
+                      {notifications.length > 0 && (
+                        <button 
+                          onClick={() => {
+                            notifications.forEach(n => markNotificationAsRead(n.id));
+                          }}
+                          className="text-[10px] font-black text-brand-primary uppercase tracking-[0.2em] hover:underline"
+                        >
+                          Arquivar Todas
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid gap-6">
