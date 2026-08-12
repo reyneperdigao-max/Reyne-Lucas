@@ -422,7 +422,7 @@ interface SystemSettings {
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  whatsappTemplate: 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {capital}.\n\nCaso prefira, você pode pagar apenas os juros de R$ {juros} para renovar por mais 30 dias.',
+  whatsappTemplate: 'Boa noite {nome}! Tudo bem? Passando para lembrar que o vencimento do seu empréstimo no valor de R$ {capital} é hoje.\n\nCaso precise de mais tempo, você pode pagar apenas os juros de R$ {juros} para renovar por mais 30 dias.',
   whatsappOverdueTemplate: 'Olá {nome}, passando para lembrar que constam {meses_atraso} {termo_meses} em atraso do seu empréstimo de {capital}, e estamos próximos de mais um vencimento.\n\nCaso prefira, você pode pagar os juros acumulados de {juros} para regularizar e renovar por mais 30 dias.',
   defaultInterestRate: 0,
   accentColor: 'yellow'
@@ -2216,8 +2216,14 @@ export default function App() {
     const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        let loadedTemplate = data.whatsappTemplate || DEFAULT_SETTINGS.whatsappTemplate;
         let loadedOverdueTemplate = data.whatsappOverdueTemplate || DEFAULT_SETTINGS.whatsappOverdueTemplate;
         
+        const oldStandardDefault1 = 'Olá {nome}, passando para lembrar do vencimento do seu empréstimo no valor de R$ {capital}.\n\nCaso prefira, você pode pagar apenas os juros de R$ {juros} para renovar por mais 30 dias.';
+        if (!data.whatsappTemplate || loadedTemplate === oldStandardDefault1) {
+          loadedTemplate = DEFAULT_SETTINGS.whatsappTemplate;
+        }
+
         const oldDefault1 = 'Olá {nome}, passando para lembrar que constam {meses_atraso} {termo_meses} em atraso do seu empréstimo de R$ {capital}, e estamos próximos de mais um vencimento.\n\nCaso prefira, você pode pagar os juros acumulados de R$ {juros} para regularizar e renovar por mais 30 dias.';
         const oldDefault2 = 'Olá {nome}, tudo bem?\n\nIdentificamos que você possui {meses_atraso} {termo_meses} em atraso referente ao seu empréstimo de capital R$ {capital}. Além disso, está prestes a vencer mais uma parcela.\n\nAté o momento, o valor total em aberto é de R$ {total_bruto}.\n\nPara regularizar ou refinanciar, por favor, entre em contato.';
         
@@ -2231,6 +2237,7 @@ export default function App() {
         setSystemSettings({
           ...DEFAULT_SETTINGS,
           ...data,
+          whatsappTemplate: loadedTemplate,
           accentColor: validAccent,
           whatsappOverdueTemplate: loadedOverdueTemplate
         } as SystemSettings);
@@ -2462,6 +2469,12 @@ export default function App() {
       : (systemSettings.whatsappTemplate || DEFAULT_SETTINGS.whatsappTemplate);
 
     let message = baseTemplate
+      .replace(/R\$\s*{capital}/gi, capitalFormatted)
+      .replace(/R\$\s*{valor}/gi, capitalFormatted)
+      .replace(/R\$\s*{juros}/gi, jurosFormatted)
+      .replace(/R\$\s*{valor do capital}/gi, capitalFormatted)
+      .replace(/R\$\s*{valor do juros}/gi, jurosFormatted)
+      .replace(/R\$\s*{total_bruto}/gi, totalBrutoFormatted)
       .replace(/{nome}/gi, firstName)
       .replace(/{valor}/gi, capitalFormatted)
       .replace(/{capital}/gi, capitalFormatted)
@@ -2472,7 +2485,8 @@ export default function App() {
       .replace(/{vencimento}/gi, vencimentoFormatted)
       .replace(/{meses_atraso}/gi, String(overdueCount))
       .replace(/{termo_meses}/gi, termoMeses)
-      .replace(/{total_bruto}/gi, totalBrutoFormatted);
+      .replace(/{total_bruto}/gi, totalBrutoFormatted)
+      .replace(/R\$\s*R\$/gi, 'R$');
 
     if (userProfile?.pixKey) {
       const pixInfo = `\n\nChave Pix para pagamento:\n${userProfile.pixKey}\n${userProfile.pixName || ''}`;
