@@ -696,22 +696,32 @@ function NexusLogo({ className = "w-10 h-10" }: { className?: string }) {
         viewBox="0 0 100 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-full filter drop-shadow-[0_4px_14px_rgba(212,175,55,0.4)] transition-transform duration-300 group-hover:scale-105"
+        className="w-full h-full filter drop-shadow-[0_4px_16px_rgba(212,175,55,0.45)] transition-transform duration-300 group-hover:scale-105"
       >
         <defs>
-          <linearGradient id="nexusGoldPrimary" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFF5C0" />
-            <stop offset="35%" stopColor="#FFD700" />
-            <stop offset="70%" stopColor="#D4AF37" />
-            <stop offset="100%" stopColor="#8A660A" />
+          <linearGradient id="nexusGoldBright" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="20%" stopColor="#FFF2A1" />
+            <stop offset="50%" stopColor="#FFD700" />
+            <stop offset="80%" stopColor="#D4AF37" />
+            <stop offset="100%" stopColor="#997A15" />
           </linearGradient>
-          <linearGradient id="nexusGoldDark" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#D4AF37" />
-            <stop offset="50%" stopColor="#664B06" />
-            <stop offset="100%" stopColor="#1A1201" />
+
+          <linearGradient id="nexusGoldSecondary" x1="0%" y1="100%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#B38728" />
+            <stop offset="40%" stopColor="#FBF5B7" />
+            <stop offset="70%" stopColor="#DAA520" />
+            <stop offset="100%" stopColor="#AA7C11" />
           </linearGradient>
-          <linearGradient id="nexusInnerGlow" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#FFD700" stopOpacity="0.4" />
+
+          <linearGradient id="nexusShieldBg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#1E293B" />
+            <stop offset="50%" stopColor="#0F172A" />
+            <stop offset="100%" stopColor="#020617" />
+          </linearGradient>
+
+          <linearGradient id="nexusGlowOverlay" x1="50%" y1="0%" x2="50%" y2="100%">
+            <stop offset="0%" stopColor="#FFD700" stopOpacity="0.25" />
             <stop offset="100%" stopColor="#000000" stopOpacity="0.8" />
           </linearGradient>
         </defs>
@@ -719,44 +729,54 @@ function NexusLogo({ className = "w-10 h-10" }: { className?: string }) {
         {/* Outer Shield Hexagon */}
         <polygon
           points="50,4 92,25 92,75 50,96 8,75 8,25"
-          fill="url(#nexusGoldDark)"
-          stroke="url(#nexusGoldPrimary)"
+          fill="url(#nexusShieldBg)"
+          stroke="url(#nexusGoldBright)"
           strokeWidth="3.5"
           strokeLinejoin="round"
         />
-        
-        {/* Inner Shield Facet */}
+
+        {/* Inner Shield Bevel Rim */}
         <polygon
-          points="50,10 85,28 85,72 50,90 15,72 15,28"
-          fill="url(#nexusInnerGlow)"
-          stroke="url(#nexusGoldPrimary)"
+          points="50,10 86,28 86,72 50,90 14,72 14,28"
+          fill="url(#nexusGlowOverlay)"
+          stroke="url(#nexusGoldSecondary)"
           strokeWidth="1.5"
-          strokeOpacity="0.6"
+          strokeOpacity="0.7"
+          strokeLinejoin="round"
         />
 
-        {/* High-end Geometric N & P Interlocking Crest */}
-        {/* N Pillar Left */}
-        <path
-          d="M 28 28 L 37 28 L 37 72 L 28 72 Z"
-          fill="url(#nexusGoldPrimary)"
-        />
-        {/* N Diagonal */}
-        <path
-          d="M 37 28 L 59 62 L 59 72 L 50 72 L 28 39 L 28 28 Z"
-          fill="url(#nexusGoldPrimary)"
-          opacity="0.9"
-        />
-        {/* P Right Arch & Loop */}
-        <path
-          d="M 50 28 L 65 28 C 74 28 79 33 79 41 C 79 49 74 53 65 53 L 50 53 L 50 72 L 59 72 L 59 53 L 65 53 C 71 53 79 49 79 41 C 79 33 71 28 65 28 Z"
-          fill="url(#nexusGoldPrimary)"
-        />
-        
         {/* Top Diamond Crown Accent */}
-        <polygon
-          points="50,16 57,24 50,32 43,24"
-          fill="url(#nexusGoldPrimary)"
+        <line x1="50" y1="10" x2="50" y2="20" stroke="url(#nexusGoldBright)" strokeWidth="1.5" strokeOpacity="0.5" />
+        <polygon points="50,16 55,22 50,28 45,22" fill="url(#nexusGoldBright)" />
+
+        {/* --- INTERLOCKING NP MONOGRAM --- */}
+
+        {/* N Left Pillar */}
+        <path
+          d="M 21 26 H 29 V 74 H 21 Z"
+          fill="url(#nexusGoldBright)"
         />
+
+        {/* N Diagonal Stroke */}
+        <path
+          d="M 29 26 L 48 64 V 74 H 40 L 21 36 V 26 H 29 Z"
+          fill="url(#nexusGoldSecondary)"
+        />
+
+        {/* Shared Center Pillar (N Right Pillar / P Stem) */}
+        <path
+          d="M 40 26 H 48 V 74 H 40 Z"
+          fill="url(#nexusGoldBright)"
+        />
+
+        {/* P Upper Arch & Loop */}
+        <path
+          d="M 48 26 H 65 C 74.5 26 80 31.5 80 38.5 C 80 45.5 74.5 51 65 51 H 48 V 43 H 64 C 69 43 72 41 72 38.5 C 72 36 69 34 64 34 H 48 V 26 Z"
+          fill="url(#nexusGoldBright)"
+        />
+
+        {/* Bottom Accent Dot */}
+        <circle cx="50" cy="84" r="2" fill="url(#nexusGoldBright)" />
       </svg>
     </div>
   );
