@@ -59,28 +59,29 @@ service cloud.firestore {
              (!('pixKey' in data) || (data.pixKey is string && data.pixKey.size() <= 200)) &&
              (!('pixName' in data) || (data.pixName is string && data.pixName.size() <= 100)) &&
              (!('pixBank' in data) || (data.pixBank is string && data.pixBank.size() <= 100)) &&
-             (!('profilePicture' in data) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() <= 2000000)));
+             (!('profilePicture' in data) || (data.profilePicture == null || (data.profilePicture is string && data.profilePicture.size() <= 2000000))) &&
+             (!('lastClosureDate' in data) || (data.lastClosureDate == null || (data.lastClosureDate is string && data.lastClosureDate.size() <= 100)));
     }
 
     function isValidLoan(data) {
-      let requiredFields = ['clientName', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'uid', 'createdAt', 'capitalPago', 'jurosPagos'];
+      let requiredFields = ['clientName', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'uid'];
       return data.keys().hasAll(requiredFields) &&
              data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 100 &&
              data.date is string && data.date.size() <= 20 &&
              data.dueDate is string && data.dueDate.size() <= 20 &&
-             data.capital is number && (data.status == 'Pago' ? data.capital >= 0 : data.capital >= 0) &&
+             data.capital is number && data.capital >= 0 &&
              data.interestRate is number && data.interestRate >= 0 &&
              data.totalBruto is number &&
              data.status in ['Pendente', 'Pago', 'Atrasado', 'Agendado'] &&
              data.uid == request.auth.uid &&
-             data.capitalPago is number &&
-             data.jurosPagos is number &&
+             (!('capitalPago' in data) || (data.capitalPago is number && data.capitalPago >= 0)) &&
+             (!('jurosPagos' in data) || (data.jurosPagos is number && data.jurosPagos >= 0)) &&
              (!('clientPhone' in data) || (data.clientPhone is string && data.clientPhone.size() <= 50)) &&
              (!('clientAddress' in data) || (data.clientAddress is string && data.clientAddress.size() <= 255));
     }
 
     function isCreatedAtImmutable() {
-      return incoming().createdAt == existing().createdAt;
+      return !('createdAt' in existing()) || incoming().createdAt == existing().createdAt;
     }
 
     function isActiveTimestamp() {
@@ -91,7 +92,7 @@ service cloud.firestore {
       let requiredFields = ['type', 'description', 'clientName', 'loanId', 'date', 'uid'];
       return data.keys().hasAll(requiredFields) &&
              data.type in ['loan_created', 'payment_received', 'loan_deleted', 'loan_updated', 'loan_scheduled', 'loan_activated', 'loan_renewed'] &&
-             data.description is string && data.description.size() <= 500 &&
+             data.description is string && data.description.size() <= 2000 &&
              data.clientName is string && data.clientName.size() <= 100 &&
              data.loanId is string && data.loanId.size() <= 128 &&
              data.date is string && data.date.size() <= 50 &&
@@ -118,6 +119,7 @@ service cloud.firestore {
       let requiredFields = ['whatsappTemplate', 'defaultInterestRate', 'accentColor'];
       return data.keys().hasAll(requiredFields) &&
              data.whatsappTemplate is string && data.whatsappTemplate.size() <= 2000 &&
+             (!('whatsappOverdueTemplate' in data) || (data.whatsappOverdueTemplate is string && data.whatsappOverdueTemplate.size() <= 2000)) &&
              data.defaultInterestRate is number &&
              data.accentColor in ['yellow', 'green', 'blue', 'violet', 'red'];
     }
@@ -151,7 +153,7 @@ service cloud.firestore {
                       // Action: Financial/Status (Amortization, Payment, Renewal, Payoff)
                       (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capital', 'totalBruto', 'capitalPago', 'jurosPagos', 'date', 'dueDate'])) ||
                       // Action: General Info Edit
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto']))
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos']))
                     )));
       allow delete: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
     }

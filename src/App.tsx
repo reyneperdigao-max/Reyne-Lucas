@@ -58,13 +58,11 @@ import {
   addDoc, 
   updateDoc, 
   doc, 
-  orderBy,
   deleteDoc,
   getDocs,
   setDoc,
   serverTimestamp,
-  writeBatch,
-  limit
+  writeBatch
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, 
@@ -1751,6 +1749,14 @@ export default function App() {
               profilePicture?: string,
               lastClosureDate?: string | null 
             };
+            if (profile.lastClosureDate) {
+              const parsed = toDate(profile.lastClosureDate);
+              if (parsed && parsed.getTime() > Date.now()) {
+                console.warn('Healing future lastClosureDate for user:', profile.lastClosureDate);
+                updateDoc(userRef, { lastClosureDate: null }).catch(() => {});
+                profile.lastClosureDate = null;
+              }
+            }
             setUserProfile(profile);
             const savedName = profile.displayName || u.displayName || u.email?.split('@')[0] || 'Usuário';
             const savedPic = profile.profilePicture || null;
@@ -2191,8 +2197,7 @@ export default function App() {
     setLoading(true);
     const q = query(
       collection(db, 'loans'),
-      where('uid', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('uid', '==', user.uid)
     );
 
     const unsubscribeLoans = onSnapshot(q, (snapshot) => {
@@ -2201,17 +2206,22 @@ export default function App() {
         const rawLoan = { id: docSnap.id, ...docSnap.data() } as Loan;
         loanData.push(enrichLoanWithAccruedInterest(rawLoan));
       });
+      loanData.sort((a, b) => {
+        const timeA = toDate(a.createdAt)?.getTime() || toDate(a.date)?.getTime() || 0;
+        const timeB = toDate(b.createdAt)?.getTime() || toDate(b.date)?.getTime() || 0;
+        return timeB - timeA;
+      });
       setLoans(loanData);
       setLoading(false);
     }, (err) => {
+      console.error('Error listening to loans:', err);
       handleFirestoreError(err, OperationType.LIST, 'loans');
+      setLoading(false);
     });
 
     const qActions = query(
       collection(db, 'actions'),
-      where('uid', '==', user.uid),
-      orderBy('date', 'desc'),
-      limit(1000)
+      where('uid', '==', user.uid)
     );
 
     const unsubscribeActions = onSnapshot(qActions, (snapshot) => {
@@ -2219,16 +2229,24 @@ export default function App() {
       snapshot.forEach((doc) => {
         actionData.push({ id: doc.id, ...doc.data() } as SystemAction);
       });
+      actionData.sort((a, b) => {
+        const timeA = toDate(a.date)?.getTime() || 0;
+        const timeB = toDate(b.date)?.getTime() || 0;
+        return timeB - timeA;
+      });
       setActions(actionData);
     }, (err) => {
+      console.error('Error listening to actions:', err);
       handleFirestoreError(err, OperationType.LIST, 'actions');
     });
 
-    const qClosures = query(collection(db, 'monthly_closures'), where('userId', '==', user.uid), orderBy('year', 'desc'), orderBy('month', 'desc'));
+    const qClosures = query(collection(db, 'monthly_closures'), where('userId', '==', user.uid));
     const unsubscribeClosures = onSnapshot(qClosures, (snapshot) => {
       const closuresData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MonthlyClosure));
+      closuresData.sort((a, b) => (b.year * 100 + b.month) - (a.year * 100 + a.month));
       setMonthlyClosures(closuresData);
     }, (err) => {
+      console.error('Error listening to monthly_closures:', err);
       handleFirestoreError(err, OperationType.GET, 'monthly_closures');
     });
 
@@ -2538,13 +2556,15 @@ export default function App() {
     setIsAdding(true);
   };
 
-  const handleAmortization = async (method?: 'DINHEIRO' | 'PIX') => {
-    if (!payingLoan || !amortizationAmount) return;
-    const amount = parseFloat(amortizationAmount);
+  const handleAmortization = async (customAmount?: number, method?: 'DINHEIRO' | 'PIX') => {
+    if (!payingLoan) return;
+    const amount = customAmount && !isNaN(customAmount) && customAmount > 0 
+      ? customAmount 
+      : parseLocaleNumber(amortizationAmount);
     if (isNaN(amount) || amount <= 0) return;
 
     const newCapital = Math.round(Math.max(0, payingLoan.capital - amount) * 100) / 100;
-    const newTotalBruto = Math.round(newCapital * (1 + payingLoan.interestRate) * 100) / 100;
+    const newTotalBruto = Math.round(newCapital * (1 + (payingLoan.interestRate || 0)) * 100) / 100;
     const newCapitalPago = Math.round(((payingLoan.capitalPago || 0) + amount) * 100) / 100;
     
     try {
@@ -2552,32 +2572,19 @@ export default function App() {
         capital: newCapital,
         totalBruto: newTotalBruto,
         capitalPago: newCapitalPago,
+        jurosPagos: payingLoan.jurosPagos || 0,
         status: newCapital === 0 ? 'Pago' : payingLoan.status
       });
       
       const methodText = method ? ` via ${method}` : '';
       const description = `Amortização de capital: ${formatCurrency(amount)}${methodText}`;
-      let action: SystemAction | null = null;
 
-      if (lastAction && lastAction.loanId === payingLoan.id) {
-        const newAmount = (lastAction.amount || 0) + amount;
-        const newCapitalAmount = (lastAction.capitalAmount || 0) + amount;
-        const newDescription = `${lastAction.description} + ${description}`;
-        await updateDoc(doc(db, 'actions', lastAction.id), {
-          amount: newAmount,
-          capitalAmount: newCapitalAmount,
-          description: newDescription,
-          date: new Date().toISOString(),
-          paymentMethod: method || null
-        });
-        action = { ...lastAction, amount: newAmount, capitalAmount: newCapitalAmount, description: newDescription, paymentMethod: method };
-      } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0, method);
-      }
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0, method);
 
       setAmortizationAmount('');
       if (action) setLastAction(action);
     } catch (err) {
+      console.error('Error executing amortization:', err);
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
   };
@@ -2602,40 +2609,30 @@ export default function App() {
       }
     }
 
-    const interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    let interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    if (interestAmount <= 0) {
+      interestAmount = Math.round(payingLoan.capital * (payingLoan.interestRate || 0) * 100) / 100;
+    }
     const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
+    const newTotalBruto = Math.round(payingLoan.capital * (1 + (payingLoan.interestRate || 0)) * 100) / 100;
     
-    // Reset the issue date to today and move due date forward
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
         date: format(today, 'yyyy-MM-dd'),
         dueDate: format(newDueDate, 'yyyy-MM-dd'),
+        totalBruto: newTotalBruto,
+        capitalPago: payingLoan.capitalPago || 0,
         jurosPagos: newJurosPagos,
         status: 'Pago'
       });
 
       const methodText = method ? ` via ${method}` : '';
       const description = `Pagamento de juros: ${formatCurrency(interestAmount)}${methodText}`;
-      let action: SystemAction | null = null;
-
-      if (lastAction && lastAction.loanId === payingLoan.id) {
-        const newAmount = (lastAction.amount || 0) + interestAmount;
-        const newInterestAmount = (lastAction.interestAmount || 0) + interestAmount;
-        const newDescription = `${lastAction.description} + ${description}`;
-        await updateDoc(doc(db, 'actions', lastAction.id), {
-          amount: newAmount,
-          interestAmount: newInterestAmount,
-          description: newDescription,
-          date: new Date().toISOString(),
-          paymentMethod: method || null
-        });
-        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription, paymentMethod: method };
-      } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
-      }
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
 
       if (action) setLastAction(action);
     } catch (err) {
+      console.error('Error executing interest payment:', err);
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
   };
@@ -2650,53 +2647,40 @@ export default function App() {
       currentDueDate = today;
     }
     
-    // Add 1 month to the current due date to maintain the cycle (fixed day)
-    // If the current due date is invalid, use today + 1 month
     let newDueDate: Date;
     if (isNaN(currentDueDate.getTime())) {
       newDueDate = addMonths(today, 1);
     } else {
       newDueDate = addMonths(currentDueDate, 1);
-      // If the new due date is still in the past, maybe the user was very late
-      // In that case, we set it to 1 month from today to avoid immediate overdue
       if (newDueDate < today) {
         newDueDate = addMonths(today, 1);
       }
     }
     
-    const interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    let interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    if (interestAmount <= 0) {
+      interestAmount = Math.round(payingLoan.capital * (payingLoan.interestRate || 0) * 100) / 100;
+    }
     const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
+    const newTotalBruto = Math.round(payingLoan.capital * (1 + (payingLoan.interestRate || 0)) * 100) / 100;
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
         date: format(today, 'yyyy-MM-dd'),
         dueDate: format(newDueDate, 'yyyy-MM-dd'),
         status: 'Pago',
+        totalBruto: newTotalBruto,
+        capitalPago: payingLoan.capitalPago || 0,
         jurosPagos: newJurosPagos
       });
 
       const methodText = method ? ` via ${method}` : '';
       const description = `Renovação com pagamento de juros: ${formatCurrency(interestAmount)}${methodText}`;
-      let action: SystemAction | null = null;
-
-      if (lastAction && lastAction.loanId === payingLoan.id) {
-        const newAmount = (lastAction.amount || 0) + interestAmount;
-        const newInterestAmount = (lastAction.interestAmount || 0) + interestAmount;
-        const newDescription = `${lastAction.description} + ${description}`;
-        await updateDoc(doc(db, 'actions', lastAction.id), {
-          amount: newAmount,
-          interestAmount: newInterestAmount,
-          description: newDescription,
-          date: new Date().toISOString(),
-          paymentMethod: method || null
-        });
-        action = { ...lastAction, amount: newAmount, interestAmount: newInterestAmount, description: newDescription, paymentMethod: method };
-      } else {
-        action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
-      }
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
 
       if (action) setLastAction(action);
     } catch (err) {
+      console.error('Error executing renew loan:', err);
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
   };
@@ -2705,7 +2689,7 @@ export default function App() {
     if (!payingLoan) return;
     
     const payoffAmount = Math.round(payingLoan.totalBruto * 100) / 100;
-    const interestAmount = Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100;
+    const interestAmount = Math.max(0, Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100);
     const capitalAmount = Math.round(payingLoan.capital * 100) / 100;
     
     try {
@@ -2724,6 +2708,7 @@ export default function App() {
 
       if (action) setLastAction(action);
     } catch (err) {
+      console.error('Error executing payoff loan:', err);
       handleFirestoreError(err, OperationType.UPDATE, `loans/${payingLoan.id}`);
     }
   };
@@ -3169,19 +3154,52 @@ export default function App() {
       .reduce((acc, curr) => acc + curr.capital, 0);
     
     // Calculate received values based on actions since last closure
-    const closureDate = userProfile?.lastClosureDate ? toDate(userProfile.lastClosureDate) : null;
+    const rawClosureDate = userProfile?.lastClosureDate ? toDate(userProfile.lastClosureDate) : null;
+    const now = new Date();
+    // Guard: If closureDate was mistakenly set to a future date, disregard it so current transactions appear
+    const closureDate = (rawClosureDate && rawClosureDate.getTime() > now.getTime()) ? null : rawClosureDate;
+    
     const periodActions = actions.filter(a => {
-      if (a.type !== 'payment_received') return false;
+      if (a.type !== 'payment_received' && a.type !== 'loan_renewed') return false;
       const d = toDate(a.date);
       if (!closureDate || !d) return true;
-      return d > closureDate;
+      return d.getTime() > closureDate.getTime();
     });
 
     const capitalRecebido = Math.round(periodActions
-      .reduce((acc, curr) => acc + (curr.capitalAmount !== undefined && curr.capitalAmount > 0 ? (curr.capitalAmount || 0) : (curr.description.toLowerCase().includes('capital') || curr.description.toLowerCase().includes('amortização') || curr.description.toLowerCase().includes('quitação') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
+      .reduce((acc, curr) => {
+        if (curr.capitalAmount !== undefined && curr.capitalAmount > 0) {
+          return acc + curr.capitalAmount;
+        }
+        const desc = (curr.description || '').toLowerCase();
+        if (desc.includes('amortização') || desc.includes('amortizacao') || desc.includes('capital')) {
+          return acc + (curr.amount || 0);
+        }
+        if (desc.includes('quitação') || desc.includes('quitacao')) {
+          const capMatch = desc.match(/capital:\s*r\$\s*([\d.,]+)/i);
+          if (capMatch) {
+            return acc + parseLocaleNumber(capMatch[1]);
+          }
+          return acc + (curr.amount || 0);
+        }
+        return acc;
+      }, 0) * 100) / 100;
     
     const jurosRealizados = Math.round(periodActions
-      .reduce((acc, curr) => acc + (curr.interestAmount !== undefined && curr.interestAmount > 0 ? (curr.interestAmount || 0) : (curr.description.toLowerCase().includes('juros') ? (curr.amount || 0) : 0)), 0) * 100) / 100;
+      .reduce((acc, curr) => {
+        if (curr.interestAmount !== undefined && curr.interestAmount > 0) {
+          return acc + curr.interestAmount;
+        }
+        const desc = (curr.description || '').toLowerCase();
+        if (desc.includes('juros') || desc.includes('renovação') || desc.includes('renovacao')) {
+          const jurMatch = desc.match(/juros:\s*r\$\s*([\d.,]+)/i);
+          if (jurMatch) {
+            return acc + parseLocaleNumber(jurMatch[1]);
+          }
+          return acc + (curr.amount || 0);
+        }
+        return acc;
+      }, 0) * 100) / 100;
     
     const overdueLoans = activeLoans.filter(l => l.status === 'Atrasado' || isOverdue(l));
     const atrasado = Math.round(overdueLoans.reduce((acc, curr) => acc + curr.totalBruto, 0) * 100) / 100;
@@ -3473,8 +3491,9 @@ export default function App() {
           await reauthenticateWithCredential(user, credential);
 
           const userRef = doc(db, 'users', user.uid);
+          const closureMarker = endOfMonth.getTime() > Date.now() ? new Date().toISOString() : endOfMonth.toISOString();
           await updateDoc(userRef, {
-            lastClosureDate: endOfMonth.toISOString()
+            lastClosureDate: closureMarker
           });
 
           // Save or Update closure record
@@ -6609,6 +6628,44 @@ export default function App() {
                                 </p>
                               )}
                             </div>
+
+                            {/* Dashboard Sync & Closure Reset */}
+                            <div className="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                    <TrendingUp className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-[10px] font-black uppercase text-white tracking-[0.2em]">Sincronização do Dashboard</h4>
+                                    <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                                      {userProfile?.lastClosureDate 
+                                        ? `Marco de Fechamento ativo: ${safeFormatDate(userProfile.lastClosureDate, 'dd/MM/yyyy HH:mm')}`
+                                        : "Exibindo todas as baixas e recebimentos no Dashboard"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {userProfile?.lastClosureDate && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!user) return;
+                                      try {
+                                        const userRef = doc(db, 'users', user.uid);
+                                        await updateDoc(userRef, { lastClosureDate: null });
+                                        setUserProfile(prev => prev ? { ...prev, lastClosureDate: null } : null);
+                                        setAddSuccess("Marco de fechamento redefinido! Todas as baixas estão visíveis no Dashboard.");
+                                      } catch (e) {
+                                        console.error('Error clearing closure date:', e);
+                                      }
+                                    }}
+                                    className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-brand-primary text-black hover:bg-amber-400 transition-all shrink-0 active:scale-95"
+                                  >
+                                    Exibir Todas as Baixas
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
 
@@ -7610,20 +7667,22 @@ export default function App() {
                                 
                                 <button 
                                   onClick={() => {
+                                    const payment = pendingPayment;
+                                    if (!payment) return;
                                     setIsConfirmingPix(true);
                                     setTimeout(() => {
                                       setPixConfirmed(true);
                                       setTimeout(() => {
-                                        if (pendingPayment.type === 'interest') handleInterestPayment(pendingPayment.method);
-                                        else if (pendingPayment.type === 'renew') handleRenewLoan(pendingPayment.method);
-                                        else if (pendingPayment.type === 'payoff') handlePayoffLoan(pendingPayment.method);
-                                        else if (pendingPayment.type === 'amortization') handleAmortization(pendingPayment.method);
+                                        if (payment.type === 'interest') handleInterestPayment(payment.method);
+                                        else if (payment.type === 'renew') handleRenewLoan(payment.method);
+                                        else if (payment.type === 'payoff') handlePayoffLoan(payment.method);
+                                        else if (payment.type === 'amortization') handleAmortization(payment.amount, payment.method);
                                         
                                         setPendingPayment(null);
                                         setIsConfirmingPix(false);
                                         setPixConfirmed(false);
-                                      }, 1500);
-                                    }, 2500);
+                                      }, 600);
+                                    }, 800);
                                   }}
                                   className="w-full py-4 bg-brand-primary text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 active:scale-95"
                                 >
@@ -7652,21 +7711,22 @@ export default function App() {
                               <div className="space-y-4">
                                 <button 
                                   onClick={() => {
+                                    const payment = pendingPayment;
+                                    if (!payment) return;
                                     setIsConfirmingPix(true);
-                                    // Faster flow for cash (no real verification needed)
                                     setTimeout(() => {
                                       setPixConfirmed(true);
                                       setTimeout(() => {
-                                        if (pendingPayment.type === 'interest') handleInterestPayment(pendingPayment.method);
-                                        else if (pendingPayment.type === 'renew') handleRenewLoan(pendingPayment.method);
-                                        else if (pendingPayment.type === 'payoff') handlePayoffLoan(pendingPayment.method);
-                                        else if (pendingPayment.type === 'amortization') handleAmortization(pendingPayment.method);
+                                        if (payment.type === 'interest') handleInterestPayment(payment.method);
+                                        else if (payment.type === 'renew') handleRenewLoan(payment.method);
+                                        else if (payment.type === 'payoff') handlePayoffLoan(payment.method);
+                                        else if (payment.type === 'amortization') handleAmortization(payment.amount, payment.method);
                                         
                                         setPendingPayment(null);
                                         setIsConfirmingPix(false);
                                         setPixConfirmed(false);
-                                      }, 800);
-                                    }, 1000);
+                                      }, 500);
+                                    }, 600);
                                   }}
                                   className="w-full py-5 bg-brand-primary text-black rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 active:scale-95"
                                 >

@@ -62,7 +62,7 @@
           "description": "The timestamp when the record was created."
         }
       },
-      "required": ["clientName", "date", "dueDate", "capital", "interestRate", "totalBruto", "status", "uid", "createdAt", "capitalPago", "jurosPagos"]
+      "required": ["clientName", "date", "dueDate", "capital", "interestRate", "totalBruto", "status", "uid"]
     },
     "user": {
       "title": "User",
@@ -72,7 +72,12 @@
         "email": { "type": "string" },
         "displayName": { "type": "string", "description": "The custom name of the user for receipts." },
         "role": { "type": "string", "enum": ["admin", "user"] },
-        "uid": { "type": "string" }
+        "uid": { "type": "string" },
+        "pixKey": { "type": "string" },
+        "pixName": { "type": "string" },
+        "pixBank": { "type": "string" },
+        "profilePicture": { "type": "string" },
+        "lastClosureDate": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "role", "uid"]
     },
@@ -84,6 +89,9 @@
         "type": { "type": "string" },
         "description": { "type": "string" },
         "amount": { "type": "number" },
+        "capitalAmount": { "type": "number" },
+        "interestAmount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["DINHEIRO", "PIX"] },
         "clientName": { "type": "string" },
         "loanId": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
@@ -124,6 +132,7 @@
       "type": "object",
       "properties": {
         "whatsappTemplate": { "type": "string" },
+        "whatsappOverdueTemplate": { "type": "string" },
         "defaultInterestRate": { "type": "number" },
         "accentColor": { "type": "string", "enum": ["yellow", "green", "blue", "violet", "red"] }
       },
