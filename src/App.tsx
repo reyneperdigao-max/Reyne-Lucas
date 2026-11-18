@@ -82,6 +82,13 @@ import { cn } from './lib/utils';
 import { NexusLogo } from './components/NexusLogo';
 import { PublicRegistrationPage } from './components/PublicRegistrationPage';
 import { OnlineRegistrationTab } from './components/OnlineRegistrationTab';
+import { AddressFieldsInput } from './components/AddressFieldsInput';
+import {
+  StructuredAddress,
+  EMPTY_STRUCTURED_ADDRESS,
+  formatStructuredAddress,
+  parseStructuredAddress
+} from './utils/brFormatters';
 import { RegistrationLink, ClientRegistration } from './types/registration';
 // @ts-expect-error - image import from assets without type declaration file
 import luxuryBg from './assets/images/luxury_login_background_1782841009798.jpg';
@@ -828,6 +835,8 @@ export default function App() {
   const [viewingContract, setViewingContract] = useState<Loan[] | null>(null);
   const [isEditingDetail, setIsEditingDetail] = useState(false);
   const [editClientData, setEditClientData] = useState({ phone: '', address: '' });
+  const [loanAddressStruct, setLoanAddressStruct] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
+  const [editAddressStruct, setEditAddressStruct] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [selectedLoansForUnified, setSelectedLoansForUnified] = useState<string[]>([]);
   const [viewingClientDetail, setViewingClientDetail] = useState<{ 
     name: string, 
@@ -843,6 +852,12 @@ export default function App() {
     totalLoans: number,
     score: number
   } | null>(null);
+
+  useEffect(() => {
+    if (isAdding) {
+      setLoanAddressStruct(parseStructuredAddress(newLoan.clientAddress));
+    }
+  }, [isAdding, editingLoanId]);
 
   useEffect(() => {
     if (viewingClientLoans) {
@@ -7502,7 +7517,7 @@ export default function App() {
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           />
           <div 
-            className="relative w-full h-full sm:h-auto sm:max-w-xl glass-card p-6 sm:p-8 overflow-y-auto sm:overflow-visible rounded-none sm:rounded-[32px]"
+            className="relative w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-2xl glass-card p-6 sm:p-8 overflow-y-auto custom-scrollbar rounded-none sm:rounded-[32px]"
           >
               <div className="flex items-center justify-between mb-6 sm:mb-8">
                 <div>
@@ -7556,6 +7571,9 @@ export default function App() {
                             clientPhone: existingClient.phone || newLoan.clientPhone,
                             clientAddress: existingClient.address || newLoan.clientAddress
                           });
+                          if (existingClient.address) {
+                            setLoanAddressStruct(parseStructuredAddress(existingClient.address));
+                          }
                         } else {
                           setNewLoan({...newLoan, clientName: name});
                         }
@@ -7583,14 +7601,23 @@ export default function App() {
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Endereço Completo</label>
-                    <input 
-                      type="text"
-                      placeholder="Rua, Número, Bairro, Cidade..."
-                      className="w-full glass-input py-3 sm:py-4"
-                      value={newLoan.clientAddress || ""}
-                      onChange={(e) => setNewLoan({...newLoan, clientAddress: e.target.value})}
-                    />
+                    <div className={cn(
+                      "rounded-2xl border p-4 space-y-3",
+                      isDark ? "bg-white/[0.02] border-white/10" : "bg-slate-50/70 border-slate-200"
+                    )}>
+                      <label className="text-[10px] font-black text-brand-primary uppercase tracking-widest block">
+                        Endereço do Cliente
+                      </label>
+                      <AddressFieldsInput
+                        value={loanAddressStruct}
+                        onChange={(next) => {
+                          setLoanAddressStruct(next);
+                          setNewLoan(prev => ({ ...prev, clientAddress: formatStructuredAddress(next) }));
+                        }}
+                        isDark={isDark}
+                        compact
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -8640,13 +8667,16 @@ export default function App() {
                         )}
                       </div>
                       <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Endereço Residencial</span>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Endereço Residencial</span>
                         {isEditingDetail ? (
-                          <textarea 
-                            value={editClientData.address}
-                            onChange={(e) => setEditClientData(prev => ({ ...prev, address: e.target.value }))}
-                            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-brand-primary outline-none transition-all min-h-[80px]"
-                            placeholder="Endereço"
+                          <AddressFieldsInput
+                            value={editAddressStruct}
+                            onChange={(next) => {
+                              setEditAddressStruct(next);
+                              setEditClientData(prev => ({ ...prev, address: formatStructuredAddress(next) }));
+                            }}
+                            isDark={isDark}
+                            compact
                           />
                         ) : (
                           <p className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>
@@ -8820,6 +8850,7 @@ export default function App() {
                           phone: viewingClientDetail.phone || '',
                           address: viewingClientDetail.address || ''
                         });
+                        setEditAddressStruct(parseStructuredAddress(viewingClientDetail.address));
                         setIsEditingDetail(true);
                       }}
                       className="flex-1 py-5 bg-brand-primary text-black rounded-[32px] font-black text-xs uppercase tracking-widest hover:brightness-110 transition-all flex items-center justify-center gap-3"

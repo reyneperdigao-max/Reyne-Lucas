@@ -28,8 +28,12 @@ import {
   formatBrPhone,
   formatCurrencyInputBRL,
   parseCurrencyBRL,
-  formatBRL
+  formatBRL,
+  StructuredAddress,
+  EMPTY_STRUCTURED_ADDRESS,
+  formatStructuredAddress
 } from '../utils/brFormatters';
+import { AddressFieldsInput } from './AddressFieldsInput';
 import { RegistrationLink } from '../types/registration';
 
 interface PublicRegistrationPageProps {
@@ -61,7 +65,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   const [fullName, setFullName] = useState('');
   const [cpf, setCpf] = useState('');
   const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
+  const [structuredAddress, setStructuredAddress] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [profession, setProfession] = useState('');
   const [customProfession, setCustomProfession] = useState('');
   const [professionSearch, setProfessionSearch] = useState('');
@@ -176,7 +180,28 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
       return;
     }
 
-    if (address.trim().length < 8) {
+    if (!structuredAddress.street.trim()) {
+      setErrorMsg('Informe a rua / logradouro do seu endereço.');
+      return;
+    }
+
+    if (!structuredAddress.number.trim()) {
+      setErrorMsg('Informe o número do endereço (ou S/N).');
+      return;
+    }
+
+    if (!structuredAddress.neighborhood.trim()) {
+      setErrorMsg('Informe o bairro do seu endereço.');
+      return;
+    }
+
+    if (!structuredAddress.city.trim() || structuredAddress.state.trim().length < 2) {
+      setErrorMsg('Informe a cidade e o estado (UF), ou pesquise pelo CEP.');
+      return;
+    }
+
+    const formattedAddress = formatStructuredAddress(structuredAddress);
+    if (formattedAddress.length < 5) {
       setErrorMsg('Informe seu endereço completo (Rua, número, bairro e cidade).');
       return;
     }
@@ -226,7 +251,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
         fullName: cleanName.slice(0, 120),
         cpf: formatCPF(cpf),
         phone: formatBrPhone(phone),
-        address: address.trim().slice(0, 300),
+        address: formattedAddress,
         profession: finalProfession.slice(0, 100),
         monthlyIncome,
         requestedAmount,
@@ -472,19 +497,17 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 </div>
               </div>
 
-              <div className="sm:col-span-2 space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                  Endereço Completo *
-                </label>
-                <div className="relative">
-                  <MapPin className="w-4 h-4 text-slate-500 absolute left-4 top-4" />
-                  <textarea
+              <div className="sm:col-span-2 pt-2">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Endereço Residencial *</span>
+                  </div>
+                  <AddressFieldsInput
+                    value={structuredAddress}
+                    onChange={setStructuredAddress}
                     required
-                    rows={2}
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Rua, Número, Complemento, Bairro, Cidade - UF, CEP"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition-all resize-none"
+                    isDark
                   />
                 </div>
               </div>
