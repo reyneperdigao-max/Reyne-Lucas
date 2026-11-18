@@ -66,7 +66,7 @@ service cloud.firestore {
     function isValidLoan(data) {
       let requiredFields = ['clientName', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'uid'];
       return data.keys().hasAll(requiredFields) &&
-             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 100 &&
+             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 120 &&
              data.date is string && data.date.size() <= 20 &&
              data.dueDate is string && data.dueDate.size() <= 20 &&
              data.capital is number && data.capital >= 0 &&
@@ -77,7 +77,12 @@ service cloud.firestore {
              (!('capitalPago' in data) || (data.capitalPago is number && data.capitalPago >= 0)) &&
              (!('jurosPagos' in data) || (data.jurosPagos is number && data.jurosPagos >= 0)) &&
              (!('clientPhone' in data) || (data.clientPhone is string && data.clientPhone.size() <= 50)) &&
-             (!('clientAddress' in data) || (data.clientAddress is string && data.clientAddress.size() <= 255));
+             (!('clientAddress' in data) || (data.clientAddress is string && data.clientAddress.size() <= 300)) &&
+             (!('clientCpf' in data) || (data.clientCpf is string && data.clientCpf.size() <= 20)) &&
+             (!('clientProfession' in data) || (data.clientProfession is string && data.clientProfession.size() <= 100)) &&
+             (!('clientMonthlyIncome' in data) || (data.clientMonthlyIncome is number && data.clientMonthlyIncome >= 0)) &&
+             (!('clientReceivingDetails' in data) || (data.clientReceivingDetails is string && data.clientReceivingDetails.size() <= 500)) &&
+             (!('registrationId' in data) || (data.registrationId is string && data.registrationId.size() <= 128));
     }
 
     function isCreatedAtImmutable() {
@@ -124,6 +129,57 @@ service cloud.firestore {
              data.accentColor in ['yellow', 'green', 'blue', 'violet', 'red'];
     }
 
+    function isValidRegistrationLink(data) {
+      let requiredFields = ['linkId', 'uid', 'lenderName', 'active', 'createdAt'];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(requiredFields) &&
+             isValidId(data.linkId) &&
+             data.uid is string && data.uid == request.auth.uid && data.uid.size() <= 128 &&
+             data.lenderName is string && data.lenderName.size() > 0 && data.lenderName.size() <= 100 &&
+             data.active is bool &&
+             data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    function isValidClientRegistration(data) {
+      let requiredFields = [
+        'uid', 'linkId', 'fullName', 'cpf', 'phone', 'address', 'profession',
+        'monthlyIncome', 'requestedAmount', 'receivingType', 'accountHolder',
+        'receivingDetails', 'status', 'submittedAt'
+      ];
+      let allowedFields = [
+        'uid', 'linkId', 'fullName', 'cpf', 'phone', 'address', 'profession',
+        'monthlyIncome', 'requestedAmount', 'receivingType', 'pixKeyType',
+        'pixKey', 'bankName', 'bankAgency', 'bankAccount', 'accountHolder',
+        'receivingDetails', 'notes', 'status', 'submittedAt', 'approvedAt',
+        'approvedAmount', 'loanId'
+      ];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+             isValidId(data.linkId) &&
+             data.fullName is string && data.fullName.size() >= 3 && data.fullName.size() <= 120 &&
+             data.cpf is string && data.cpf.size() >= 11 && data.cpf.size() <= 20 &&
+             data.phone is string && data.phone.size() >= 8 && data.phone.size() <= 30 &&
+             data.address is string && data.address.size() >= 5 && data.address.size() <= 300 &&
+             data.profession is string && data.profession.size() >= 2 && data.profession.size() <= 100 &&
+             data.monthlyIncome is number && data.monthlyIncome > 0 &&
+             data.requestedAmount is number && data.requestedAmount > 0 &&
+             data.receivingType in ['PIX', 'CONTA_BANCARIA'] &&
+             data.accountHolder is string && data.accountHolder.size() >= 2 && data.accountHolder.size() <= 120 &&
+             data.receivingDetails is string && data.receivingDetails.size() >= 5 && data.receivingDetails.size() <= 500 &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.submittedAt is string && data.submittedAt.size() <= 50 &&
+             (!('pixKeyType' in data) || (data.pixKeyType is string && data.pixKeyType.size() <= 30)) &&
+             (!('pixKey' in data) || (data.pixKey is string && data.pixKey.size() <= 200)) &&
+             (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 100)) &&
+             (!('bankAgency' in data) || (data.bankAgency is string && data.bankAgency.size() <= 30)) &&
+             (!('bankAccount' in data) || (data.bankAccount is string && data.bankAccount.size() <= 40)) &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+             (!('approvedAt' in data) || (data.approvedAt is string && data.approvedAt.size() <= 50)) &&
+             (!('approvedAmount' in data) || (data.approvedAmount is number && data.approvedAmount >= 0)) &&
+             (!('loanId' in data) || (data.loanId is string && data.loanId.size() <= 128));
+    }
+
     // ==========================================
     // Collections
     // ==========================================
@@ -153,7 +209,7 @@ service cloud.firestore {
                       // Action: Financial/Status (Amortization, Payment, Renewal, Payoff)
                       (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capital', 'totalBruto', 'capitalPago', 'jurosPagos', 'date', 'dueDate'])) ||
                       // Action: General Info Edit
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos']))
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'clientCpf', 'clientProfession', 'clientMonthlyIncome', 'clientReceivingDetails', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos']))
                     )));
       allow delete: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
     }
@@ -174,6 +230,34 @@ service cloud.firestore {
       allow create: if isVerifiedUser() && isValidClosure(incoming()) && isValidId(closureId);
       allow update: if isVerifiedUser() && (isAdmin() || (resource.data.userId == request.auth.uid && isValidClosure(incoming())));
       allow delete: if isVerifiedUser() && resource.data.userId == request.auth.uid && isValidId(closureId);
+    }
+
+    match /registration_links/{linkId} {
+      // Non-PII public lookup by exact linkId so clients can open the registration form
+      allow get: if isValidId(linkId);
+      allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidRegistrationLink(incoming()) && isValidId(linkId);
+      allow update: if isVerifiedUser() && isValidId(linkId) && (isAdmin() || (isDocOwner() && isValidRegistrationLink(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().linkId == existing().linkId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['active'])));
+      allow delete: if isVerifiedUser() && isDocOwner() && isValidId(linkId);
+    }
+
+    match /client_registrations/{registrationId} {
+      allow get: if isVerifiedUser() && (isDocOwner() || isAdmin()) && isValidId(registrationId);
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow create: if isValidId(registrationId) &&
+                    isValidClientRegistration(incoming()) &&
+                    incoming().status == 'pending' &&
+                    exists(/databases/$(database)/documents/registration_links/$(incoming().linkId)) &&
+                    get(/databases/$(database)/documents/registration_links/$(incoming().linkId)).data.active == true &&
+                    get(/databases/$(database)/documents/registration_links/$(incoming().linkId)).data.uid == incoming().uid;
+      allow update: if isVerifiedUser() && isValidId(registrationId) && (isAdmin() || (isDocOwner() && isValidClientRegistration(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().linkId == existing().linkId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'approvedAt', 'approvedAmount', 'loanId'])));
+      allow delete: if isVerifiedUser() && (isDocOwner() || isAdmin()) && isValidId(registrationId);
     }
   }
 }

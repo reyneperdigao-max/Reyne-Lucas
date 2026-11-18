@@ -49,6 +49,7 @@ import {
   Fingerprint,
   UserPlus,
   KeyRound,
+  Link2,
 } from 'lucide-react';
 import { 
   collection, 
@@ -78,6 +79,10 @@ import { jsPDF } from 'jspdf';
 import { QRCodeSVG } from 'qrcode.react';
 import { db, auth } from './firebase';
 import { cn } from './lib/utils';
+import { NexusLogo } from './components/NexusLogo';
+import { PublicRegistrationPage } from './components/PublicRegistrationPage';
+import { OnlineRegistrationTab } from './components/OnlineRegistrationTab';
+import { RegistrationLink, ClientRegistration } from './types/registration';
 // @ts-expect-error - image import from assets without type declaration file
 import luxuryBg from './assets/images/luxury_login_background_1782841009798.jpg';
 
@@ -357,6 +362,11 @@ interface Loan {
   clientName: string;
   clientPhone?: string;
   clientAddress?: string;
+  clientCpf?: string;
+  clientProfession?: string;
+  clientMonthlyIncome?: number;
+  clientReceivingDetails?: string;
+  registrationId?: string;
   date: string;
   dueDate: string;
   capital: number;
@@ -687,100 +697,11 @@ function base64ToBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function NexusLogo({ className = "w-10 h-10" }: { className?: string }) {
-  return (
-    <div className={cn("relative shrink-0 flex items-center justify-center group", className)}>
-      <svg
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="w-full h-full filter drop-shadow-[0_4px_16px_rgba(212,175,55,0.45)] transition-transform duration-300 group-hover:scale-105"
-      >
-        <defs>
-          <linearGradient id="nexusGoldBright" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#FFFFFF" />
-            <stop offset="20%" stopColor="#FFF2A1" />
-            <stop offset="50%" stopColor="#FFD700" />
-            <stop offset="80%" stopColor="#D4AF37" />
-            <stop offset="100%" stopColor="#997A15" />
-          </linearGradient>
-
-          <linearGradient id="nexusGoldSecondary" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#B38728" />
-            <stop offset="40%" stopColor="#FBF5B7" />
-            <stop offset="70%" stopColor="#DAA520" />
-            <stop offset="100%" stopColor="#AA7C11" />
-          </linearGradient>
-
-          <linearGradient id="nexusShieldBg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#1E293B" />
-            <stop offset="50%" stopColor="#0F172A" />
-            <stop offset="100%" stopColor="#020617" />
-          </linearGradient>
-
-          <linearGradient id="nexusGlowOverlay" x1="50%" y1="0%" x2="50%" y2="100%">
-            <stop offset="0%" stopColor="#FFD700" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#000000" stopOpacity="0.8" />
-          </linearGradient>
-        </defs>
-
-        {/* Outer Shield Hexagon */}
-        <polygon
-          points="50,4 92,25 92,75 50,96 8,75 8,25"
-          fill="url(#nexusShieldBg)"
-          stroke="url(#nexusGoldBright)"
-          strokeWidth="3.5"
-          strokeLinejoin="round"
-        />
-
-        {/* Inner Shield Bevel Rim */}
-        <polygon
-          points="50,10 86,28 86,72 50,90 14,72 14,28"
-          fill="url(#nexusGlowOverlay)"
-          stroke="url(#nexusGoldSecondary)"
-          strokeWidth="1.5"
-          strokeOpacity="0.7"
-          strokeLinejoin="round"
-        />
-
-        {/* Top Diamond Crown Accent */}
-        <line x1="50" y1="10" x2="50" y2="20" stroke="url(#nexusGoldBright)" strokeWidth="1.5" strokeOpacity="0.5" />
-        <polygon points="50,16 55,22 50,28 45,22" fill="url(#nexusGoldBright)" />
-
-        {/* --- INTERLOCKING NP MONOGRAM --- */}
-
-        {/* N Left Pillar */}
-        <path
-          d="M 21 26 H 29 V 74 H 21 Z"
-          fill="url(#nexusGoldBright)"
-        />
-
-        {/* N Diagonal Stroke */}
-        <path
-          d="M 29 26 L 48 64 V 74 H 40 L 21 36 V 26 H 29 Z"
-          fill="url(#nexusGoldSecondary)"
-        />
-
-        {/* Shared Center Pillar (N Right Pillar / P Stem) */}
-        <path
-          d="M 40 26 H 48 V 74 H 40 Z"
-          fill="url(#nexusGoldBright)"
-        />
-
-        {/* P Upper Arch & Loop */}
-        <path
-          d="M 48 26 H 65 C 74.5 26 80 31.5 80 38.5 C 80 45.5 74.5 51 65 51 H 48 V 43 H 64 C 69 43 72 41 72 38.5 C 72 36 69 34 64 34 H 48 V 26 Z"
-          fill="url(#nexusGoldBright)"
-        />
-
-        {/* Bottom Accent Dot */}
-        <circle cx="50" cy="84" r="2" fill="url(#nexusGoldBright)" />
-      </svg>
-    </div>
-  );
-}
-
 export default function App() {
+  const [cadastroLinkId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('cadastro');
+  });
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -860,7 +781,17 @@ export default function App() {
     const saved = localStorage.getItem('nexus_privacy_mode');
     return saved === 'true';
   });
-  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Quitados' | 'Clientes' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações' | 'Suporte'>('Principal');
+  const [activeTab, setActiveTab] = useState<'Principal' | 'Empréstimos' | 'Quitados' | 'Clientes' | 'Cadastro Online' | 'Agendados' | 'Transações' | 'Pagamento' | 'Relatórios' | 'Configurações' | 'Notificações' | 'Suporte'>('Principal');
+  const [registrationLinks, setRegistrationLinks] = useState<RegistrationLink[]>([]);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [clientRegistrations, setClientRegistrations] = useState<ClientRegistration[]>([]);
+  const hasTriedAutoLinkRef = useRef(false);
+  const activeRegistrationLink = useMemo(() => {
+    return registrationLinks.find(l => l.active) || registrationLinks[0] || null;
+  }, [registrationLinks]);
+  const pendingRegistrationsCount = useMemo(() => {
+    return clientRegistrations.filter(r => r.status === 'pending').length;
+  }, [clientRegistrations]);
   const [activeReportTab, setActiveReportTab] = useState<'mensal' | 'fechamentos'>('mensal');
   const [previousTab, setPreviousTab] = useState<typeof activeTab>('Principal');
   const [systemSettings, setSystemSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -901,7 +832,11 @@ export default function App() {
   const [viewingClientDetail, setViewingClientDetail] = useState<{ 
     name: string, 
     phone: string, 
-    address: string, 
+    address: string,
+    cpf?: string,
+    profession?: string,
+    monthlyIncome?: number,
+    receivingDetails?: string,
     activeCapital: number, 
     activeDebt: number, 
     loanCount: number,
@@ -2286,13 +2221,184 @@ export default function App() {
       setIsSettingsLoaded(true); // Allow continuing with defaults if fetch fails
     });
 
+    const qRegLinks = query(
+      collection(db, 'registration_links'),
+      where('uid', '==', user.uid)
+    );
+    const unsubscribeRegLinks = onSnapshot(qRegLinks, (snapshot) => {
+      const linksData = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as RegistrationLink));
+      linksData.sort((a, b) => (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
+      setRegistrationLinks(linksData);
+    }, (err) => {
+      console.error('Error listening to registration_links:', err);
+      handleFirestoreError(err, OperationType.LIST, 'registration_links');
+    });
+
+    const qRegistrations = query(
+      collection(db, 'client_registrations'),
+      where('uid', '==', user.uid)
+    );
+    const unsubscribeRegistrations = onSnapshot(qRegistrations, (snapshot) => {
+      const regsData = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as ClientRegistration));
+      regsData.sort((a, b) => (toDate(b.submittedAt)?.getTime() || 0) - (toDate(a.submittedAt)?.getTime() || 0));
+      setClientRegistrations(regsData);
+    }, (err) => {
+      console.error('Error listening to client_registrations:', err);
+      handleFirestoreError(err, OperationType.LIST, 'client_registrations');
+    });
+
     return () => {
       unsubscribeLoans();
       unsubscribeActions();
       unsubscribeClosures();
       unsubscribeSettings();
+      unsubscribeRegLinks();
+      unsubscribeRegistrations();
     };
   }, [user, isAuthReady]);
+
+  const handleGenerateRegistrationLink = async () => {
+    if (!user) return;
+    setIsGeneratingLink(true);
+    try {
+      const activeOldLinks = registrationLinks.filter(l => l.active);
+      await Promise.all(
+        activeOldLinks.map(l =>
+          updateDoc(doc(db, 'registration_links', l.id), { active: false })
+        )
+      );
+
+      const linkId = `lnk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const rawLenderName = (userProfile?.displayName || user.displayName || 'Nexus Private').trim().slice(0, 100);
+      await setDoc(doc(db, 'registration_links', linkId), {
+        linkId,
+        uid: user.uid,
+        lenderName: rawLenderName || 'Nexus Private',
+        active: true,
+        createdAt: new Date().toISOString()
+      });
+      setAddSuccess('Novo link de cadastro online gerado com sucesso!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'registration_links');
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      activeTab === 'Cadastro Online' &&
+      user &&
+      isAuthReady &&
+      registrationLinks.length === 0 &&
+      !isGeneratingLink &&
+      !hasTriedAutoLinkRef.current
+    ) {
+      hasTriedAutoLinkRef.current = true;
+      handleGenerateRegistrationLink().catch(() => {});
+    }
+  }, [activeTab, user, isAuthReady, registrationLinks.length, isGeneratingLink]);
+
+  const handleToggleLinkActive = async (link: RegistrationLink) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'registration_links', link.id), {
+        active: !link.active
+      });
+      setAddSuccess(!link.active ? 'Link de cadastro ativado!' : 'Link de cadastro pausado.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `registration_links/${link.id}`);
+    }
+  };
+
+  const handleApproveRegistration = async (
+    reg: ClientRegistration,
+    approval: {
+      capital: number;
+      interestRatePercent: number;
+      date: string;
+      dueDate: string;
+      status: 'Pendente' | 'Agendado';
+    }
+  ) => {
+    if (!user) return;
+    try {
+      const capitalRounded = Math.round(approval.capital * 100) / 100;
+      const interestRateDec = approval.interestRatePercent / 100;
+      const totalBrutoRounded = Math.round(capitalRounded * (1 + interestRateDec) * 100) / 100;
+
+      const newLoanPayload = {
+        clientName: reg.fullName.trim().slice(0, 120),
+        clientPhone: reg.phone.trim().slice(0, 50),
+        clientAddress: reg.address.trim().slice(0, 300),
+        clientCpf: reg.cpf.trim().slice(0, 20),
+        clientProfession: reg.profession.trim().slice(0, 100),
+        clientMonthlyIncome: reg.monthlyIncome,
+        clientReceivingDetails: reg.receivingDetails.trim().slice(0, 500),
+        registrationId: reg.id,
+        date: approval.date,
+        dueDate: approval.dueDate,
+        capital: capitalRounded,
+        interestRate: interestRateDec,
+        totalBruto: totalBrutoRounded,
+        status: approval.status,
+        uid: user.uid,
+        createdAt: serverTimestamp(),
+        capitalPago: 0,
+        jurosPagos: 0
+      };
+
+      const loanRef = await addDoc(collection(db, 'loans'), newLoanPayload);
+
+      await updateDoc(doc(db, 'client_registrations', reg.id), {
+        status: 'approved',
+        approvedAt: new Date().toISOString(),
+        approvedAmount: capitalRounded,
+        loanId: loanRef.id
+      });
+
+      const isScheduled = approval.status === 'Agendado';
+      await logAction(
+        isScheduled ? 'loan_scheduled' : 'loan_created',
+        `${isScheduled ? 'Agendamento aprovado via Cadastro Online' : 'Crédito aprovado via Cadastro Online'} para ${newLoanPayload.clientName}`,
+        newLoanPayload.clientName,
+        loanRef.id,
+        capitalRounded
+      );
+
+      setAddSuccess(`Crédito de ${newLoanPayload.clientName} aprovado! Cliente adicionado à lista.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'client_registrations');
+    }
+  };
+
+  const handleRejectRegistration = async (reg: ClientRegistration) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'client_registrations', reg.id), {
+        status: 'rejected'
+      });
+      setAddSuccess(`Solicitação de ${reg.fullName} marcada como recusada.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `client_registrations/${reg.id}`);
+    }
+  };
+
+  const handleDeleteRegistration = async (reg: ClientRegistration) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'client_registrations', reg.id));
+      setAddSuccess(`Solicitação de ${reg.fullName} removida.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `client_registrations/${reg.id}`);
+    }
+  };
 
   const logAction = async (
     type: SystemAction['type'], 
@@ -2995,7 +3101,11 @@ export default function App() {
     const clientMap = new Map<string, { 
       name: string, 
       phone: string, 
-      address: string, 
+      address: string,
+      cpf?: string,
+      profession?: string,
+      monthlyIncome?: number,
+      receivingDetails?: string,
       activeCapital: number, 
       activeDebt: number, 
       loanCount: number,
@@ -3013,6 +3123,10 @@ export default function App() {
         name: loan.clientName, 
         phone: loan.clientPhone || '', 
         address: loan.clientAddress || '',
+        cpf: loan.clientCpf,
+        profession: loan.clientProfession,
+        monthlyIncome: loan.clientMonthlyIncome,
+        receivingDetails: loan.clientReceivingDetails,
         activeCapital: 0, 
         activeDebt: 0, 
         loanCount: 0,
@@ -3040,11 +3154,30 @@ export default function App() {
         }
       }
       
-      // Keep most recent contact info
+      // Keep most recent contact & registration info
       if (!existing.phone && loan.clientPhone) existing.phone = loan.clientPhone;
       if (!existing.address && loan.clientAddress) existing.address = loan.clientAddress;
+      if (!existing.cpf && loan.clientCpf) existing.cpf = loan.clientCpf;
+      if (!existing.profession && loan.clientProfession) existing.profession = loan.clientProfession;
+      if (!existing.monthlyIncome && loan.clientMonthlyIncome) existing.monthlyIncome = loan.clientMonthlyIncome;
+      if (!existing.receivingDetails && loan.clientReceivingDetails) existing.receivingDetails = loan.clientReceivingDetails;
       
       clientMap.set(loan.clientName, existing);
+    });
+
+    // Enrich with registration profile data if missing from loans
+    clientMap.forEach(client => {
+      if (!client.cpf || !client.profession || !client.receivingDetails) {
+        const regMatch = clientRegistrations.find(
+          r => r.fullName.trim().toLowerCase() === client.name.trim().toLowerCase()
+        );
+        if (regMatch) {
+          if (!client.cpf) client.cpf = regMatch.cpf;
+          if (!client.profession) client.profession = regMatch.profession;
+          if (!client.monthlyIncome) client.monthlyIncome = regMatch.monthlyIncome;
+          if (!client.receivingDetails) client.receivingDetails = regMatch.receivingDetails;
+        }
+      }
     });
 
     // Calculate dynamic credit score for each client based on payment history
@@ -3063,7 +3196,7 @@ export default function App() {
     });
     
     return Array.from(clientMap.values());
-  }, [loans]);
+  }, [loans, clientRegistrations]);
 
   const clients = useMemo(() => {
     let result = [...fullClients];
@@ -3578,6 +3711,10 @@ export default function App() {
   }, [privacyMode]);
 
   // --- Render Helpers ---
+  if (cadastroLinkId) {
+    return <PublicRegistrationPage linkId={cadastroLinkId} />;
+  }
+
   if (!isAuthReady) return (
     <div className={cn(
       "flex flex-col items-center justify-center h-screen gap-6 transition-colors duration-500",
@@ -4000,6 +4137,7 @@ export default function App() {
     { id: 'Principal', label: 'Principal', icon: BarChart3 },
     { id: 'Empréstimos', label: 'Empréstimos', icon: DollarSign },
     { id: 'Clientes', label: 'Clientes', icon: Users },
+    { id: 'Cadastro Online', label: 'Cadastro Online', icon: UserPlus },
     { id: 'Transações', label: 'Transações', icon: Wallet },
     { id: 'Agendados', label: 'Agendamentos', icon: Calendar },
     { id: 'Notificações', label: 'Alertas', icon: Bell },
@@ -4146,7 +4284,16 @@ export default function App() {
                     {item.label}
                   </span>
                 )}
-                {!isActive && !isSidebarCollapsed && (
+                {item.id === 'Cadastro Online' && pendingRegistrationsCount > 0 && (
+                  <span className={cn(
+                    "ml-auto px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none",
+                    isSidebarCollapsed && "absolute top-1.5 right-1.5 ml-0",
+                    isActive ? "bg-black text-[#FFD700]" : "bg-brand-primary text-black"
+                  )}>
+                    {pendingRegistrationsCount}
+                  </span>
+                )}
+                {!isActive && !isSidebarCollapsed && !(item.id === 'Cadastro Online' && pendingRegistrationsCount > 0) && (
                   <div className="absolute right-4 transform translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-300">
                     <ChevronRight className="w-3 h-3 opacity-50" />
                   </div>
@@ -4247,6 +4394,14 @@ export default function App() {
                   )}
                   <item.icon className="w-5 h-5" />
                   <span className="text-xs uppercase tracking-widest">{item.label}</span>
+                  {item.id === 'Cadastro Online' && pendingRegistrationsCount > 0 && (
+                    <span className={cn(
+                      "ml-auto px-2 py-0.5 rounded-full text-[10px] font-black",
+                      activeTab === item.id ? "bg-black text-[#FFD700]" : "bg-brand-primary text-black"
+                    )}>
+                      {pendingRegistrationsCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -4564,6 +4719,23 @@ export default function App() {
                   </button>
                 </div>
               )}
+
+            {activeTab === 'Clientes' && (
+              <div className="flex gap-2 sm:gap-3">
+                <button
+                  onClick={() => changeTab('Cadastro Online')}
+                  className="bg-brand-primary text-slate-950 px-5 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
+                >
+                  <Link2 className="w-4 h-4" />
+                  <span>Link Cadastro Online</span>
+                  {pendingRegistrationsCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-black text-[#FFD700] text-[9px] font-black leading-none">
+                      {pendingRegistrationsCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
             </div>
           )}
 
@@ -6793,6 +6965,32 @@ export default function App() {
                     </div>
                   </div>
                 </motion.div>
+              ) : activeTab === 'Cadastro Online' ? (
+                <motion.div
+                  key="tab-cadastro-online"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                  className="p-4 sm:p-6"
+                >
+                  <OnlineRegistrationTab
+                    isDark={isDark}
+                    activeLink={activeRegistrationLink}
+                    isGeneratingLink={isGeneratingLink}
+                    onGenerateNewLink={handleGenerateRegistrationLink}
+                    onToggleLinkActive={handleToggleLinkActive}
+                    registrations={clientRegistrations}
+                    defaultInterestRate={systemSettings.defaultInterestRate}
+                    onApproveRegistration={handleApproveRegistration}
+                    onRejectRegistration={handleRejectRegistration}
+                    onDeleteRegistration={handleDeleteRegistration}
+                    onGoToClient={(clientName) => {
+                      changeTab('Clientes');
+                      setCommand(clientName);
+                    }}
+                  />
+                </motion.div>
               ) : (
 
 
@@ -8456,6 +8654,46 @@ export default function App() {
                           </p>
                         )}
                       </div>
+                      {(viewingClientDetail.cpf || viewingClientDetail.profession || viewingClientDetail.monthlyIncome || viewingClientDetail.receivingDetails) && (
+                        <>
+                          {(viewingClientDetail.cpf || viewingClientDetail.profession) && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {viewingClientDetail.cpf && (
+                                <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">CPF</span>
+                                  <p className={cn("text-sm font-bold font-mono", isDark ? "text-white" : "text-slate-900")}>
+                                    {viewingClientDetail.cpf}
+                                  </p>
+                                </div>
+                              )}
+                              {viewingClientDetail.profession && (
+                                <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Profissão</span>
+                                  <p className={cn("text-sm font-bold", isDark ? "text-white" : "text-slate-900")}>
+                                    {viewingClientDetail.profession}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {viewingClientDetail.monthlyIncome && viewingClientDetail.monthlyIncome > 0 && (
+                            <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Renda Mensal Informada</span>
+                              <p className={cn("text-sm font-bold text-emerald-400 font-mono")}>
+                                R$ {viewingClientDetail.monthlyIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                          )}
+                          {viewingClientDetail.receivingDetails && (
+                            <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Dados para Recebimento (PIX / Banco)</span>
+                              <p className={cn("text-xs font-bold break-words", isDark ? "text-slate-200" : "text-slate-800")}>
+                                {viewingClientDetail.receivingDetails}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -9255,7 +9493,7 @@ export default function App() {
                 key={`bottom-nav-${item.id}`}
                 onClick={() => changeTab(item.id as typeof activeTab)}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
+                  "relative flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
                   isActive ? "text-[#D4AF37]" : "text-slate-500"
                 )}
               >
@@ -9275,11 +9513,17 @@ export default function App() {
                   )}
                   <Icon className={cn("w-5 h-5", isActive ? "text-black scale-110" : "text-slate-400")} />
                 </div>
+                {item.id === 'Cadastro Online' && pendingRegistrationsCount > 0 && (
+                  <span className="absolute top-0.5 right-2 px-1.5 py-0.5 rounded-full bg-brand-primary text-black text-[8px] font-black leading-none">
+                    {pendingRegistrationsCount}
+                  </span>
+                )}
                 <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", isActive ? "opacity-100 font-extrabold text-[#D4AF37]" : "opacity-60")}>
                   {item.label === 'Principal' ? 'Início' : 
                    item.label === 'Empréstimos' ? 'Empréstimos' :
                    item.label === 'Quitados' ? 'Pagos' :
-                   item.label === 'Clientes' ? 'Clientes' : 
+                   item.label === 'Clientes' ? 'Clientes' :
+                   item.label === 'Cadastro Online' ? 'Cadastro' :
                    item.label === 'Transações' ? 'Transações' : item.label}
                 </span>
               </button>

@@ -17,6 +17,30 @@
           "type": "string",
           "description": "The address of the client."
         },
+        "clientCpf": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "The CPF of the client."
+        },
+        "clientProfession": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "The profession of the client."
+        },
+        "clientMonthlyIncome": {
+          "type": "number",
+          "description": "The declared monthly income of the client."
+        },
+        "clientReceivingDetails": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "PIX or bank account details for disbursing the loan."
+        },
+        "registrationId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Optional reference to the online registration document."
+        },
         "date": {
           "type": "string",
           "format": "date",
@@ -137,6 +161,54 @@
         "accentColor": { "type": "string", "enum": ["yellow", "green", "blue", "violet", "red"] }
       },
       "required": ["whatsappTemplate", "defaultInterestRate", "accentColor"]
+    },
+    "registration_link": {
+      "title": "Registration Link",
+      "description": "Shareable public link metadata for online client credit registration.",
+      "type": "object",
+      "properties": {
+        "linkId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "maxLength": 128 },
+        "lenderName": { "type": "string", "maxLength": 100 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": ["linkId", "uid", "lenderName", "active", "createdAt"]
+    },
+    "client_registration": {
+      "title": "Client Registration",
+      "description": "Online credit registration request submitted by a prospective client.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "linkId": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "cpf": { "type": "string", "minLength": 11, "maxLength": 20 },
+        "phone": { "type": "string", "minLength": 8, "maxLength": 30 },
+        "address": { "type": "string", "minLength": 5, "maxLength": 300 },
+        "profession": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "monthlyIncome": { "type": "number" },
+        "requestedAmount": { "type": "number" },
+        "receivingType": { "type": "string", "enum": ["PIX", "CONTA_BANCARIA"] },
+        "pixKeyType": { "type": "string", "maxLength": 30 },
+        "pixKey": { "type": "string", "maxLength": 200 },
+        "bankName": { "type": "string", "maxLength": 100 },
+        "bankAgency": { "type": "string", "maxLength": 30 },
+        "bankAccount": { "type": "string", "maxLength": 40 },
+        "accountHolder": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "receivingDetails": { "type": "string", "minLength": 5, "maxLength": 500 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "submittedAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "approvedAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "approvedAmount": { "type": "number" },
+        "loanId": { "type": "string", "maxLength": 128 }
+      },
+      "required": [
+        "uid", "linkId", "fullName", "cpf", "phone", "address", "profession",
+        "monthlyIncome", "requestedAmount", "receivingType", "accountHolder",
+        "receivingDetails", "status", "submittedAt"
+      ]
     }
   },
   "firestore": {
@@ -159,6 +231,14 @@
     "/monthly_closures/{closureId}": {
       "schema": "monthly_closure",
       "description": "History of monthly closures."
+    },
+    "/registration_links/{linkId}": {
+      "schema": "registration_link",
+      "description": "Shareable registration links created by lenders."
+    },
+    "/client_registrations/{registrationId}": {
+      "schema": "client_registration",
+      "description": "Client credit registration requests submitted online."
     }
   }
 }

@@ -1,0 +1,928 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  User,
+  MapPin,
+  Briefcase,
+  DollarSign,
+  Phone,
+  CreditCard,
+  Landmark,
+  CheckCircle2,
+  AlertCircle,
+  Search,
+  ChevronDown,
+  ShieldCheck,
+  Sparkles,
+  FileText,
+  ArrowRight,
+  Lock
+} from 'lucide-react';
+import { db } from '../firebase';
+import { cn } from '../lib/utils';
+import { NexusLogo } from './NexusLogo';
+import { PROFESSIONS_LIST } from '../data/professions';
+import {
+  formatCPF,
+  isValidCPF,
+  formatBrPhone,
+  formatCurrencyInputBRL,
+  parseCurrencyBRL,
+  formatBRL
+} from '../utils/brFormatters';
+import { RegistrationLink } from '../types/registration';
+
+interface PublicRegistrationPageProps {
+  linkId: string;
+}
+
+const POPULAR_BANKS = [
+  'Nubank',
+  'Itaú',
+  'Banco do Brasil',
+  'Caixa Econômica',
+  'Bradesco',
+  'Santander',
+  'Inter',
+  'C6 Bank',
+  'PicPay',
+  'Mercado Pago',
+  'PagBank',
+  'Sicredi',
+  'Sicoob',
+  'Outro Banco'
+];
+
+export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ linkId }) => {
+  const [linkData, setLinkData] = useState<RegistrationLink | null>(null);
+  const [linkStatus, setLinkStatus] = useState<'loading' | 'valid' | 'invalid'>('loading');
+
+  // Form states
+  const [fullName, setFullName] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [profession, setProfession] = useState('');
+  const [customProfession, setCustomProfession] = useState('');
+  const [professionSearch, setProfessionSearch] = useState('');
+  const [isProfessionDropdownOpen, setIsProfessionDropdownOpen] = useState(false);
+
+  const [monthlyIncomeStr, setMonthlyIncomeStr] = useState('');
+  const [requestedAmountStr, setRequestedAmountStr] = useState('');
+
+  const [receivingType, setReceivingType] = useState<'PIX' | 'CONTA_BANCARIA'>('PIX');
+  const [pixKeyType, setPixKeyType] = useState<'CPF' | 'Celular' | 'E-mail' | 'Aleatória'>('CPF');
+  const [pixKey, setPixKey] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [bankAgency, setBankAgency] = useState('');
+  const [bankAccount, setBankAccount] = useState('');
+  const [accountType, setAccountType] = useState<'Corrente' | 'Poupança'>('Corrente');
+  const [accountHolder, setAccountHolder] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedProtocol, setSubmittedProtocol] = useState<string | null>(null);
+  const [submittedSummary, setSubmittedSummary] = useState<{
+    name: string;
+    amount: number;
+    receiving: string;
+  } | null>(null);
+
+  const professionDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchLink = async () => {
+      if (!linkId || !/^[a-zA-Z0-9_-]+$/.test(linkId)) {
+        setLinkStatus('invalid');
+        return;
+      }
+      try {
+        const snap = await getDoc(doc(db, 'registration_links', linkId));
+        if (!snap.exists()) {
+          setLinkStatus('invalid');
+          return;
+        }
+        const data = { id: snap.id, ...snap.data() } as RegistrationLink;
+        if (!data.active) {
+          setLinkStatus('invalid');
+          return;
+        }
+        setLinkData(data);
+        setLinkStatus('valid');
+      } catch (err) {
+        console.error('Erro ao validar link de cadastro:', err);
+        setLinkStatus('invalid');
+      }
+    };
+    fetchLink();
+  }, [linkId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        professionDropdownRef.current &&
+        !professionDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsProfessionDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredProfessions = useMemo(() => {
+    const term = professionSearch.trim().toLowerCase();
+    if (!term) return PROFESSIONS_LIST;
+    return PROFESSIONS_LIST.filter(
+      (p) =>
+        p.name.toLowerCase().includes(term) ||
+        p.category.toLowerCase().includes(term)
+    );
+  }, [professionSearch]);
+
+  const groupedProfessions = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    filteredProfessions.forEach((p) => {
+      if (!groups[p.category]) groups[p.category] = [];
+      groups[p.category].push(p.name);
+    });
+    return groups;
+  }, [filteredProfessions]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    if (!linkData) {
+      setErrorMsg('Link de cadastro inválido ou expirado.');
+      return;
+    }
+
+    const cleanName = fullName.trim();
+    if (cleanName.length < 5 || !cleanName.includes(' ')) {
+      setErrorMsg('Por favor, informe seu nome completo (nome e sobrenome).');
+      return;
+    }
+
+    if (!isValidCPF(cpf)) {
+      setErrorMsg('CPF inválido. Verifique os 11 dígitos informados.');
+      return;
+    }
+
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      setErrorMsg('Informe um número de telefone/WhatsApp válido com DDD.');
+      return;
+    }
+
+    if (address.trim().length < 8) {
+      setErrorMsg('Informe seu endereço completo (Rua, número, bairro e cidade).');
+      return;
+    }
+
+    const finalProfession =
+      profession === 'Outra Profissão' ? customProfession.trim() : profession.trim();
+    if (!finalProfession) {
+      setErrorMsg('Selecione ou informe sua profissão.');
+      return;
+    }
+
+    const monthlyIncome = parseCurrencyBRL(monthlyIncomeStr);
+    if (monthlyIncome <= 0) {
+      setErrorMsg('Informe sua renda mensal aproximada.');
+      return;
+    }
+
+    const requestedAmount = parseCurrencyBRL(requestedAmountStr);
+    if (requestedAmount <= 0) {
+      setErrorMsg('Informe o valor do empréstimo desejado.');
+      return;
+    }
+
+    const holder = (accountHolder.trim() || cleanName).slice(0, 120);
+    let receivingDetails = '';
+
+    if (receivingType === 'PIX') {
+      if (!pixKey.trim()) {
+        setErrorMsg('Informe sua Chave PIX para recebimento.');
+        return;
+      }
+      receivingDetails = `PIX (${pixKeyType}): ${pixKey.trim()}${bankName.trim() ? ` | Banco: ${bankName.trim()}` : ''} | Titular: ${holder}`;
+    } else {
+      if (!bankName.trim() || !bankAgency.trim() || !bankAccount.trim()) {
+        setErrorMsg('Preencha banco, agência e conta para recebimento.');
+        return;
+      }
+      receivingDetails = `Conta ${accountType} - ${bankName.trim()} | Ag: ${bankAgency.trim()} | Conta: ${bankAccount.trim()} | Titular: ${holder}`;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const regId = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const payload: Record<string, unknown> = {
+        uid: linkData.uid,
+        linkId: linkData.linkId,
+        fullName: cleanName.slice(0, 120),
+        cpf: formatCPF(cpf),
+        phone: formatBrPhone(phone),
+        address: address.trim().slice(0, 300),
+        profession: finalProfession.slice(0, 100),
+        monthlyIncome,
+        requestedAmount,
+        receivingType,
+        accountHolder: holder,
+        receivingDetails: receivingDetails.slice(0, 500),
+        status: 'pending',
+        submittedAt: new Date().toISOString()
+      };
+
+      if (receivingType === 'PIX') {
+        payload.pixKeyType = pixKeyType;
+        payload.pixKey = pixKey.trim().slice(0, 200);
+        if (bankName.trim()) payload.bankName = bankName.trim().slice(0, 100);
+      } else {
+        payload.bankName = bankName.trim().slice(0, 100);
+        payload.bankAgency = bankAgency.trim().slice(0, 30);
+        payload.bankAccount = `${bankAccount.trim()} (${accountType})`.slice(0, 40);
+      }
+
+      if (notes.trim()) {
+        payload.notes = notes.trim().slice(0, 500);
+      }
+
+      await setDoc(doc(db, 'client_registrations', regId), payload);
+
+      setSubmittedSummary({
+        name: cleanName,
+        amount: requestedAmount,
+        receiving: receivingDetails
+      });
+      setSubmittedProtocol(regId.toUpperCase().slice(0, 16));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      console.error('Erro ao enviar cadastro:', err);
+      setErrorMsg('Não foi possível enviar sua solicitação no momento. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (linkStatus === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#07080B] text-white flex flex-col items-center justify-center p-6 gap-5">
+        <NexusLogo className="w-16 h-16" />
+        <div className="w-10 h-10 border-2 border-[#D4AF37]/20 border-t-[#D4AF37] rounded-full animate-spin" />
+        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
+          Carregando Formulário Seguro
+        </p>
+      </div>
+    );
+  }
+
+  if (linkStatus === 'invalid') {
+    return (
+      <div className="min-h-screen bg-[#07080B] text-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-[#111319] border border-white/10 rounded-[32px] p-8 sm:p-10 text-center space-y-6 shadow-2xl">
+          <div className="flex justify-center">
+            <NexusLogo className="w-16 h-16" />
+          </div>
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl font-black uppercase tracking-tight text-white">
+              Link Indisponível
+            </h1>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Este link de cadastro online está pausado, expirado ou não foi encontrado. Entre em contato com seu consultor para receber um novo link.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (submittedProtocol && submittedSummary) {
+    return (
+      <div className="min-h-screen bg-[#07080B] text-white flex items-center justify-center p-4 sm:p-8">
+        <div className="max-w-lg w-full bg-[#101218] border border-[#D4AF37]/30 rounded-[36px] p-8 sm:p-10 text-center space-y-6 shadow-[0_25px_70px_rgba(0,0,0,0.85)] relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(212,175,55,0.14)_0%,_transparent_65%)] pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col items-center space-y-5">
+            <NexusLogo className="w-14 h-14" />
+            <div className="w-20 h-20 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#D4AF37]">
+                Protocolo {submittedProtocol}
+              </span>
+              <h1 className="text-2xl font-black tracking-tight text-white">
+                Solicitação Enviada!
+              </h1>
+              <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+                Recebemos seu cadastro com sucesso, <span className="text-white font-bold">{submittedSummary.name}</span>. Seus dados já estão em análise de crédito.
+              </p>
+            </div>
+
+            <div className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-5 text-left space-y-3">
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Valor Solicitado
+                </span>
+                <span className="text-lg font-black text-[#D4AF37] font-mono">
+                  {formatBRL(submittedSummary.amount)}
+                </span>
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 block mb-1">
+                  Dados para Recebimento
+                </span>
+                <p className="text-xs font-semibold text-slate-200 break-words">
+                  {submittedSummary.receiving}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2.5 rounded-xl">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>Em breve retornaremos com a aprovação</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#07080B] text-white py-6 px-3 sm:py-12 sm:px-6 relative overflow-x-hidden">
+      {/* Background luxury ambient glow */}
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,_rgba(212,175,55,0.1)_0%,_transparent_50%),radial-gradient(circle_at_80%_100%,_rgba(16,185,129,0.06)_0%,_transparent_50%)]" />
+
+      <div className="max-w-2xl mx-auto relative z-10 space-y-6">
+        {/* Header Card */}
+        <div className="bg-[#101218]/95 backdrop-blur-xl border border-[#D4AF37]/25 rounded-[32px] p-6 sm:p-8 shadow-2xl">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
+            <NexusLogo className="w-16 h-16 shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[#D4AF37] text-[9px] font-black uppercase tracking-[0.25em]">
+                <Lock className="w-3 h-3" />
+                Cadastro Seguro de Crédito
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                {linkData?.lenderName || 'Nexus Private'}
+              </h1>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Preencha seus dados abaixo para análise e liberação de crédito. Todas as informações são confidenciais.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Registration Form */}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-[#101218]/95 backdrop-blur-xl border border-white/10 rounded-[32px] p-5 sm:p-8 shadow-2xl space-y-8"
+        >
+          {errorMsg && (
+            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* Section 1: Dados Pessoais */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
+              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
+                <User className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  1. Dados Pessoais
+                </h2>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Identificação e contato do solicitante
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Ex: João da Silva Santos"
+                  className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  CPF *
+                </label>
+                <div className="relative">
+                  <FileText className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={cpf}
+                    onChange={(e) => setCpf(formatCPF(e.target.value))}
+                    placeholder="000.000.000-00"
+                    maxLength={14}
+                    className={cn(
+                      "w-full rounded-2xl bg-white/[0.04] border pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono",
+                      cpf.replace(/\D/g, '').length === 11
+                        ? isValidCPF(cpf)
+                          ? "border-emerald-500/50"
+                          : "border-red-500/60"
+                        : "border-white/10 focus:border-[#D4AF37]"
+                    )}
+                  />
+                </div>
+                {cpf.replace(/\D/g, '').length === 11 && !isValidCPF(cpf) && (
+                  <p className="text-[10px] text-red-400 font-bold ml-1">CPF inválido</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Telefone / WhatsApp *
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(formatBrPhone(e.target.value))}
+                    placeholder="(00) 00000-0000"
+                    maxLength={15}
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Endereço Completo *
+                </label>
+                <div className="relative">
+                  <MapPin className="w-4 h-4 text-slate-500 absolute left-4 top-4" />
+                  <textarea
+                    required
+                    rows={2}
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Rua, Número, Complemento, Bairro, Cidade - UF, CEP"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition-all resize-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Profissão e Renda */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
+              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
+                <Briefcase className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  2. Profissão e Renda
+                </h2>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Atividade profissional e ganho mensal
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Searchable Profession Picker */}
+              <div className="space-y-1.5 relative" ref={professionDropdownRef}>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Profissão *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsProfessionDropdownOpen((o) => !o)}
+                  className={cn(
+                    "w-full rounded-2xl bg-white/[0.04] border px-4 py-3.5 text-sm text-left flex items-center justify-between gap-2 transition-all",
+                    isProfessionDropdownOpen ? "border-[#D4AF37]" : "border-white/10 hover:border-white/20"
+                  )}
+                >
+                  <span className={profession ? "text-white font-semibold truncate" : "text-slate-500"}>
+                    {profession || 'Selecione sua profissão...'}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 text-slate-400 shrink-0 transition-transform",
+                      isProfessionDropdownOpen && "rotate-180 text-[#D4AF37]"
+                    )}
+                  />
+                </button>
+
+                {isProfessionDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-[#151821] border border-[#D4AF37]/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden">
+                    <div className="p-2.5 border-b border-white/10 bg-black/40">
+                      <div className="relative">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={professionSearch}
+                          onChange={(e) => setProfessionSearch(e.target.value)}
+                          placeholder="Buscar profissão (ex: Motorista, Vendedor)..."
+                          autoFocus
+                          className="w-full rounded-xl bg-white/5 border border-white/10 focus:border-[#D4AF37] pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-1.5 space-y-2">
+                      {Object.keys(groupedProfessions).length === 0 ? (
+                        <div className="p-4 text-center space-y-2">
+                          <p className="text-xs text-slate-400">Profissão não encontrada na lista.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfession('Outra Profissão');
+                              setCustomProfession(professionSearch);
+                              setIsProfessionDropdownOpen(false);
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-[#D4AF37] text-black text-[10px] font-black uppercase tracking-wider"
+                          >
+                            Usar "{professionSearch}"
+                          </button>
+                        </div>
+                      ) : (
+                        (Object.entries(groupedProfessions) as [string, string[]][]).map(([category, items]) => (
+                          <div key={category}>
+                            <div className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#D4AF37]/80">
+                              {category}
+                            </div>
+                            {items.map((item) => (
+                              <button
+                                key={item}
+                                type="button"
+                                onClick={() => {
+                                  setProfession(item);
+                                  setIsProfessionDropdownOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 rounded-xl text-xs transition-colors flex items-center justify-between",
+                                  profession === item
+                                    ? "bg-[#D4AF37] text-black font-bold"
+                                    : "text-slate-200 hover:bg-white/10"
+                                )}
+                              >
+                                <span>{item}</span>
+                                {profession === item && <CheckCircle2 className="w-3.5 h-3.5" />}
+                              </button>
+                            ))}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {profession === 'Outra Profissão' && (
+                  <input
+                    type="text"
+                    required
+                    value={customProfession}
+                    onChange={(e) => setCustomProfession(e.target.value)}
+                    placeholder="Digite sua profissão..."
+                    className="mt-2 w-full rounded-2xl bg-white/[0.04] border border-[#D4AF37]/40 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none"
+                  />
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Renda Mensal (R$) *
+                </label>
+                <div className="relative">
+                  <span className="text-xs font-black text-[#D4AF37] absolute left-4 top-1/2 -translate-y-1/2">
+                    R$
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={monthlyIncomeStr}
+                    onChange={(e) => setMonthlyIncomeStr(formatCurrencyInputBRL(e.target.value))}
+                    placeholder="0,00"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Valor do Empréstimo */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                <DollarSign className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  3. Valor do Empréstimo
+                </h2>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Quanto você precisa solicitar?
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="relative">
+                <span className="text-base font-black text-emerald-400 absolute left-4 top-1/2 -translate-y-1/2">
+                  R$
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  value={requestedAmountStr}
+                  onChange={(e) => setRequestedAmountStr(formatCurrencyInputBRL(e.target.value))}
+                  placeholder="0,00"
+                  className="w-full rounded-2xl bg-emerald-500/[0.04] border border-emerald-500/30 focus:border-emerald-400 pl-12 pr-4 py-4 text-xl text-white placeholder:text-slate-600 outline-none transition-all font-mono font-black"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {[500, 1000, 1500, 2000, 3000, 5000].map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() =>
+                      setRequestedAmountStr(
+                        val.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-[#D4AF37]/15 border border-white/10 hover:border-[#D4AF37]/40 text-[11px] font-bold text-slate-300 hover:text-[#D4AF37] transition-all font-mono"
+                  >
+                    R$ {val.toLocaleString('pt-BR')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Dados para Recebimento */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
+              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
+                <Landmark className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white">
+                  4. Dados para Recebimento
+                </h2>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  Onde o valor emprestado deverá ser depositado
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-1 bg-white/[0.03] rounded-2xl border border-white/10">
+              <button
+                type="button"
+                onClick={() => setReceivingType('PIX')}
+                className={cn(
+                  "py-3 px-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                  receivingType === 'PIX'
+                    ? "bg-[#D4AF37] text-black shadow-lg"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                <Sparkles className="w-4 h-4" />
+                Chave PIX
+              </button>
+              <button
+                type="button"
+                onClick={() => setReceivingType('CONTA_BANCARIA')}
+                className={cn(
+                  "py-3 px-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                  receivingType === 'CONTA_BANCARIA'
+                    ? "bg-[#D4AF37] text-black shadow-lg"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                <CreditCard className="w-4 h-4" />
+                Conta Bancária
+              </button>
+            </div>
+
+            {receivingType === 'PIX' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Tipo de Chave PIX *
+                  </label>
+                  <select
+                    value={pixKeyType}
+                    onChange={(e) =>
+                      setPixKeyType(
+                        e.target.value as 'CPF' | 'Celular' | 'E-mail' | 'Aleatória'
+                      )
+                    }
+                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white outline-none transition-all"
+                  >
+                    <option value="CPF">CPF</option>
+                    <option value="Celular">Celular / WhatsApp</option>
+                    <option value="E-mail">E-mail</option>
+                    <option value="Aleatória">Chave Aleatória</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between ml-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Chave PIX *
+                    </label>
+                    {(cpf || phone) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (pixKeyType === 'CPF' && cpf) setPixKey(cpf);
+                          else if (pixKeyType === 'Celular' && phone) setPixKey(phone);
+                          else if (cpf) {
+                            setPixKeyType('CPF');
+                            setPixKey(cpf);
+                          }
+                        }}
+                        className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] hover:underline"
+                      >
+                        Preencher automático
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={pixKey}
+                    onChange={(e) => setPixKey(e.target.value)}
+                    placeholder="Informe sua chave PIX"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Banco / Instituição
+                  </label>
+                  <select
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white outline-none transition-all"
+                  >
+                    <option value="">Selecione o banco (opcional)</option>
+                    {POPULAR_BANKS.map((bank) => (
+                      <option key={bank} value={bank}>
+                        {bank}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Titular da Conta
+                  </label>
+                  <input
+                    type="text"
+                    value={accountHolder}
+                    onChange={(e) => setAccountHolder(e.target.value)}
+                    placeholder={fullName || 'Nome completo do titular'}
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Banco *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    placeholder="Ex: Nubank, Itaú, Bradesco"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Tipo de Conta *
+                  </label>
+                  <select
+                    value={accountType}
+                    onChange={(e) => setAccountType(e.target.value as 'Corrente' | 'Poupança')}
+                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white outline-none transition-all"
+                  >
+                    <option value="Corrente">Conta Corrente</option>
+                    <option value="Poupança">Conta Poupança</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Agência *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bankAgency}
+                    onChange={(e) => setBankAgency(e.target.value)}
+                    placeholder="0001"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Conta com Dígito *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bankAccount}
+                    onChange={(e) => setBankAccount(e.target.value)}
+                    placeholder="123456-7"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Nome do Titular da Conta
+                  </label>
+                  <input
+                    type="text"
+                    value={accountHolder}
+                    onChange={(e) => setAccountHolder(e.target.value)}
+                    placeholder={fullName || 'Nome completo do titular'}
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5 pt-2">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                Observações / Melhor dia de vencimento (Opcional)
+              </label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Ex: Gostaria de pagar todo dia 10..."
+                className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-4 sm:py-5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#AA7C11] text-black font-black text-xs sm:text-sm uppercase tracking-[0.2em] shadow-[0_10px_35px_rgba(212,175,55,0.3)] hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-60"
+          >
+            {isSubmitting ? (
+              <>
+                <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                <span>Enviando Cadastro...</span>
+              </>
+            ) : (
+              <>
+                <span>Enviar Cadastro para Análise</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="text-center text-[10px] font-bold uppercase tracking-[0.25em] text-slate-600 pb-6">
+          Nexus Private • Ambiente Criptografado
+        </p>
+      </div>
+    </div>
+  );
+};
