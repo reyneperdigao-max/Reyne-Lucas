@@ -1082,13 +1082,13 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
 
             <div className="space-y-1.5 pt-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                Observações / Melhor dia de vencimento (Opcional)
+                Observações (Opcional)
               </label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Ex: Gostaria de pagar todo dia 10..."
+                placeholder="Alguma observação adicional sobre sua solicitação (opcional)..."
                 className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
               />
             </div>
