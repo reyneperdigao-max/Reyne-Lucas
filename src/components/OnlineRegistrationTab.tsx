@@ -31,6 +31,7 @@ import { formatBRL, formatBrPhone, formatCurrencyInputBRL, parseCurrencyBRL } fr
 
 interface OnlineRegistrationTabProps {
   isDark: boolean;
+  lenderName?: string;
   activeLink: RegistrationLink | null;
   isGeneratingLink: boolean;
   onGenerateNewLink: () => Promise<void>;
@@ -54,6 +55,7 @@ interface OnlineRegistrationTabProps {
 
 export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
   isDark,
+  lenderName,
   activeLink,
   isGeneratingLink,
   onGenerateNewLink,
@@ -123,8 +125,16 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
     }
   };
 
+  const resolvedLenderName = useMemo(() => {
+    const candidate = (lenderName || activeLink?.lenderName || '').trim();
+    if (!candidate || candidate.toLowerCase() === 'nexus private') {
+      return 'Credor Autorizado';
+    }
+    return candidate;
+  }, [lenderName, activeLink?.lenderName]);
+
   const getWhatsAppInviteUrl = () => {
-    const message = `Olá! Segue o link seguro para você preencher seu cadastro online e solicitação de crédito:\n\n${registrationUrl}\n\nApós enviar seus dados, faremos a análise rapidamente.`;
+    const message = `*NEXUS PRIVATE*\nCredor: *${resolvedLenderName}*\n\nOlá! Segue o link seguro para você preencher seu cadastro online e solicitação de crédito:\n\n${registrationUrl}\n\nApós enviar seus dados, faremos a análise rapidamente.`;
     const digits = whatsappTargetPhone.replace(/\D/g, '');
     if (digits.length >= 10) {
       const fullNumber = digits.startsWith('55') ? digits : `55${digits}`;
@@ -270,6 +280,29 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
 
           {activeLink ? (
             <div className="space-y-4">
+              {/* Presentation Preview Banner */}
+              <div
+                className={cn(
+                  "flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 rounded-2xl border",
+                  isDark ? "bg-[#D4AF37]/[0.06] border-[#D4AF37]/25" : "bg-amber-50/80 border-amber-200"
+                )}
+              >
+                <div>
+                  <p className={cn("text-xs font-black uppercase tracking-[0.2em]", isDark ? "text-white" : "text-slate-900")}>
+                    Nexus <span className="text-[#D4AF37]">Private</span>
+                  </p>
+                  <p className={cn("text-xs font-bold mt-0.5", isDark ? "text-slate-300" : "text-slate-700")}>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#D4AF37] mr-1.5">
+                      Credor:
+                    </span>
+                    {resolvedLenderName}
+                  </p>
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  Apresentação exibida no link
+                </span>
+              </div>
+
               {/* URL Display + Copy + Preview */}
               <div
                 className={cn(

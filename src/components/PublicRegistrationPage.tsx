@@ -82,6 +82,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   const [bankAccount, setBankAccount] = useState('');
   const [accountType, setAccountType] = useState<'Corrente' | 'Poupança'>('Corrente');
   const [accountHolder, setAccountHolder] = useState('');
+  const [confirmSameHolder, setConfirmSameHolder] = useState(false);
   const [notes, setNotes] = useState('');
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -242,6 +243,11 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
       receivingDetails = `Conta ${accountType} - ${bankName.trim()} | Ag: ${bankAgency.trim()} | Conta: ${bankAccount.trim()} | Titular: ${holder}`;
     }
 
+    if (!confirmSameHolder) {
+      setErrorMsg('Confirme que a conta ou Chave PIX informada é de titularidade do próprio solicitante do empréstimo.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const regId = `reg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -336,6 +342,16 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
 
           <div className="relative z-10 flex flex-col items-center space-y-5">
             <NexusLogo className="w-14 h-14" />
+            <div className="space-y-0.5">
+              <p className="text-sm font-black uppercase tracking-[0.22em] text-white">
+                Nexus <span className="text-[#D4AF37]">Private</span>
+              </p>
+              {linkData?.lenderName && linkData.lenderName.trim().toLowerCase() !== 'nexus private' && (
+                <p className="text-[11px] font-bold text-slate-300">
+                  Credor: <span className="text-white">{linkData.lenderName}</span>
+                </p>
+              )}
+            </div>
             <div className="w-20 h-20 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
               <CheckCircle2 className="w-10 h-10" />
             </div>
@@ -391,15 +407,27 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
         <div className="bg-[#101218]/95 backdrop-blur-xl border border-[#D4AF37]/25 rounded-[32px] p-6 sm:p-8 shadow-2xl">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
             <NexusLogo className="w-16 h-16 shrink-0" />
-            <div className="flex-1 space-y-1.5">
+            <div className="flex-1 space-y-2">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[#D4AF37] text-[9px] font-black uppercase tracking-[0.25em]">
                 <Lock className="w-3 h-3" />
                 Cadastro Seguro de Crédito
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                {linkData?.lenderName || 'Nexus Private'}
-              </h1>
-              <p className="text-xs text-slate-400 leading-relaxed">
+              <div className="space-y-0.5">
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white uppercase">
+                  Nexus <span className="text-[#D4AF37]">Private</span>
+                </h1>
+                <p className="text-xs sm:text-sm font-bold text-slate-200 flex items-center justify-center sm:justify-start gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#D4AF37]">
+                    Credor:
+                  </span>
+                  <span>
+                    {linkData?.lenderName && linkData.lenderName.trim().toLowerCase() !== 'nexus private'
+                      ? linkData.lenderName
+                      : 'Credor Autorizado'}
+                  </span>
+                </p>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed pt-0.5">
                 Preencha seus dados abaixo para análise e liberação de crédito. Todas as informações são confidenciais.
               </p>
             </div>
@@ -717,7 +745,19 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   4. Dados para Recebimento
                 </h2>
                 <p className="text-[10px] text-slate-500 font-medium">
-                  Onde o valor emprestado deverá ser depositado
+                  Conta ou Chave PIX obrigatoriamente em nome e CPF de quem solicita o empréstimo
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="text-[11px] font-black uppercase tracking-wider text-[#D4AF37]">
+                  Titularidade Obrigatória do Solicitante
+                </p>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  A conta bancária ou Chave PIX informada <strong className="text-white">deve estar obrigatoriamente na titularidade de quem quer o empréstimo</strong> (mesmo nome e CPF deste cadastro). Não realizamos transferências para contas de terceiros.
                 </p>
               </div>
             </div>
@@ -824,14 +864,25 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Titular da Conta
-                  </label>
+                  <div className="flex items-center justify-between ml-1 gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Titular da Conta (Solicitante)
+                    </label>
+                    {fullName.trim() && accountHolder !== fullName && (
+                      <button
+                        type="button"
+                        onClick={() => setAccountHolder(fullName)}
+                        className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] hover:underline shrink-0"
+                      >
+                        Usar meu nome
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={accountHolder}
                     onChange={(e) => setAccountHolder(e.target.value)}
-                    placeholder={fullName || 'Nome completo do titular'}
+                    placeholder={fullName ? `${fullName} (mesma titularidade)` : 'Mesmo nome do solicitante'}
                     className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
@@ -895,19 +946,42 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 </div>
 
                 <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                    Nome do Titular da Conta
-                  </label>
+                  <div className="flex items-center justify-between ml-1 gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Nome do Titular da Conta (Deve ser o solicitante)
+                    </label>
+                    {fullName.trim() && accountHolder !== fullName && (
+                      <button
+                        type="button"
+                        onClick={() => setAccountHolder(fullName)}
+                        className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] hover:underline shrink-0"
+                      >
+                        Usar meu nome
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={accountHolder}
                     onChange={(e) => setAccountHolder(e.target.value)}
-                    placeholder={fullName || 'Nome completo do titular'}
+                    placeholder={fullName ? `${fullName} (mesma titularidade)` : 'Mesmo nome completo do solicitante'}
                     className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
               </div>
             )}
+
+            <label className="flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-[#D4AF37]/40 cursor-pointer transition-all">
+              <input
+                type="checkbox"
+                checked={confirmSameHolder}
+                onChange={(e) => setConfirmSameHolder(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37] shrink-0 cursor-pointer"
+              />
+              <span className="text-xs text-slate-300 leading-relaxed">
+                Declaro que a conta bancária ou Chave PIX informada acima é de <strong className="text-white">minha própria titularidade</strong> (mesmo nome e CPF de quem está solicitando o empréstimo).
+              </span>
+            </label>
 
             <div className="space-y-1.5 pt-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">

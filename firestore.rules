@@ -240,7 +240,7 @@ service cloud.firestore {
       allow update: if isVerifiedUser() && isValidId(linkId) && (isAdmin() || (isDocOwner() && isValidRegistrationLink(incoming()) &&
                     incoming().uid == existing().uid &&
                     incoming().linkId == existing().linkId &&
-                    incoming().diff(existing()).affectedKeys().hasOnly(['active'])));
+                    incoming().diff(existing()).affectedKeys().hasOnly(['active', 'lenderName'])));
       allow delete: if isVerifiedUser() && isDocOwner() && isValidId(linkId);
     }
 

@@ -915,6 +915,18 @@ export default function App() {
     profilePicture?: string,
     lastClosureDate?: string | null 
   } | null>(null);
+  const resolvedLenderName = useMemo(() => {
+    const candidates = [
+      userProfile?.displayName,
+      user?.displayName,
+      userProfile?.pixName,
+      user?.email ? user.email.split('@')[0] : ''
+    ];
+    const picked = candidates.find(
+      (c) => typeof c === 'string' && c.trim().length > 0 && c.trim().toLowerCase() !== 'nexus private'
+    );
+    return (picked || 'Credor Autorizado').trim().slice(0, 100);
+  }, [userProfile?.displayName, userProfile?.pixName, user?.displayName, user?.email]);
   const [theme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('nexus_theme');
     return (saved as 'light' | 'dark') || 'dark';
@@ -1762,6 +1774,20 @@ export default function App() {
       };
 
       await setDoc(userRef, updateData, { merge: true });
+      if (activeRegistrationLink) {
+        const nextLenderName = (
+          newDisplayName?.trim() ||
+          newPixName?.trim() ||
+          user.displayName ||
+          user.email?.split('@')[0] ||
+          'Credor Autorizado'
+        ).slice(0, 100);
+        if (nextLenderName && activeRegistrationLink.lenderName !== nextLenderName) {
+          await updateDoc(doc(db, 'registration_links', activeRegistrationLink.id), {
+            lenderName: nextLenderName
+          }).catch(() => {});
+        }
+      }
     } catch (err) {
       console.error("Error saving profile:", err);
       setError("Erro ao salvar configurações. " + (err instanceof Error ? err.message : ""));
@@ -2290,11 +2316,10 @@ export default function App() {
       );
 
       const linkId = `lnk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const rawLenderName = (userProfile?.displayName || user.displayName || 'Nexus Private').trim().slice(0, 100);
       await setDoc(doc(db, 'registration_links', linkId), {
         linkId,
         uid: user.uid,
-        lenderName: rawLenderName || 'Nexus Private',
+        lenderName: resolvedLenderName,
         active: true,
         createdAt: new Date().toISOString()
       });
@@ -2319,6 +2344,21 @@ export default function App() {
       handleGenerateRegistrationLink().catch(() => {});
     }
   }, [activeTab, user, isAuthReady, registrationLinks.length, isGeneratingLink]);
+
+  useEffect(() => {
+    if (
+      activeTab === 'Cadastro Online' &&
+      user &&
+      isAuthReady &&
+      activeRegistrationLink &&
+      resolvedLenderName &&
+      activeRegistrationLink.lenderName !== resolvedLenderName
+    ) {
+      updateDoc(doc(db, 'registration_links', activeRegistrationLink.id), {
+        lenderName: resolvedLenderName
+      }).catch(() => {});
+    }
+  }, [activeTab, user, isAuthReady, activeRegistrationLink, resolvedLenderName]);
 
   const handleToggleLinkActive = async (link: RegistrationLink) => {
     if (!user) return;
@@ -6991,6 +7031,7 @@ export default function App() {
                 >
                   <OnlineRegistrationTab
                     isDark={isDark}
+                    lenderName={resolvedLenderName}
                     activeLink={activeRegistrationLink}
                     isGeneratingLink={isGeneratingLink}
                     onGenerateNewLink={handleGenerateRegistrationLink}
