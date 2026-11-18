@@ -16,7 +16,9 @@ import {
   Sparkles,
   FileText,
   ArrowRight,
-  Lock
+  Lock,
+  Calculator,
+  Info
 } from 'lucide-react';
 import { db } from '../firebase';
 import { cn } from '../lib/utils';
@@ -83,6 +85,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   const [accountType, setAccountType] = useState<'Corrente' | 'Poupança'>('Corrente');
   const [accountHolder, setAccountHolder] = useState('');
   const [confirmSameHolder, setConfirmSameHolder] = useState(false);
+  const [confirmTerms, setConfirmTerms] = useState(false);
   const [notes, setNotes] = useState('');
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -154,6 +157,17 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
     });
     return groups;
   }, [filteredProfessions]);
+
+  const MONTHLY_INTEREST_RATE = 0.10;
+  const simulatedAmount = useMemo(() => parseCurrencyBRL(requestedAmountStr), [requestedAmountStr]);
+  const simulatedInterest = useMemo(
+    () => Math.round(simulatedAmount * MONTHLY_INTEREST_RATE * 100) / 100,
+    [simulatedAmount]
+  );
+  const simulatedTotal = useMemo(
+    () => Math.round((simulatedAmount + simulatedInterest) * 100) / 100,
+    [simulatedAmount, simulatedInterest]
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,6 +259,11 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
 
     if (!confirmSameHolder) {
       setErrorMsg('Confirme que a conta ou Chave PIX informada é de titularidade do próprio solicitante do empréstimo.');
+      return;
+    }
+
+    if (!confirmTerms) {
+      setErrorMsg('Marque a caixa no final do formulário confirmando que concorda com os juros de 10% ao mês e demais condições.');
       return;
     }
 
@@ -731,6 +750,71 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   </button>
                 ))}
               </div>
+
+              {/* Simulação de Juros (10% ao mês) */}
+              {simulatedAmount > 0 ? (
+                <div className="rounded-2xl bg-gradient-to-br from-[#D4AF37]/[0.08] via-emerald-500/[0.04] to-transparent border border-[#D4AF37]/30 p-4 sm:p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-[#D4AF37]" />
+                      <span className="text-[11px] font-black uppercase tracking-wider text-white">
+                        Simulação do Empréstimo
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">
+                      Juros: 10% ao mês
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block">
+                        Valor Solicitado
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-white font-mono mt-0.5 block">
+                        {formatBRL(simulatedAmount)}
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-black/40 border border-[#D4AF37]/25 p-3">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[#D4AF37] block">
+                        Juros (10% ao mês)
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-[#D4AF37] font-mono mt-0.5 block">
+                        {formatBRL(simulatedInterest)}
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-black/40 border border-emerald-500/25 p-3">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 block">
+                        Total em 30 dias
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-emerald-400 font-mono mt-0.5 block">
+                        {formatBRL(simulatedTotal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-black/30 border border-white/10 p-3 space-y-1.5 text-xs text-slate-300 leading-relaxed">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-200">
+                      Como funciona o pagamento após 30 dias:
+                    </p>
+                    <p>
+                      • <strong className="text-white">Quitação total:</strong> Pague{' '}
+                      <strong className="text-emerald-400 font-mono">{formatBRL(simulatedTotal)}</strong> (valor emprestado + 10% de juros) e encerre o empréstimo.
+                    </p>
+                    <p>
+                      • <strong className="text-white">Renovação mensal:</strong> Caso precise de mais prazo, você pode pagar apenas os juros de{' '}
+                      <strong className="text-[#D4AF37] font-mono">{formatBRL(simulatedInterest)}</strong> para renovar por mais 30 dias.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-white/[0.02] border border-white/10 px-4 py-3 flex items-center gap-2.5 text-xs text-slate-400">
+                  <Calculator className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                  <span>
+                    Taxa da Nexus Private: <strong className="text-[#D4AF37]">10% ao mês</strong>. Digite ou selecione um valor acima para visualizar sua simulação.
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -789,6 +873,19 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 <CreditCard className="w-4 h-4" />
                 Conta Bancária
               </button>
+            </div>
+
+            <div className="rounded-2xl bg-white/[0.03] border border-white/10 px-4 py-3 flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
+              <Info className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
+              {receivingType === 'PIX' ? (
+                <span>
+                  <strong className="text-white">Recebimento via PIX:</strong> Após a aprovação, o valor será transferido na hora via PIX para a chave informada abaixo (CPF, celular, e-mail ou chave aleatória vinculada ao seu CPF).
+                </span>
+              ) : (
+                <span>
+                  <strong className="text-white">Recebimento via Conta Bancária (TED/Transferência):</strong> Após a aprovação, o depósito será enviado para a conta corrente ou poupança informada abaixo, em seu nome e CPF.
+                </span>
+              )}
             </div>
 
             {receivingType === 'PIX' ? (
@@ -996,6 +1093,20 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
               />
             </div>
           </div>
+
+          {/* Final Terms & Simulation Agreement */}
+          <label className="flex items-start gap-3 p-4 rounded-2xl bg-[#D4AF37]/[0.06] border border-[#D4AF37]/35 hover:border-[#D4AF37]/65 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={confirmTerms}
+              onChange={(e) => setConfirmTerms(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37] shrink-0 cursor-pointer"
+            />
+            <span className="text-xs text-slate-200 leading-relaxed">
+              Li e <strong className="text-white">concordo com os termos da simulação da Nexus Private</strong> (juros de <strong className="text-[#D4AF37]">10% ao mês</strong>
+              {simulatedAmount > 0 ? `, equivalente a ${formatBRL(simulatedInterest)} de juros mensais e ${formatBRL(simulatedTotal)} para quitação em 30 dias` : ''}, formas de recebimento e regras de pagamento), confirmando que todas as informações enviadas são verdadeiras.
+            </span>
+          </label>
 
           <button
             type="submit"

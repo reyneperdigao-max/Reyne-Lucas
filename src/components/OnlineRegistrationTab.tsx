@@ -161,7 +161,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
         maximumFractionDigits: 2
       })
     );
-    setApprovalInterestStr(String(defaultInterestRate > 0 ? defaultInterestRate : 20));
+    setApprovalInterestStr(String(defaultInterestRate > 0 ? defaultInterestRate : 10));
     setApprovalDate(format(new Date(), 'yyyy-MM-dd'));
     setApprovalDueDate(format(addMonths(new Date(), 1), 'yyyy-MM-dd'));
     setApprovalStatus('Pendente');
