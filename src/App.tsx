@@ -117,32 +117,32 @@ const CurvedDarkLuxuryBanknote = () => (
   >
     <svg className="w-full h-full" viewBox="0 0 160 56" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        {/* Deep, rich dark-gold and ultra-dark charcoal background gradient for the banknote body */}
+        {/* Deep, rich dark charcoal background gradient for the banknote body */}
         <linearGradient id="darkLuxuryBillBg" x1="0%" y1="100%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#07080a" stopOpacity="0.98" />
           <stop offset="35%" stopColor="#0d0f14" stopOpacity="0.95" />
-          <stop offset="70%" stopColor="#1e180b" stopOpacity="0.98" />
+          <stop offset="70%" stopColor="#181a20" stopOpacity="0.98" />
           <stop offset="100%" stopColor="#0c0d12" stopOpacity="0.95" />
         </linearGradient>
 
-        {/* Shimmering, high-contrast gold gradient for borders and lines */}
+        {/* Shimmering, high-contrast platinum silver-white gradient for borders and lines */}
         <linearGradient id="luxuryGoldStroke" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#8c7023" />
-          <stop offset="50%" stopColor="#F5D061" />
-          <stop offset="100%" stopColor="#D4AF37" />
+          <stop offset="0%" stopColor="#71717A" />
+          <stop offset="50%" stopColor="#FFFFFF" />
+          <stop offset="100%" stopColor="#E5E5E5" />
         </linearGradient>
 
         {/* Guilloche pattern representing financial security waves */}
         <linearGradient id="guillocheGold" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.02" />
-          <stop offset="30%" stopColor="#F5D061" stopOpacity="0.25" />
-          <stop offset="70%" stopColor="#D4AF37" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#8c7023" stopOpacity="0.1" />
+          <stop offset="0%" stopColor="#E5E5E5" stopOpacity="0.02" />
+          <stop offset="30%" stopColor="#FFFFFF" stopOpacity="0.25" />
+          <stop offset="70%" stopColor="#E5E5E5" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#71717A" stopOpacity="0.1" />
         </linearGradient>
 
         {/* Fine background grid */}
         <pattern id="securityGrid" width="6" height="6" patternUnits="userSpaceOnUse">
-          <path d="M 6 0 L 0 0 0 6" fill="none" stroke="#D4AF37" strokeWidth="0.15" strokeOpacity="0.08" />
+          <path d="M 6 0 L 0 0 0 6" fill="none" stroke="#E5E5E5" strokeWidth="0.15" strokeOpacity="0.08" />
         </pattern>
       </defs>
 
@@ -164,7 +164,7 @@ const CurvedDarkLuxuryBanknote = () => (
       <path 
         d="M 2 54 Q 35 54 69 36 T 119 16 T 158 5" 
         fill="none"
-        stroke="#D4AF37"
+        stroke="#E5E5E5"
         strokeWidth="0.4"
         strokeDasharray="2.5 1.5"
         strokeOpacity="0.5"
@@ -200,30 +200,30 @@ const CurvedDarkLuxuryBanknote = () => (
       {/* Banknote Watermark Stamp (Luxury Royal Emblem / Central Seal) */}
       <g transform="translate(122, 28) scale(0.6)">
         {/* Outer security circle */}
-        <circle cx="12" cy="12" r="11" fill="#0d0f14" stroke="#D4AF37" strokeWidth="0.8" strokeOpacity="0.8" />
-        <circle cx="12" cy="12" r="9" fill="none" stroke="#D4AF37" strokeWidth="0.3" strokeDasharray="1.5 0.8" strokeOpacity="0.6" />
+        <circle cx="12" cy="12" r="11" fill="#0d0f14" stroke="#E5E5E5" strokeWidth="0.8" strokeOpacity="0.8" />
+        <circle cx="12" cy="12" r="9" fill="none" stroke="#E5E5E5" strokeWidth="0.3" strokeDasharray="1.5 0.8" strokeOpacity="0.6" />
         {/* Central Currency Emblem */}
-        <path d="M12 5.5 L13.5 8.5 L17 9 L14.5 11.5 L15 15 L12 13.5 L9 15 L9.5 11.5 L7 9 L10.5 8.5 Z" fill="#D4AF37" fillOpacity="0.85" />
+        <path d="M12 5.5 L13.5 8.5 L17 9 L14.5 11.5 L15 15 L12 13.5 L9 15 L9.5 11.5 L7 9 L10.5 8.5 Z" fill="#F5F5F7" fillOpacity="0.85" />
       </g>
 
       {/* Security Thread - Vertical metal strip cutting through the bill */}
       <line x1="88" y1="28" x2="88" y2="56" stroke="url(#luxuryGoldStroke)" strokeWidth="0.8" strokeOpacity="0.4" strokeDasharray="3 1.5" />
 
       {/* Engraved vertical bar codes & borders at the right end */}
-      <line x1="152" y1="8" x2="152" y2="52" stroke="#D4AF37" strokeWidth="0.3" strokeOpacity="0.4" strokeDasharray="1 1" />
-      <line x1="155" y1="6" x2="155" y2="52" stroke="#D4AF37" strokeWidth="0.5" strokeOpacity="0.3" />
+      <line x1="152" y1="8" x2="152" y2="52" stroke="#E5E5E5" strokeWidth="0.3" strokeOpacity="0.4" strokeDasharray="1 1" />
+      <line x1="155" y1="6" x2="155" y2="52" stroke="#E5E5E5" strokeWidth="0.5" strokeOpacity="0.3" />
 
       {/* Banknote text, numbers, and currency indicators following the design */}
-      <text x="12" y="52" fill="#D4AF37" fillOpacity="0.8" fontSize="6.5" fontWeight="900" fontFamily="monospace" letterSpacing="0.8">100</text>
-      <text x="142" y="15" fill="#D4AF37" fillOpacity="0.75" fontSize="4.5" fontWeight="bold" fontFamily="sans-serif" letterSpacing="0.5">USD</text>
-      <text x="52" y="51" fill="#D4AF37" fillOpacity="0.35" fontSize="3.2" fontWeight="bold" fontFamily="serif" letterSpacing="1.2">SECURE CAPITAL</text>
-      <text x="118" y="51" fill="#D4AF37" fillOpacity="0.3" fontSize="2.8" fontWeight="bold" fontFamily="monospace">N° 888-2026</text>
+      <text x="12" y="52" fill="#F5F5F7" fillOpacity="0.8" fontSize="6.5" fontWeight="900" fontFamily="monospace" letterSpacing="0.8">100</text>
+      <text x="142" y="15" fill="#F5F5F7" fillOpacity="0.75" fontSize="4.5" fontWeight="bold" fontFamily="sans-serif" letterSpacing="0.5">USD</text>
+      <text x="52" y="51" fill="#F5F5F7" fillOpacity="0.35" fontSize="3.2" fontWeight="bold" fontFamily="serif" letterSpacing="1.2">SECURE CAPITAL</text>
+      <text x="118" y="51" fill="#F5F5F7" fillOpacity="0.3" fontSize="2.8" fontWeight="bold" fontFamily="monospace">N° 888-2026</text>
 
       {/* Financial Growth Chart Markers (Vertices on the curve) */}
-      <circle cx="70" cy="38" r="2.2" fill="#FFD700" stroke="#07080a" strokeWidth="0.5" />
-      <circle cx="120" cy="18" r="2.2" fill="#FFD700" stroke="#07080a" strokeWidth="0.5" />
+      <circle cx="70" cy="38" r="2.2" fill="#FFFFFF" stroke="#07080a" strokeWidth="0.5" />
+      <circle cx="120" cy="18" r="2.2" fill="#FFFFFF" stroke="#07080a" strokeWidth="0.5" />
       {/* High-growth endpoint indicator */}
-      <circle cx="160" cy="6" r="3.2" fill="#FFFFFF" stroke="#D4AF37" strokeWidth="0.8" className="animate-pulse" />
+      <circle cx="160" cy="6" r="3.2" fill="#FFFFFF" stroke="#E5E5E5" strokeWidth="0.8" className="animate-pulse" />
     </svg>
   </div>
 );
@@ -233,24 +233,24 @@ const CurvedDarkLuxuryBanknote = () => (
 const RealisticCoin = ({ className = "w-4 h-4" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#FFE082" />
-        <stop offset="30%" stopColor="#FFB300" />
-        <stop offset="70%" stopColor="#FFA000" />
-        <stop offset="100%" stopColor="#B78103" />
+      <linearGradient id="platinumGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#FFFFFF" />
+        <stop offset="30%" stopColor="#E5E5E5" />
+        <stop offset="70%" stopColor="#A1A1AA" />
+        <stop offset="100%" stopColor="#52525B" />
       </linearGradient>
-      <linearGradient id="goldRim" x1="100%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.8" />
-        <stop offset="50%" stopColor="#FFD54F" />
-        <stop offset="100%" stopColor="#6D4C41" />
+      <linearGradient id="platinumRim" x1="100%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.9" />
+        <stop offset="50%" stopColor="#D4D4D8" />
+        <stop offset="100%" stopColor="#27272A" />
       </linearGradient>
     </defs>
-    <circle cx="12" cy="12" r="11" fill="url(#goldGrad)" stroke="url(#goldRim)" strokeWidth="1.5" />
-    <circle cx="12" cy="12" r="8" fill="none" stroke="#FF8F00" strokeWidth="0.5" strokeDasharray="1.5 1" />
-    <circle cx="12" cy="12" r="7.5" fill="none" stroke="#FFE082" strokeWidth="0.5" />
-    <path d="M12.5 6C12.5 6 10.5 7 10.5 9C10.5 11 13.5 11.5 13.5 13C13.5 14.5 11.5 15.5 11.5 15.5M12 5V18" stroke="#795548" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="11" fill="url(#platinumGrad)" stroke="url(#platinumRim)" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="8" fill="none" stroke="#52525B" strokeWidth="0.5" strokeDasharray="1.5 1" />
+    <circle cx="12" cy="12" r="7.5" fill="none" stroke="#FFFFFF" strokeWidth="0.5" />
+    <path d="M12.5 6C12.5 6 10.5 7 10.5 9C10.5 11 13.5 11.5 13.5 13C13.5 14.5 11.5 15.5 11.5 15.5M12 5V18" stroke="#3F3F46" strokeWidth="1.5" strokeLinecap="round" />
     <path d="M12.5 6.5C12.5 6.5 10.5 7.5 10.5 9.5C10.5 11.5 13.5 12 13.5 13.5C13.5 15 11.5 16 11.5 16M12 5.5V18.5" stroke="#FFFFFF" strokeWidth="1" strokeLinecap="round" strokeOpacity="0.9" />
-    <path d="M12.5 6C12.5 6 10.5 7 10.5 9C10.5 11 13.5 11.5 13.5 13C13.5 14.5 11.5 15.5 11.5 15.5M12 5V18" stroke="#E65100" strokeWidth="1" strokeLinecap="round" />
+    <path d="M12.5 6C12.5 6 10.5 7 10.5 9C10.5 11 13.5 11.5 13.5 13C13.5 14.5 11.5 15.5 11.5 15.5M12 5V18" stroke="#27272A" strokeWidth="1" strokeLinecap="round" />
   </svg>
 );
 
@@ -260,8 +260,8 @@ const AssetSparkline = () => (
     <svg className="w-full h-full" viewBox="0 0 200 60" preserveAspectRatio="none">
       <defs>
         <linearGradient id="assetGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.18" />
-          <stop offset="100%" stopColor="#D4AF37" stopOpacity="0.0" />
+          <stop offset="0%" stopColor="#F5F5F7" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#F5F5F7" stopOpacity="0.0" />
         </linearGradient>
       </defs>
       <path
@@ -271,11 +271,11 @@ const AssetSparkline = () => (
       <path
         d="M 0 50 Q 25 45 50 48 T 100 28 T 150 20 T 200 10"
         fill="none"
-        stroke="#D4AF37"
+        stroke="#F5F5F7"
         strokeWidth="1.5"
         strokeLinecap="round"
       />
-      <circle cx="200" cy="10" r="3" fill="#D4AF37" />
+      <circle cx="200" cy="10" r="3" fill="#FFFFFF" />
     </svg>
   </div>
 );
@@ -566,7 +566,7 @@ const sanitizeCSSColorFunctions = (value: string): string => {
   });
 };
 
-const sanitizeCSSString = (css: string, accentHex = '#FFD700') => {
+const sanitizeCSSString = (css: string, accentHex = '#F5F5F7') => {
   if (!css || (!css.toLowerCase().includes('oklch') && !css.toLowerCase().includes('oklab'))) {
     return css;
   }
@@ -1076,12 +1076,12 @@ export default function App() {
 
   const getAccentColorHex = () => {
     switch (systemSettings.accentColor) {
-      case 'yellow': return '#FFD700';
+      case 'yellow': return '#F5F5F7';
       case 'green': return '#39FF14';
-      case 'blue': return '#FFD700'; // Default to yellow/gold if blue was saved
+      case 'blue': return '#F5F5F7';
       case 'violet': return '#8B5CF6';
       case 'red': return '#EF4444';
-      default: return '#FFD700';
+      default: return '#F5F5F7';
     }
   };
 
@@ -1133,7 +1133,7 @@ export default function App() {
         
         new Notification("Nexus Private: Sistema de Alertas", {
           body: "As notificações de segurança e lembretes bancários foram ativadas com sucesso.",
-          icon: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=128&h=128&fit=crop'
+          icon: '/pwa-192x192.png'
         });
 
         // Auto hide success message
@@ -1664,17 +1664,17 @@ export default function App() {
     if (score >= 600) {
       return {
         label: 'Bom',
-        color: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-        textColor: 'text-amber-400',
-        bgColor: 'bg-amber-400/10'
+        color: 'text-[#F5F5F7] bg-white/10 border-white/25',
+        textColor: 'text-[#F5F5F7]',
+        bgColor: 'bg-white/10'
       };
     }
     if (score >= 400) {
       return {
         label: 'Regular',
-        color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
-        textColor: 'text-amber-500',
-        bgColor: 'bg-amber-500/10'
+        color: 'text-slate-300 bg-slate-500/10 border-slate-500/20',
+        textColor: 'text-slate-300',
+        bgColor: 'bg-slate-500/10'
       };
     }
     return {
@@ -4072,7 +4072,7 @@ export default function App() {
       "flex flex-col items-center justify-center h-screen gap-6 transition-colors duration-500",
       theme === 'light' ? "bg-slate-50 text-slate-900" : "bg-black text-white"
     )}>
-      <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(212,175,55,0.2)]" />
+      <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(255,255,255,0.2)]" />
       <span className="text-slate-500 font-black uppercase tracking-[0.4em] text-[9px]">Sincronizando Sistema</span>
     </div>
   );
@@ -4092,8 +4092,8 @@ export default function App() {
 
         {/* Left Side: Branding & Visuals (Desktop Only) */}
         <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-16 overflow-hidden">
-          {/* Subtle gold-tinted glow behind the text */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(212,175,55,0.08)_0%,_transparent_60%)]" />
+          {/* Subtle platinum-white glow behind the text */}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_rgba(255,255,255,0.08)_0%,_transparent_60%)]" />
           
           <div className="relative z-10">
             <motion.div 
@@ -4105,7 +4105,7 @@ export default function App() {
               <NexusLogo className="w-13 h-13" />
               <div>
                 <h1 className="text-2xl font-black tracking-tighter uppercase leading-none text-white">Nexus Private</h1>
-                <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.4em] mt-1">Crédito e Gestão</p>
+                <p className="text-[10px] font-black text-[#E5E5E5] uppercase tracking-[0.4em] mt-1">Crédito e Gestão</p>
               </div>
             </motion.div>
           </div>
@@ -4118,7 +4118,7 @@ export default function App() {
               className="text-5xl font-black tracking-tighter leading-[1.05] mb-6 text-white"
             >
               A Nova Era do <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#D4AF37] via-[#f3e5ab] to-[#AA7C11] filter drop-shadow-[0_2px_10px_rgba(212,175,55,0.3)]">Capital Privado</span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-[#E5E5E5] to-[#D4D4D8] filter drop-shadow-[0_2px_10px_rgba(255,255,255,0.25)]">Capital Privado</span>
             </motion.h2>
 
             {/* Custom Slogan Phrase: "Sem dinheiro, sem graça" */}
@@ -4126,9 +4126,9 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 1, delay: 0.4 }}
-              className="mb-8 border-l-4 border-[#D4AF37] pl-5 py-2.5 bg-black/30 backdrop-blur-sm rounded-r-2xl"
+              className="mb-8 border-l-4 border-[#F5F5F7] pl-5 py-2.5 bg-black/30 backdrop-blur-sm rounded-r-2xl"
             >
-              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#D4AF37]">Mantra de Poder</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#E5E5E5]">Mantra de Poder</p>
               <p className="text-2xl font-black italic text-slate-100 tracking-tight mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 "Sem dinheiro, sem graça."
               </p>
@@ -4141,13 +4141,13 @@ export default function App() {
               className="grid grid-cols-2 gap-8"
             >
               <div>
-                <p className="text-[10px] font-black text-[#D4AF37]/80 uppercase tracking-widest mb-2">Segurança</p>
+                <p className="text-[10px] font-black text-[#E5E5E5]/80 uppercase tracking-widest mb-2">Segurança</p>
                 <p className="text-xs font-medium leading-relaxed text-slate-300">
                   Infraestrutura baseada em nuvem com criptografia de ponta a ponta.
                 </p>
               </div>
               <div>
-                <p className="text-[10px] font-black text-[#D4AF37]/80 uppercase tracking-widest mb-2">Performance</p>
+                <p className="text-[10px] font-black text-[#E5E5E5]/80 uppercase tracking-widest mb-2">Performance</p>
                 <p className="text-xs font-medium leading-relaxed text-slate-300">
                   Algoritmos inteligentes para gestão de liquidez instantânea.
                 </p>
@@ -4181,13 +4181,13 @@ export default function App() {
               <h3 className="text-base font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                 Nexus Private
               </h3>
-              <p className="text-[8px] font-black text-[#D4AF37] uppercase tracking-[0.3em] mt-0.5">
+              <p className="text-[8px] font-black text-[#E5E5E5] uppercase tracking-[0.3em] mt-0.5">
                 Crédito e Gestão
               </p>
               
               {/* Slogan for mobile */}
-              <div className="mt-3 px-3.5 py-1.5 rounded-xl bg-black/40 border border-[#D4AF37]/20 backdrop-blur-md">
-                <p className="text-[9px] font-extrabold italic text-[#f3e5ab] tracking-wider">
+              <div className="mt-3 px-3.5 py-1.5 rounded-xl bg-black/40 border border-white/20 backdrop-blur-md">
+                <p className="text-[9px] font-extrabold italic text-[#F5F5F7] tracking-wider">
                   "Sem dinheiro, sem graça"
                 </p>
               </div>
@@ -4198,7 +4198,7 @@ export default function App() {
               <h3 className="text-2xl font-black tracking-tight mb-2 text-white">
                 Acessar Portal
               </h3>
-              <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-[0.3em]">
+              <p className="text-[10px] font-black text-[#E5E5E5] uppercase tracking-[0.3em]">
                 Nexus Private Ledger
               </p>
             </div>
@@ -4219,31 +4219,31 @@ export default function App() {
             {savedAccount && !useDifferentAccount ? (
               /* BANCO INTER STYLE SAVED USER CARD */
               <div className="space-y-6">
-                <div className="flex flex-col items-center text-center p-6 rounded-3xl bg-white/[0.03] border border-[#D4AF37]/30 shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(212,175,55,0.12)_0%,_transparent_75%)] pointer-events-none" />
+                <div className="flex flex-col items-center text-center p-6 rounded-3xl bg-white/[0.03] border border-white/25 shadow-[0_10px_30px_rgba(0,0,0,0.5)] relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(255,255,255,0.12)_0%,_transparent_75%)] pointer-events-none" />
                   
                   {/* Avatar or Initial */}
                   <div className="relative mb-4">
-                    <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] via-amber-400 to-[#8a660a] shadow-[0_0_25px_rgba(212,175,55,0.3)]">
+                    <div className="w-20 h-20 rounded-full p-1 bg-gradient-to-tr from-white via-[#E5E5E5] to-[#71717A] shadow-[0_0_25px_rgba(255,255,255,0.22)]">
                       <div className="w-full h-full rounded-full bg-[#121318] flex items-center justify-center overflow-hidden border-2 border-black">
                         {savedAccount.profilePicture ? (
                           <img src={savedAccount.profilePicture} alt={savedAccount.displayName} className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-2xl font-black text-[#D4AF37] uppercase">
+                          <span className="text-2xl font-black text-[#F5F5F7] uppercase">
                             {savedAccount.displayName.charAt(0)}
                           </span>
                         )}
                       </div>
                     </div>
                     {isMobile && (
-                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#121318] border-2 border-[#D4AF37] flex items-center justify-center text-[#D4AF37]">
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#121318] border-2 border-[#F5F5F7] flex items-center justify-center text-[#F5F5F7]">
                         <ScanFace className="w-4 h-4" />
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#D4AF37]">
+                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#E5E5E5]">
                       Conta Salva
                     </span>
                     <h3 className="text-xl font-black text-white tracking-tight">
@@ -4263,8 +4263,8 @@ export default function App() {
                         disabled={isAuthenticatingFaceID || isSubmitting}
                         className="w-full relative group/btn"
                       >
-                        <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[22px] blur opacity-40 group-hover/btn:opacity-75 transition duration-500" />
-                        <div className="relative w-full bg-gradient-to-br from-[#D4AF37] via-amber-500 to-[#8a660a] text-black font-black uppercase tracking-[0.15em] py-4 px-5 rounded-[20px] shadow-2xl flex items-center justify-center gap-3.5 transition-transform active:scale-[0.98]">
+                        <div className="absolute -inset-1 bg-gradient-to-r from-white to-[#D4D4D8] rounded-[22px] blur opacity-30 group-hover/btn:opacity-60 transition duration-500" />
+                        <div className="relative w-full bg-gradient-to-br from-white via-[#E5E5E5] to-[#D4D4D8] text-black font-black uppercase tracking-[0.15em] py-4 px-5 rounded-[20px] shadow-2xl flex items-center justify-center gap-3.5 transition-transform active:scale-[0.98]">
                           <ScanFace className="w-6 h-6 text-black shrink-0" />
                           <div className="text-left">
                             <span className="text-xs sm:text-sm font-black tracking-wider text-black block leading-none">
@@ -4285,13 +4285,13 @@ export default function App() {
                             Senha de {savedAccount.displayName}
                           </label>
                           <div className="relative group">
-                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#D4AF37]" />
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F5F5F7]" />
                             <input
                               type="password"
                               placeholder="••••••••••••"
                               value={password || ""}
                               onChange={(e) => setPassword(e.target.value)}
-                              className="w-full rounded-[16px] py-3 pl-12 pr-4 text-xs transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                              className="w-full rounded-[16px] py-3 pl-12 pr-4 text-xs transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                               autoFocus={!isMobile}
                               required
                             />
@@ -4300,7 +4300,7 @@ export default function App() {
                         <button
                           type="submit"
                           disabled={isSubmitting}
-                          className="w-full py-3.5 rounded-[16px] bg-[#D4AF37] hover:bg-[#c4a02e] text-black font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center"
+                          className="w-full py-3.5 rounded-[16px] bg-[#F5F5F7] hover:bg-[#E5E5E5] text-black font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center"
                         >
                           {isSubmitting ? (
                             <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
@@ -4315,7 +4315,7 @@ export default function App() {
                         onClick={() => setShowPasswordInput(true)}
                         className="w-full py-3.5 px-4 rounded-[18px] bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
                       >
-                        <KeyRound className="w-3.5 h-3.5 text-[#D4AF37]" />
+                        <KeyRound className="w-3.5 h-3.5 text-[#F5F5F7]" />
                         Entrar com Senha
                       </button>
                     )}
@@ -4330,9 +4330,9 @@ export default function App() {
                       setUseDifferentAccount(true);
                       setError(null);
                     }}
-                    className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#D4AF37] transition-colors py-2 px-4 rounded-xl hover:bg-white/5"
+                    className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-white transition-colors py-2 px-4 rounded-xl hover:bg-white/5"
                   >
-                    <UserPlus className="w-3.5 h-3.5 text-[#D4AF37]" />
+                    <UserPlus className="w-3.5 h-3.5 text-[#F5F5F7]" />
                     Trocar de conta / Entrar com outro e-mail
                   </button>
                 </div>
@@ -4347,7 +4347,7 @@ export default function App() {
                       setUseDifferentAccount(false);
                       setError(null);
                     }}
-                    className="mb-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] hover:underline bg-[#D4AF37]/10 border border-[#D4AF37]/30 px-3.5 py-2 rounded-xl transition-all"
+                    className="mb-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#F5F5F7] hover:underline bg-white/10 border border-white/25 px-3.5 py-2 rounded-xl transition-all"
                   >
                     <UserIcon className="w-3.5 h-3.5" />
                     Voltar para conta de {savedAccount.displayName}
@@ -4363,7 +4363,7 @@ export default function App() {
                     }}
                     className={cn(
                       "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                      !isClientSignupMode ? "bg-[#D4AF37] text-black" : "text-slate-400 hover:text-white"
+                      !isClientSignupMode ? "bg-[#F5F5F7] text-black" : "text-slate-400 hover:text-white"
                     )}
                   >
                     Já tenho conta
@@ -4376,7 +4376,7 @@ export default function App() {
                     }}
                     className={cn(
                       "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                      isClientSignupMode ? "bg-[#D4AF37] text-black" : "text-slate-400 hover:text-white"
+                      isClientSignupMode ? "bg-[#F5F5F7] text-black" : "text-slate-400 hover:text-white"
                     )}
                   >
                     1º Acesso (Cliente)
@@ -4388,13 +4388,13 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
                       <div className="relative group">
-                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#F5F5F7]" />
                         <input
                           type="text"
                           placeholder="Seu nome completo"
                           value={clientSignupName}
                           onChange={(e) => setClientSignupName(e.target.value)}
-                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                           required
                         />
                       </div>
@@ -4403,14 +4403,14 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CPF (Opcional)</label>
                       <div className="relative group">
-                        <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#F5F5F7]" />
                         <input
                           type="text"
                           inputMode="numeric"
                           placeholder="000.000.000-00"
                           value={clientSignupCpf}
                           onChange={(e) => setClientSignupCpf(formatCPF(e.target.value))}
-                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                         />
                       </div>
                     </div>
@@ -4418,13 +4418,13 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail do Contrato</label>
                       <div className="relative group">
-                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#F5F5F7]" />
                         <input
                           type="email"
                           placeholder="seu@email.com"
                           value={email || ""}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                           required
                         />
                       </div>
@@ -4433,13 +4433,13 @@ export default function App() {
                     <div className="space-y-1.5">
                       <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Criar Senha (mín. 6 dígitos)</label>
                       <div className="relative group">
-                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#F5F5F7]" />
                         <input
                           type="password"
                           placeholder="••••••••••••"
                           value={password || ""}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                           required
                         />
                       </div>
@@ -4454,9 +4454,9 @@ export default function App() {
                       disabled={isSubmitting}
                       className="w-full relative group pt-1"
                     >
-                      <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 rounded-[16px] sm:rounded-[20px] shadow-2xl flex items-center justify-center gap-3 transition-all">
+                      <div className="relative w-full bg-gradient-to-br from-white via-[#E5E5E5] to-[#D4D4D8] text-black font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 rounded-[16px] sm:rounded-[20px] shadow-2xl flex items-center justify-center gap-3 transition-all">
                         {isSubmitting ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                         ) : (
                           <span>Criar Minha Conta de Cliente</span>
                         )}
@@ -4468,13 +4468,13 @@ export default function App() {
                   <div className="space-y-1.5 sm:space-y-2">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
                     <div className="relative group">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#F5F5F7]" />
                       <input
                         type="email"
                         placeholder="email@nexusprivate.com"
                         value={email || ""}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                        className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                         required
                       />
                     </div>
@@ -4483,13 +4483,13 @@ export default function App() {
                   <div className="space-y-1.5 sm:space-y-2">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
                     <div className="relative group">
-                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#F5F5F7]" />
                       <input
                         type="password"
                         placeholder="••••••••••••"
                         value={password || ""}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                        className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-4 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#F5F5F7]/50 focus:bg-white/[0.08]"
                         required
                       />
                     </div>
@@ -4501,10 +4501,10 @@ export default function App() {
                       disabled={isSubmitting || isAuthenticatingFaceID}
                       className="w-full relative group"
                     >
-                      <div className="absolute -inset-1 bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-[18px] sm:rounded-[22px] blur opacity-35 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
-                      <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 sm:py-5 rounded-[16px] sm:rounded-[20px] shadow-2xl hover:shadow-[#D4AF37]/40 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
+                      <div className="absolute -inset-1 bg-gradient-to-r from-white to-[#D4D4D8] rounded-[18px] sm:rounded-[22px] blur opacity-30 group-hover:opacity-55 transition duration-1000 group-hover:duration-200" />
+                      <div className="relative w-full bg-gradient-to-br from-white via-[#E5E5E5] to-[#D4D4D8] text-black font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 sm:py-5 rounded-[16px] sm:rounded-[20px] shadow-2xl hover:shadow-white/25 flex items-center justify-center gap-3 transition-all hover:-translate-y-0.5 active:translate-y-0">
                         {isSubmitting ? (
-                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                         ) : (
                           <span>Entrar</span>
                         )}
@@ -4522,10 +4522,10 @@ export default function App() {
                           type="button"
                           onClick={handleLoginWithFaceID}
                           disabled={isAuthenticatingFaceID || isSubmitting}
-                          className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 text-white transition-all active:scale-[0.98] group shadow-xl"
+                          className="w-full flex items-center justify-center gap-3 py-3.5 px-4 rounded-[16px] sm:rounded-[20px] bg-white/[0.04] hover:bg-white/[0.08] border border-white/25 hover:border-white/50 text-white transition-all active:scale-[0.98] group shadow-xl"
                         >
-                          <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/10 flex items-center justify-center border border-[#D4AF37]/30 group-hover:scale-110 transition-transform shrink-0">
-                            <ScanFace className="w-4.5 h-4.5 text-[#D4AF37]" />
+                          <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center border border-white/25 group-hover:scale-110 transition-transform shrink-0">
+                            <ScanFace className="w-4.5 h-4.5 text-[#F5F5F7]" />
                           </div>
                           <div className="text-left">
                             <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-[0.15em] text-white block">
@@ -4549,20 +4549,20 @@ export default function App() {
         {/* Face ID Biometric Scanner Modal */}
         {showFaceIDModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-            <div className="bg-[#121318] border border-[#D4AF37]/40 rounded-3xl p-8 max-w-sm w-full text-center shadow-[0_0_60px_rgba(212,175,55,0.25)] relative overflow-hidden">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(212,175,55,0.15)_0%,_transparent_70%)] pointer-events-none" />
+            <div className="bg-[#121318] border border-white/30 rounded-3xl p-8 max-w-sm w-full text-center shadow-[0_0_60px_rgba(255,255,255,0.2)] relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(255,255,255,0.12)_0%,_transparent_70%)] pointer-events-none" />
 
               {/* Face ID Icon with animated scanning laser ring */}
               <div className="relative w-24 h-24 mx-auto mb-6 flex items-center justify-center">
                 <div className={cn(
                   "absolute inset-0 rounded-full border-2 border-dashed transition-colors duration-500",
                   faceIDModalState === 'success' ? "border-emerald-500 animate-none" :
-                  faceIDModalState === 'error' ? "border-red-500 animate-none" : "border-[#D4AF37] animate-[spin_6s_linear_infinite]"
+                  faceIDModalState === 'error' ? "border-red-500 animate-none" : "border-[#F5F5F7] animate-[spin_6s_linear_infinite]"
                 )} />
                 <div className={cn(
                   "w-20 h-20 rounded-full flex items-center justify-center transition-all duration-500",
                   faceIDModalState === 'success' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 scale-105" :
-                  faceIDModalState === 'error' ? "bg-red-500/20 text-red-400 border border-red-500/40" : "bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/30"
+                  faceIDModalState === 'error' ? "bg-red-500/20 text-red-400 border border-red-500/40" : "bg-white/10 text-[#F5F5F7] border border-white/30"
                 )}>
                   <ScanFace className={cn("w-10 h-10 transition-transform duration-300", faceIDModalState === 'scanning' && "animate-pulse scale-110")} />
                 </div>
@@ -4575,7 +4575,7 @@ export default function App() {
               <p className={cn(
                 "text-xs font-bold uppercase tracking-wider transition-colors min-h-[40px] flex items-center justify-center px-2",
                 faceIDModalState === 'success' ? "text-emerald-400" :
-                faceIDModalState === 'error' ? "text-red-400" : "text-amber-300"
+                faceIDModalState === 'error' ? "text-red-400" : "text-[#E5E5E5]"
               )}>
                 {faceIDModalMsg}
               </p>
@@ -4602,7 +4602,7 @@ export default function App() {
         "flex flex-col items-center justify-center h-screen gap-6 transition-colors duration-500",
         theme === 'light' ? "bg-slate-50 text-slate-900" : "bg-black text-white"
       )}>
-        <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(212,175,55,0.2)]" />
+        <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(255,255,255,0.2)]" />
         <span className="text-slate-500 font-black uppercase tracking-[0.4em] text-[9px]">Carregando Perfil</span>
       </div>
     );
@@ -4656,8 +4656,8 @@ export default function App() {
     >
       <style>{`
         @keyframes luxuryGlow {
-          0% { box-shadow: 0 4px 15px rgba(212, 175, 55, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
-          100% { box-shadow: 0 8px 30px rgba(212, 175, 55, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+          0% { box-shadow: 0 4px 15px rgba(255, 255, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+          100% { box-shadow: 0 8px 30px rgba(255, 255, 255, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.85); }
         }
         @keyframes luxuryFloatBill {
           0% { transform: translateY(-50%) rotate(15deg) scale(0.95); opacity: 0.35; }
@@ -4679,8 +4679,8 @@ export default function App() {
           100% { left: 200%; }
         }
         @keyframes ambientPulseGold {
-          0% { box-shadow: 0 12px 32px rgba(212, 175, 55, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
-          100% { box-shadow: 0 20px 48px rgba(212, 175, 55, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15); }
+          0% { box-shadow: 0 12px 32px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+          100% { box-shadow: 0 20px 48px rgba(255, 255, 255, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
         }
         @keyframes ambientPulseRed {
           0% { box-shadow: 0 12px 32px rgba(239, 68, 68, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
@@ -4716,7 +4716,7 @@ export default function App() {
         <div className={cn("p-6 flex items-center gap-3 transition-all", isSidebarCollapsed ? "p-5 justify-center" : "")}>
           <div className="p-0.5 rounded-2xl shrink-0">
             {userProfile?.profilePicture ? (
-              <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover border border-[#D4AF37]/40 shadow-md" alt="Logo" />
+              <img src={userProfile.profilePicture} className="w-10 h-10 rounded-xl object-cover border border-white/30 shadow-md" alt="Logo" />
             ) : (
               <NexusLogo className="w-10 h-10" />
             )}
@@ -4752,8 +4752,8 @@ export default function App() {
                     : cn("text-slate-500", isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-900 hover:bg-slate-100")
                 )}
                 style={isActive ? {
-                  background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
-                  border: '1px solid #FFD700',
+                  background: 'linear-gradient(135deg, #FFFFFF 0%, #E5E5E5 55%, #D4D4D8 100%)',
+                  border: '1px solid #FFFFFF',
                   animation: 'luxuryGlow 2.5s ease-in-out infinite alternate',
                   color: '#000000'
                 } : undefined}
@@ -4776,7 +4776,7 @@ export default function App() {
                   <span className={cn(
                     "ml-auto px-1.5 py-0.5 rounded-full text-[9px] font-black leading-none",
                     isSidebarCollapsed && "absolute top-1.5 right-1.5 ml-0",
-                    isActive ? "bg-black text-[#FFD700]" : "bg-brand-primary text-black"
+                    isActive ? "bg-black text-white" : "bg-brand-primary text-black"
                   )}>
                     {pendingRegistrationsCount}
                   </span>
@@ -4871,8 +4871,8 @@ export default function App() {
                       : cn("text-slate-500", isDark ? "hover:bg-surface-800 hover:text-white" : "hover:bg-slate-100 hover:text-slate-900")
                   )}
                   style={activeTab === item.id ? {
-                    background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
-                    border: '1px solid #FFD700',
+                    background: 'linear-gradient(135deg, #FFFFFF 0%, #E5E5E5 55%, #D4D4D8 100%)',
+                    border: '1px solid #FFFFFF',
                     animation: 'luxuryGlow 2.5s ease-in-out infinite alternate',
                     color: '#000000'
                   } : undefined}
@@ -4885,7 +4885,7 @@ export default function App() {
                   {item.id === 'Cadastro Online' && pendingRegistrationsCount > 0 && (
                     <span className={cn(
                       "ml-auto px-2 py-0.5 rounded-full text-[10px] font-black",
-                      activeTab === item.id ? "bg-black text-[#FFD700]" : "bg-brand-primary text-black"
+                      activeTab === item.id ? "bg-black text-white" : "bg-brand-primary text-black"
                     )}>
                       {pendingRegistrationsCount}
                     </span>
@@ -5142,16 +5142,16 @@ export default function App() {
                   </div>
                 )}
                 {showOnlyPayoff && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg w-fit">
-                    <CheckCircle2 className="w-3 h-3 text-amber-500" />
-                    <span className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">
+                  <div className="flex items-center gap-2 px-3 py-1 bg-white/10 border border-white/25 rounded-lg w-fit">
+                    <CheckCircle2 className="w-3 h-3 text-[#F5F5F7]" />
+                    <span className="text-[9px] font-bold text-[#F5F5F7] uppercase tracking-widest">
                       Quitados
                     </span>
                     <button 
                       onClick={() => setShowOnlyPayoff(false)}
-                      className="p-1 hover:bg-amber-500/20 rounded-md transition-colors"
+                      className="p-1 hover:bg-white/20 rounded-md transition-colors"
                     >
-                      <X className="w-2.5 h-2.5 text-amber-500" />
+                      <X className="w-2.5 h-2.5 text-[#F5F5F7]" />
                     </button>
                   </div>
                 )}
@@ -5236,7 +5236,7 @@ export default function App() {
                   )}
                   title="Copiar link do aplicativo para o cliente acessar as cobranças"
                 >
-                  {copiedClientAppUrl ? <Check className="w-4 h-4" /> : <CreditCard className="w-4 h-4 text-[#D4AF37]" />}
+                  {copiedClientAppUrl ? <Check className="w-4 h-4" /> : <CreditCard className={cn("w-4 h-4", isDark ? "text-[#F5F5F7]" : "text-slate-900")} />}
                   <span>{copiedClientAppUrl ? 'Link Copiado!' : 'App do Cliente'}</span>
                 </button>
                 <button
@@ -5246,7 +5246,7 @@ export default function App() {
                   <Link2 className="w-4 h-4" />
                   <span>Link Cadastro Online</span>
                   {pendingRegistrationsCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-black text-[#FFD700] text-[9px] font-black leading-none">
+                    <span className="px-1.5 py-0.5 rounded-full bg-black text-white text-[9px] font-black leading-none">
                       {pendingRegistrationsCount}
                     </span>
                   )}
@@ -5370,7 +5370,7 @@ export default function App() {
                   transition={{ duration: 0.5 }}
                   className={cn(
                     "p-8 sm:p-10 rounded-[32px] border transition-all duration-300 relative overflow-hidden group cursor-pointer", 
-                    isDark ? "bg-[#0d0e12] border-slate-800 hover:border-[#D4AF37]/50" : "bg-white border-slate-200/80 shadow-md shadow-slate-100/40 hover:border-[#D4AF37]/50"
+                    isDark ? "bg-[#0d0e12] border-slate-800 hover:border-white/40" : "bg-white border-slate-200/80 shadow-md shadow-slate-100/40 hover:border-slate-400"
                   )}
                   whileHover={{ y: -4 }}
                 >
@@ -5381,9 +5381,9 @@ export default function App() {
 
                   {/* Header Badge */}
                   <div className="relative z-10 flex flex-col mb-6">
-                    <div className="text-[8px] font-black text-[#D4AF37] uppercase tracking-[0.4em] mb-1">REAL ASSETS & CAPITAL</div>
-                    <h3 className="text-[12px] sm:text-[13px] font-black uppercase tracking-[0.25em] text-slate-800 dark:text-[#FFF5C0] flex items-center gap-3">
-                      <span className="w-2 h-2 bg-[#D4AF37] rounded-full shadow-[0_0_8px_#D4AF37]" />
+                    <div className={cn("text-[8px] font-black uppercase tracking-[0.4em] mb-1", isDark ? "text-[#E5E5E5]" : "text-slate-600")}>REAL ASSETS & CAPITAL</div>
+                    <h3 className={cn("text-[12px] sm:text-[13px] font-black uppercase tracking-[0.25em] flex items-center gap-3", isDark ? "text-[#F5F5F7]" : "text-slate-900")}>
+                      <span className={cn("w-2 h-2 rounded-full", isDark ? "bg-[#F5F5F7] shadow-[0_0_8px_#FFFFFF]" : "bg-slate-900")} />
                       Visão de Ativos
                     </h3>
                   </div>
@@ -5397,7 +5397,7 @@ export default function App() {
                        {loading ? (
                          <div className="h-8 w-12 bg-slate-500/15 rounded animate-pulse mt-1" />
                        ) : (
-                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-[#FFF5C0]" : "text-slate-900")}>{stats.totalClients}</span>
+                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-[#F5F5F7]" : "text-slate-900")}>{stats.totalClients}</span>
                        )}
                     </div>
                     <div className="flex justify-between items-end pb-3 border-b border-slate-100 dark:border-slate-800/60">
@@ -5408,7 +5408,7 @@ export default function App() {
                        {loading ? (
                          <div className="h-8 w-12 bg-slate-500/15 rounded animate-pulse mt-1" />
                        ) : (
-                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-[#FFF5C0]" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
+                         <span className={cn("text-2xl sm:text-3xl font-black tracking-tighter", isDark ? "text-[#F5F5F7]" : "text-slate-900")}>{loans.filter(l => l.status !== 'Pago' || l.capital > 0).length}</span>
                        )}
                     </div>
                     <div className="flex justify-between items-end pb-1">
@@ -5789,7 +5789,7 @@ export default function App() {
                                        className="h-full rounded-full transition-all"
                                        style={{ 
                                          width: `${(client.score / 1000) * 100}%`,
-                                         backgroundColor: client.score >= 800 ? '#10b981' : client.score >= 600 ? '#06b6d4' : client.score >= 400 ? '#f59e0b' : '#f43f5e'
+                                         backgroundColor: client.score >= 800 ? '#10b981' : client.score >= 600 ? '#06b6d4' : client.score >= 400 ? (isDark ? '#e5e5e5' : '#475569') : '#f43f5e'
                                        }}
                                      />
                                    </div>
@@ -6030,7 +6030,7 @@ export default function App() {
                                     onClick={handleTogglePayoff}
                                     className={cn(
                                       "px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-bold uppercase tracking-widest transition-all shrink-0 snap-start",
-                                      showOnlyPayoff ? "bg-amber-500 text-white" : "bg-white/5 text-slate-500 hover:text-white"
+                                      showOnlyPayoff ? "bg-[#F5F5F7] text-black" : "bg-white/5 text-slate-500 hover:text-white"
                                     )}
                                   >
                                     Quitados
@@ -6412,7 +6412,10 @@ export default function App() {
                           Auditado
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em]">
+                        <div className={cn(
+                          "flex items-center gap-2 px-4 py-3 border rounded-2xl text-[9px] font-black uppercase tracking-[0.2em]",
+                          isDark ? "bg-white/10 border-white/25 text-[#F5F5F7]" : "bg-slate-100 border-slate-300 text-slate-800"
+                        )}>
                           <Clock className="w-3 h-3" />
                           Em Aberto
                         </div>
@@ -6422,7 +6425,7 @@ export default function App() {
                     <div className="lg:col-span-3 flex justify-end">
                       <button
                         onClick={handleCloseMonth}
-                        className="w-full lg:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-br from-brand-primary to-amber-600 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all hover:-translate-y-1 active:translate-y-0"
+                        className="w-full lg:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-br from-white via-[#E5E5E5] to-[#D4D4D8] text-black rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-white/15 hover:shadow-white/30 transition-all hover:-translate-y-1 active:translate-y-0"
                       >
                         <Lock className="w-3.5 h-3.5" />
                         {monthlyClosures.some(c => c.month === reportMonth && c.year === reportYear) ? 'Refazer Fechamento' : 'Arquivar Período'}
@@ -6448,7 +6451,7 @@ export default function App() {
                           )}>
                             <div className={cn(
                               "w-20 h-20 rounded-full flex items-center justify-center mb-6 border animate-pulse",
-                              isDark ? "bg-brand-primary/10 border-brand-primary/20 text-brand-primary" : "bg-amber-50 border-amber-200 text-amber-600"
+                              isDark ? "bg-brand-primary/10 border-brand-primary/20 text-brand-primary" : "bg-slate-100 border-slate-200 text-slate-900"
                             )}>
                               <FileText className="w-10 h-10" />
                             </div>
@@ -6547,7 +6550,7 @@ export default function App() {
                                 { label: 'Total Recebido', value: monthlyReportStats.totalPayments, sub: `${monthlyReportStats.paymentCount} Transações`, color: 'emerald-600' },
                                 { label: 'Falta Receber (Juros)', value: monthlyReportStats.pendingInterest, sub: 'Juros do Mês Pendentes', color: 'rose-600' },
                                 { label: 'Lucro (Juros)', value: monthlyReportStats.interestPayments, sub: 'Rendimentos Reais', color: 'emerald-600' },
-                                { label: 'Renda Estimada', value: monthlyReportStats.estimatedInterest, sub: 'Expectativa de Juros', color: 'amber-600' },
+                                { label: 'Renda Estimada', value: monthlyReportStats.estimatedInterest, sub: 'Expectativa de Juros', color: 'slate-700' },
                                 { label: 'Capital Aberto', value: monthlyReportStats.pendingCapital || 0, sub: 'Principal a Cobrar', color: 'slate-900' }
                               ].map((stat, i) => (
                                 <div key={i} className={cn(
@@ -6559,7 +6562,7 @@ export default function App() {
                                     <div className={cn(
                                       "text-lg sm:text-xl font-black tracking-tight font-mono", 
                                       stat.color === 'emerald-600' ? "text-emerald-600" : 
-                                      stat.color === 'amber-600' ? "text-amber-600" : 
+                                      stat.color === 'slate-700' ? "text-slate-700" : 
                                       stat.color === 'rose-600' ? "text-rose-600" : "text-slate-900"
                                     )}>
                                       {formatCurrency(stat.value)}
@@ -6910,7 +6913,7 @@ export default function App() {
                                   </div>
                                   <div>
                                     <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-1">Renda Est.</span>
-                                    <div className="text-amber-500 font-black text-xs">R$ {(closure.stats.estimatedInterest ?? 0).toLocaleString('pt-BR')}</div>
+                                    <div className={cn("font-black text-xs", isDark ? "text-[#F5F5F7]" : "text-slate-900")}>R$ {(closure.stats.estimatedInterest ?? 0).toLocaleString('pt-BR')}</div>
                                   </div>
                                   <div className="text-right">
                                     <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-1">Movimentado</span>
@@ -7113,7 +7116,7 @@ export default function App() {
                           <div className="space-y-8">
                             <div className="flex justify-center">
                               <div className="relative group">
-                                <div className="w-24 h-24 rounded-[32px] overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center transition-all group-hover:border-[#FFD700]/50">
+                                <div className="w-24 h-24 rounded-[32px] overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center transition-all group-hover:border-[#F5F5F7]/50">
                                   {newProfilePicture ? (
                                     <img src={newProfilePicture} className="w-full h-full object-cover" alt="Preview" />
                                   ) : (
@@ -7121,7 +7124,7 @@ export default function App() {
                                   )}
                                 </div>
                                 <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-[32px]">
-                                  <span className="text-[10px] font-black text-white uppercase tracking-widest text-[#FFD700]">Mudar</span>
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-[#F5F5F7]">Mudar</span>
                                   <input 
                                     type="file" 
                                     accept="image/*" 
@@ -7148,7 +7151,7 @@ export default function App() {
                                 type="text"
                                 value={newDisplayName}
                                 onChange={(e) => setNewDisplayName(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#F5F5F7] focus:outline-none transition-all"
                               />
                             </div>
 
@@ -7165,7 +7168,7 @@ export default function App() {
                                   type="text"
                                   value={newPixKey}
                                   onChange={(e) => setNewPixKey(e.target.value)}
-                                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#F5F5F7] focus:outline-none transition-all"
                                 />
                               </div>
                               <div className="space-y-2">
@@ -7174,7 +7177,7 @@ export default function App() {
                                   type="text"
                                   value={newPixName}
                                   onChange={(e) => setNewPixName(e.target.value)}
-                                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#FFD700] focus:outline-none transition-all"
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-sm text-white focus:border-[#F5F5F7] focus:outline-none transition-all"
                                 />
                               </div>
                             </div>
@@ -7189,7 +7192,7 @@ export default function App() {
                                     className={cn(
                                       "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all active:scale-95",
                                       newPixBank === bank.name 
-                                        ? "bg-[#FFD700]/10 border-[#FFD700]" 
+                                        ? "bg-[#F5F5F7]/10 border-[#F5F5F7]" 
                                         : "bg-white/5 border-transparent hover:border-white/10"
                                     )}
                                   >
@@ -7211,7 +7214,7 @@ export default function App() {
                             <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
                               <div className="flex items-center justify-between gap-3">
                                 <div>
-                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-[#F5F5F7]">
                                     Integração Asaas (PIX &amp; Boleto)
                                   </h4>
                                   <p className="text-xs text-slate-400 mt-1">
@@ -7225,7 +7228,7 @@ export default function App() {
                                     "px-2.5 py-1 rounded-lg border text-[10px] font-bold shrink-0",
                                     asaasServerStatus.configured
                                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                                      : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                      : "bg-white/10 text-[#E5E5E5] border-white/25"
                                   )}
                                 >
                                   {asaasServerStatus.configured ? 'Ativo' : 'Chave Pendente'}
@@ -7251,7 +7254,7 @@ export default function App() {
                                       setTimeout(() => setCopiedClientAppUrl(false), 2500);
                                     }
                                   }}
-                                  className="px-4 py-2.5 rounded-xl bg-[#D4AF37] text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shrink-0 hover:brightness-110 transition-all"
+                                  className="px-4 py-2.5 rounded-xl bg-[#F5F5F7] text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shrink-0 hover:bg-[#E5E5E5] transition-all"
                                 >
                                   {copiedClientAppUrl ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                                   {copiedClientAppUrl ? 'Link Copiado!' : 'Copiar Link do App'}
@@ -7305,7 +7308,7 @@ export default function App() {
                                 ))}
                               </div>
                               <p className="text-[9px] text-slate-500 uppercase font-black leading-relaxed tracking-wider ml-1">
-                                Dica: Utilize <span className="text-[#FFD700] font-bold">{'{meses_atraso}'}</span> (ex: 1, 2) e <span className="text-[#FFD700] font-bold">{'{termo_meses}'}</span> (mês/meses) para estruturar a mensagem de atrasados de maneira dinâmica.
+                                Dica: Utilize <span className="text-[#F5F5F7] font-bold">{'{meses_atraso}'}</span> (ex: 1, 2) e <span className="text-[#F5F5F7] font-bold">{'{termo_meses}'}</span> (mês/meses) para estruturar a mensagem de atrasados de maneira dinâmica.
                               </p>
                             </div>
                           </div>
@@ -7332,7 +7335,7 @@ export default function App() {
                               className="w-full flex items-center justify-between p-6 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
                             >
                               <div className="flex items-center gap-4">
-                                <Download className="w-5 h-5 text-[#FFD700]" />
+                                <Download className="w-5 h-5 text-[#F5F5F7]" />
                                 <span className="text-[9px] font-black uppercase text-white tracking-[0.2em]">Backup System</span>
                               </div>
                               <ChevronRight className="w-4 h-4 text-slate-700" />
@@ -7342,7 +7345,7 @@ export default function App() {
                             <div className="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
                               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-4">
-                                  <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/10 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] shrink-0">
+                                  <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/25 flex items-center justify-center text-[#F5F5F7] shrink-0">
                                     <ScanFace className="w-5 h-5" />
                                   </div>
                                   <div>
@@ -7360,7 +7363,7 @@ export default function App() {
                                     "px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shrink-0 active:scale-95",
                                     isFaceIDRegistered 
                                       ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30" 
-                                      : "bg-[#D4AF37] text-black hover:bg-[#c4a02e]"
+                                      : "bg-[#F5F5F7] text-black hover:bg-[#E5E5E5]"
                                   )}
                                 >
                                   <Fingerprint className="w-3.5 h-3.5" />
@@ -7404,7 +7407,7 @@ export default function App() {
                                         console.error('Error clearing closure date:', e);
                                       }
                                     }}
-                                    className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-brand-primary text-black hover:bg-amber-400 transition-all shrink-0 active:scale-95"
+                                    className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-[#F5F5F7] text-black hover:bg-[#E5E5E5] transition-all shrink-0 active:scale-95"
                                   >
                                     Exibir Todas as Baixas
                                   </button>
@@ -7449,7 +7452,7 @@ export default function App() {
 
                     <div className="relative z-10 flex flex-col md:flex-row gap-8 items-start">
                       <div className="w-full md:w-2/5 flex flex-col items-center text-center p-6 rounded-3xl bg-black/20 border border-white/5">
-                        <div className="relative w-24 h-24 mb-4 rounded-full p-1 bg-gradient-to-tr from-brand-primary to-amber-500 shadow-xl">
+                        <div className="relative w-24 h-24 mb-4 rounded-full p-1 bg-gradient-to-tr from-white via-[#E5E5E5] to-[#71717A] shadow-xl">
                           <div className={cn(
                             "w-full h-full rounded-full flex items-center justify-center font-black text-2xl uppercase",
                             isDark ? "bg-black text-white" : "bg-white text-slate-900"
@@ -7528,7 +7531,7 @@ export default function App() {
                             href="https://wa.me/5591993805974?text=Ol%C3%A1%20Reyne%20Lucas!%20Estou%20utilizando%20o%20sistema%20de%20gest%C3%A3o%20Nexus%20Private%20e%20gostaria%20de%20solicitar%20aux%C3%ADlio%20t%C3%A9cnico%20sobre%20o%20sistema."
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="w-full py-4 bg-gradient-to-r from-brand-primary to-amber-500 text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-brand-primary/20 flex items-center justify-center gap-2"
+                            className="w-full py-4 bg-gradient-to-r from-white via-[#E5E5E5] to-[#D4D4D8] text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:brightness-105 active:scale-[0.98] transition-all shadow-lg shadow-white/15 flex items-center justify-center gap-2"
                           >
                             <MessageCircle className="w-4 h-4 fill-black" />
                             Falar no WhatsApp
@@ -7777,7 +7780,7 @@ export default function App() {
                                       </button>
                                       <button 
                                         onClick={() => setViewingScheduleReceipt(loan)}
-                                        className="p-2 bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white rounded-xl border border-amber-500/20"
+                                        className="p-2 bg-white/10 text-[#F5F5F7] hover:bg-[#F5F5F7] hover:text-black rounded-xl border border-white/25 transition-all"
                                         title="Gerar Comprovante de Agendamento"
                                       >
                                         <Printer className="w-4 h-4" />
@@ -7798,8 +7801,8 @@ export default function App() {
                                         className={cn(
                                           "p-2 rounded-xl border transition-all active:scale-95",
                                           loan.asaasChargeId
-                                            ? "bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 hover:bg-[#D4AF37] hover:text-black"
-                                            : "bg-white/5 text-slate-400 border-white/10 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37]"
+                                            ? "bg-white/15 text-[#F5F5F7] border-white/30 hover:bg-[#F5F5F7] hover:text-black"
+                                            : "bg-white/5 text-slate-400 border-white/10 hover:bg-white/15 hover:text-[#F5F5F7]"
                                         )}
                                         title={loan.asaasChargeId ? "Ver Cobrança Asaas (Pix/Boleto)" : "Gerar Cobrança Asaas"}
                                       >
@@ -8045,7 +8048,7 @@ export default function App() {
                                   </button>
                                   <button 
                                     onClick={() => setViewingScheduleReceipt(loan)}
-                                    className="p-3.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 active:scale-95 transition-all"
+                                    className="p-3.5 bg-white/10 text-[#F5F5F7] rounded-xl border border-white/25 active:scale-95 transition-all"
                                     title="Comprovante de Agendamento"
                                   >
                                     <Printer className="w-5 h-5" />
@@ -8066,7 +8069,7 @@ export default function App() {
                                     className={cn(
                                       "p-3.5 rounded-xl border active:scale-95 transition-all",
                                       loan.asaasChargeId
-                                        ? "bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30"
+                                        ? "bg-white/15 text-[#F5F5F7] border-white/30"
                                         : "bg-white/5 text-slate-300 border-white/10"
                                     )}
                                     title={loan.asaasChargeId ? "Ver Cobrança Asaas" : "Gerar Cobrança Asaas"}
@@ -8376,7 +8379,7 @@ export default function App() {
 
                 <button 
                   type="submit"
-                  className="w-full bg-gradient-to-r from-brand-primary via-amber-400 to-amber-500 text-black py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 transition-all text-base sm:text-lg uppercase tracking-widest active:scale-95"
+                  className="w-full bg-gradient-to-r from-white via-[#E5E5E5] to-[#D4D4D8] text-black py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black shadow-lg shadow-white/15 hover:shadow-white/30 transition-all text-base sm:text-lg uppercase tracking-widest active:scale-95"
                 >
                   {editingLoanId ? 'Salvar Alterações' : 'Confirmar Cadastro'}
                 </button>
@@ -8743,10 +8746,10 @@ export default function App() {
                             label: 'Pagar Juros e Renovar +30 dias',
                             method: 'PIX'
                           })}
-                          className="w-full py-5 bg-gradient-to-r from-brand-primary via-amber-400 to-amber-500 text-black rounded-2xl font-bold transition-all shadow-lg shadow-brand-primary/25 hover:shadow-brand-primary/40 flex items-center justify-between px-6 active:scale-[0.98]"
+                          className="w-full py-5 bg-gradient-to-r from-white via-[#E5E5E5] to-[#D4D4D8] text-black rounded-2xl font-bold transition-all shadow-lg shadow-white/15 hover:shadow-white/30 flex items-center justify-between px-6 active:scale-[0.98]"
                         >
                           <span className="text-sm">Pagar Juros e Renovar</span>
-                          <span className="text-black font-black text-[10px] bg-white/90 px-2.5 py-1 rounded-lg uppercase tracking-tighter">
+                          <span className="text-white font-black text-[10px] bg-black px-2.5 py-1 rounded-lg uppercase tracking-tighter">
                             +30 dias
                           </span>
                         </button>
@@ -9036,8 +9039,8 @@ export default function App() {
                                 className={cn(
                                   "p-2 rounded-xl transition-all active:scale-95 border",
                                   loan.asaasChargeId
-                                    ? "bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 hover:bg-[#D4AF37] hover:text-black"
-                                    : "bg-white/5 text-slate-400 border-white/10 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37]"
+                                    ? "bg-white/15 text-[#F5F5F7] border-white/30 hover:bg-[#F5F5F7] hover:text-black"
+                                    : "bg-white/5 text-slate-400 border-white/10 hover:bg-white/15 hover:text-[#F5F5F7]"
                                 )}
                                 title={loan.asaasChargeId ? "Ver Cobrança Asaas (Pix/Boleto)" : "Gerar Cobrança Asaas"}
                               >
@@ -9102,7 +9105,7 @@ export default function App() {
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
                 <div className="mb-6 flex justify-center">
-                  <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(212,175,55,0.4)]" />
+                  <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(0,0,0,0.22)]" />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">Nexus Private</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -9305,7 +9308,7 @@ export default function App() {
                         className="h-full rounded-full transition-all duration-500"
                         style={{ 
                           width: `${(viewingClientDetail.score / 1000) * 100}%`,
-                          backgroundColor: viewingClientDetail.score >= 800 ? '#10b981' : viewingClientDetail.score >= 600 ? '#06b6d4' : viewingClientDetail.score >= 400 ? '#f59e0b' : '#f43f5e'
+                          backgroundColor: viewingClientDetail.score >= 800 ? '#10b981' : viewingClientDetail.score >= 600 ? '#06b6d4' : viewingClientDetail.score >= 400 ? '#e5e5e5' : '#f43f5e'
                         }}
                       />
                     </div>
@@ -9358,7 +9361,7 @@ export default function App() {
                           />
                         ) : (
                           <p className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-slate-900")}>
-                            <Mail className="w-4 h-4 text-[#D4AF37]" />
+                            <Mail className={cn("w-4 h-4", isDark ? "text-[#F5F5F7]" : "text-slate-800")} />
                             {viewingClientDetail.email || "Não informado"}
                           </p>
                         )}
@@ -9599,7 +9602,7 @@ export default function App() {
                 {/* Elegant Header */}
                 <div className="flex flex-col items-center mb-12 relative z-10">
                   <div className="mb-6 flex justify-center">
-                    <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(212,175,55,0.4)]" />
+                    <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(0,0,0,0.22)]" />
                   </div>
                   <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                   <div className="h-px w-12 bg-brand-primary my-4" />
@@ -9736,7 +9739,7 @@ export default function App() {
               {/* Elegant Header */}
               <div className="flex flex-col items-center mb-12 relative z-10">
                 <div className="mb-6 flex justify-center">
-                  <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(212,175,55,0.4)]" />
+                  <NexusLogo className="w-20 h-20 filter drop-shadow-[0_6px_20px_rgba(0,0,0,0.22)]" />
                 </div>
                 <h1 className="text-xl font-black uppercase tracking-[0.2em] text-slate-900">{userProfile?.displayName || 'Nexus Private'}</h1>
                 <div className="h-px w-12 bg-brand-primary my-4" />
@@ -9913,15 +9916,15 @@ export default function App() {
                   isDark ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
                 )}
               >
-                <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center border group-hover:scale-110 transition-transform shrink-0", isDark ? "bg-white/10 border-white/20" : "bg-slate-200/70 border-slate-300")}>
                   {copiedShareText ? (
                     <Check className="w-6 h-6 text-emerald-400" />
                   ) : (
-                    <Copy className="w-6 h-6 text-amber-400" />
+                    <Copy className={cn("w-6 h-6", isDark ? "text-[#F5F5F7]" : "text-slate-900")} />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black uppercase tracking-wider text-amber-400 group-hover:text-amber-300 transition-colors">
+                  <p className={cn("text-sm font-black uppercase tracking-wider transition-colors", isDark ? "text-[#F5F5F7] group-hover:text-white" : "text-slate-900 group-hover:text-slate-700")}>
                     {copiedShareText ? "Copiado!" : "Copiar Texto do Comprovante"}
                   </p>
                   <p className="text-[10px] text-slate-400">Salvar dados organizados na área de transferência</p>
@@ -9942,11 +9945,11 @@ export default function App() {
                     isDark ? "bg-white/5 border-white/5 hover:bg-white/10" : "bg-slate-50 border-slate-100 hover:bg-slate-100"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
-                    <Download className="w-6 h-6 text-amber-500" />
+                  <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center border group-hover:scale-110 transition-transform shrink-0", isDark ? "bg-white/10 border-white/20" : "bg-slate-200/70 border-slate-300")}>
+                    <Download className={cn("w-6 h-6", isDark ? "text-[#F5F5F7]" : "text-slate-900")} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black uppercase tracking-wider text-amber-500 group-hover:text-amber-400 transition-colors">Baixar Imagem (PNG)</p>
+                    <p className={cn("text-sm font-black uppercase tracking-wider transition-colors", isDark ? "text-[#F5F5F7] group-hover:text-white" : "text-slate-900 group-hover:text-slate-700")}>Baixar Imagem (PNG)</p>
                     <p className="text-[10px] text-slate-400">Salvar comprovante como foto de alta qualidade</p>
                   </div>
                 </button>
@@ -10015,11 +10018,11 @@ export default function App() {
                     isDark ? "bg-white/[0.02] border-white/10 hover:bg-white/5" : "bg-slate-50 border-slate-200 hover:bg-slate-100"
                   )}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform shrink-0">
-                    <Share2 className="w-6 h-6 text-amber-400" />
+                  <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center border group-hover:scale-110 transition-transform shrink-0", isDark ? "bg-white/10 border-white/20" : "bg-slate-200/70 border-slate-300")}>
+                    <Share2 className={cn("w-6 h-6", isDark ? "text-[#F5F5F7]" : "text-slate-900")} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black uppercase tracking-wider text-amber-400 group-hover:text-amber-300 transition-colors">Compartilhamento do Aparelho</p>
+                    <p className={cn("text-sm font-black uppercase tracking-wider transition-colors", isDark ? "text-[#F5F5F7] group-hover:text-white" : "text-slate-900 group-hover:text-slate-700")}>Compartilhamento do Aparelho</p>
                     <p className="text-[10px] text-slate-400">Usar o menu de compartilhamento padrão do sistema</p>
                   </div>
                 </button>
@@ -10148,7 +10151,7 @@ export default function App() {
                   <div className="flex items-center gap-3">
                     <span className={cn(
                       "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg border",
-                      isDark ? "bg-[#0f0f0f] text-[#D4AF37] border-white/10" : "bg-white text-[#AA7C11] border-slate-100"
+                      isDark ? "bg-[#0f0f0f] text-[#F5F5F7] border-white/10" : "bg-white text-slate-900 border-slate-100"
                     )}>
                       Agendar Empréstimo
                     </span>
@@ -10173,7 +10176,7 @@ export default function App() {
                       }}
                       className={cn(
                         "p-3.5 rounded-full shadow-lg transition-transform active:scale-95 border flex items-center justify-center",
-                        isDark ? "bg-[#0f0f0f] border-white/10 text-[#D4AF37]" : "bg-white border-slate-100 text-[#AA7C11]"
+                        isDark ? "bg-[#0f0f0f] border-white/10 text-[#F5F5F7]" : "bg-white border-slate-100 text-slate-900"
                       )}
                     >
                       <Clock className="w-5 h-5 stroke-[2.5]" />
@@ -10253,7 +10256,7 @@ export default function App() {
                 onClick={() => changeTab(item.id as typeof activeTab)}
                 className={cn(
                   "relative flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
-                  isActive ? "text-[#D4AF37]" : "text-slate-500"
+                  isActive ? (isDark ? "text-white" : "text-slate-900") : "text-slate-500"
                 )}
               >
                 <div 
@@ -10262,9 +10265,9 @@ export default function App() {
                     isActive ? "shadow-md" : ""
                   )}
                   style={isActive ? {
-                    background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
-                    border: '1px solid #FFD700',
-                    boxShadow: '0 4px 12px rgba(212, 175, 55, 0.3)',
+                    background: 'linear-gradient(135deg, #FFFFFF 0%, #E5E5E5 55%, #D4D4D8 100%)',
+                    border: '1px solid #FFFFFF',
+                    boxShadow: '0 4px 12px rgba(255, 255, 255, 0.25)',
                   } : undefined}
                 >
                   {isActive && (
@@ -10277,7 +10280,7 @@ export default function App() {
                     {pendingRegistrationsCount}
                   </span>
                 )}
-                <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", isActive ? "opacity-100 font-extrabold text-[#D4AF37]" : "opacity-60")}>
+                <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", isActive ? (isDark ? "opacity-100 font-extrabold text-white" : "opacity-100 font-extrabold text-slate-900") : "opacity-60")}>
                   {item.label === 'Principal' ? 'Início' : 
                    item.label === 'Empréstimos' ? 'Empréstimos' :
                    item.label === 'Quitados' ? 'Pagos' :
@@ -10292,7 +10295,7 @@ export default function App() {
             onClick={() => changeTab('Configurações')}
             className={cn(
               "flex flex-col items-center justify-center gap-1 flex-1 py-1 transition-all active:scale-90",
-              activeTab === 'Configurações' ? "text-[#D4AF37]" : "text-slate-500"
+              activeTab === 'Configurações' ? (isDark ? "text-white" : "text-slate-900") : "text-slate-500"
             )}
           >
             <div 
@@ -10301,9 +10304,9 @@ export default function App() {
                 activeTab === 'Configurações' ? "shadow-md" : ""
               )}
               style={activeTab === 'Configurações' ? {
-                background: 'linear-gradient(135deg, #FFD700 0%, #FFF5C0 50%, #D4AF37 100%)',
-                border: '1px solid #FFD700',
-                boxShadow: '0 4px 12px rgba(212, 175, 55, 0.3)',
+                background: 'linear-gradient(135deg, #FFFFFF 0%, #E5E5E5 55%, #D4D4D8 100%)',
+                border: '1px solid #FFFFFF',
+                boxShadow: '0 4px 12px rgba(255, 255, 255, 0.25)',
               } : undefined}
             >
               {activeTab === 'Configurações' && (
@@ -10311,7 +10314,7 @@ export default function App() {
               )}
               <Settings className={cn("w-5 h-5", activeTab === 'Configurações' ? "text-black scale-110" : "text-slate-400")} />
             </div>
-            <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", activeTab === 'Configurações' ? "opacity-100 font-extrabold text-[#D4AF37]" : "opacity-60")}>
+            <span className={cn("text-[9px] font-bold tracking-tight mt-1 transition-all", activeTab === 'Configurações' ? (isDark ? "opacity-100 font-extrabold text-white" : "opacity-100 font-extrabold text-slate-900") : "opacity-60")}>
               Ajustes
             </span>
           </button>
@@ -10399,7 +10402,7 @@ function StatusBadge({ status, isDark }: { status: Loan['status'], isDark?: bool
       icon: AlertCircle
     },
     'Agendado': {
-      classes: 'bg-amber-500/10 text-amber-500 border-amber-500/20 shadow-amber-500/5',
+      classes: cn(isDark ? 'bg-white/10 text-[#F5F5F7] border-white/25 shadow-white/5' : 'bg-slate-100 text-slate-800 border-slate-300 shadow-slate-500/5'),
       icon: Calendar
     },
   };

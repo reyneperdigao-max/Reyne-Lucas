@@ -120,7 +120,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
-            <p className="text-xs font-semibold text-[#D4AF37]">Cobrança Asaas · PIX &amp; Boleto</p>
+            <p className={cn('text-xs font-semibold', isDark ? 'text-[#E5E5E5]' : 'text-slate-700')}>Cobrança Asaas · PIX &amp; Boleto</p>
             <h3 className="text-lg font-bold tracking-tight mt-0.5">{loan.clientName}</h3>
             <p className="text-xs text-slate-400 font-mono tabular-nums mt-0.5">
               Valor: {formatBRL(loan.totalBruto > 0 ? loan.totalBruto : loan.capital)} · Venc.: {loan.dueDate.split('-').reverse().join('/')}
@@ -166,7 +166,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
             {liveCharge.asaasPixQrCode && !statusMeta.isPaid && (
               <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col items-center gap-3 text-center">
                 <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                  <QrCode className="w-4 h-4 text-[#D4AF37]" />
+                  <QrCode className="w-4 h-4 text-[#F5F5F7]" />
                   QR Code PIX Asaas
                 </span>
                 <div className="bg-white p-3 rounded-2xl">
@@ -192,7 +192,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleCopy(liveCharge.asaasPixPayload || '', 'pix')}
-                    className="px-4 py-2.5 rounded-xl bg-[#D4AF37] text-black text-xs font-bold flex items-center gap-1.5 shrink-0 hover:brightness-110 transition-all"
+                    className="px-4 py-2.5 rounded-xl bg-[#F5F5F7] hover:bg-white text-black text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all"
                   >
                     {copiedKey === 'pix' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     {copiedKey === 'pix' ? 'Copiado' : 'Copiar PIX'}
@@ -231,7 +231,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
                   rel="noopener noreferrer"
                   className="py-3 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-xs font-bold flex items-center justify-center gap-2 transition-all"
                 >
-                  <FileText className="w-4 h-4 text-[#D4AF37]" />
+                  <FileText className="w-4 h-4 text-[#F5F5F7]" />
                   Baixar Boleto PDF
                 </a>
               )}
@@ -241,7 +241,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   className={cn(
-                    'py-3 px-4 rounded-xl bg-[#D4AF37] hover:brightness-110 text-black text-xs font-bold flex items-center justify-center gap-2 transition-all',
+                    'py-3 px-4 rounded-xl bg-[#F5F5F7] hover:bg-white text-black text-xs font-bold flex items-center justify-center gap-2 transition-all',
                     !liveCharge.asaasBankSlipUrl && 'sm:col-span-2'
                   )}
                 >
@@ -263,7 +263,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
                   <select
                     value={billingType}
                     onChange={(e) => setBillingType(e.target.value as AsaasBillingType)}
-                    className="w-full rounded-xl bg-[#161922] border border-white/10 px-3.5 py-3 text-xs text-white outline-none focus:border-[#D4AF37]"
+                    className="w-full rounded-xl bg-[#161922] border border-white/10 px-3.5 py-3 text-xs text-white outline-none focus:border-white"
                   >
                     <option value="UNDEFINED">Pix e Boleto (Cliente escolhe)</option>
                     <option value="PIX">Somente PIX</option>
@@ -274,7 +274,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
                   type="button"
                   disabled={isLoading}
                   onClick={handleGenerate}
-                  className="w-full py-3.5 px-4 rounded-xl bg-[#D4AF37] hover:brightness-110 text-black text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  className="w-full py-3.5 px-4 rounded-xl bg-[#F5F5F7] hover:bg-white text-black text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                 >
                   <CreditCard className="w-4 h-4" />
                   {isLoading ? 'Gerando Cobrança no Asaas...' : 'Gerar Cobrança Asaas Agora'}

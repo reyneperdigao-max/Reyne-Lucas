@@ -5,7 +5,7 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-primary: #FFD700;
+  --color-brand-primary: #F5F5F7;
   --color-brand-secondary: #ffffff;
   --color-brand-accent: #E5E7EB;
   --color-brand-danger: #FF1A1A;
@@ -108,7 +108,7 @@
 }
 
 .btn-primary {
-  @apply bg-brand-primary hover:bg-[#e5c05b] text-black px-6 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-xl shadow-brand-primary/10 active:scale-95 uppercase tracking-widest;
+  @apply bg-brand-primary hover:bg-[#E5E5E5] text-black px-6 py-3 rounded-2xl text-sm font-extrabold transition-all shadow-xl shadow-white/10 active:scale-95 uppercase tracking-widest;
 }
 
 .btn-ghost {
@@ -231,11 +231,11 @@
 .printable-content .bg-black { background-color: #000000 !important; }
 .printable-content .text-black { color: #000000 !important; }
 .printable-content .text-white { color: #ffffff !important; }
-.printable-content .text-brand-primary { color: #d4af37 !important; }
-.printable-content .bg-brand-primary { background-color: #d4af37 !important; }
-.printable-content .bg-brand-primary\/5 { background-color: #fdf9eb !important; }
-.printable-content .border-brand-primary\/10 { border-color: #f9f1d7 !important; }
-.printable-content .border-brand-primary\/20 { border-color: #f2e3af !important; }
+.printable-content .text-brand-primary { color: #0f172a !important; }
+.printable-content .bg-brand-primary { background-color: #0f172a !important; }
+.printable-content .bg-brand-primary\/5 { background-color: #f8fafc !important; }
+.printable-content .border-brand-primary\/10 { border-color: #e2e8f0 !important; }
+.printable-content .border-brand-primary\/20 { border-color: #cbd5e1 !important; }
 
 .printable-content .glass-card {
   background: white !important;
@@ -329,7 +329,7 @@
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #d4af37;
+  background: #E5E5E5;
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */

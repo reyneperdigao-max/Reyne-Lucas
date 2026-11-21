@@ -328,7 +328,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
     return (
       <div className="min-h-screen bg-[#07080B] text-white flex flex-col items-center justify-center p-6 gap-5">
         <NexusLogo className="w-16 h-16" />
-        <div className="w-10 h-10 border-2 border-[#D4AF37]/20 border-t-[#D4AF37] rounded-full animate-spin" />
+        <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
           Carregando Formulário Seguro
         </p>
@@ -362,14 +362,14 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   if (submittedProtocol && submittedSummary) {
     return (
       <div className="min-h-screen bg-[#07080B] text-white flex items-center justify-center p-4 sm:p-8">
-        <div className="max-w-lg w-full bg-[#101218] border border-[#D4AF37]/30 rounded-[36px] p-8 sm:p-10 text-center space-y-6 shadow-[0_25px_70px_rgba(0,0,0,0.85)] relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(212,175,55,0.14)_0%,_transparent_65%)] pointer-events-none" />
+        <div className="max-w-lg w-full bg-[#101218] border border-white/25 rounded-[36px] p-8 sm:p-10 text-center space-y-6 shadow-[0_25px_70px_rgba(0,0,0,0.85)] relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(255,255,255,0.12)_0%,_transparent_65%)] pointer-events-none" />
 
           <div className="relative z-10 flex flex-col items-center space-y-5">
             <NexusLogo className="w-14 h-14" />
             <div className="space-y-0.5">
               <p className="text-sm font-black uppercase tracking-[0.22em] text-white">
-                Nexus <span className="text-[#D4AF37]">Private</span>
+                Nexus <span className="text-[#E5E5E5]">Private</span>
               </p>
               {linkData?.lenderName && linkData.lenderName.trim().toLowerCase() !== 'nexus private' && (
                 <p className="text-[11px] font-bold text-slate-300">
@@ -382,7 +382,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
             </div>
 
             <div className="space-y-2">
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#D4AF37]">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[#F5F5F7]">
                 Protocolo {submittedProtocol}
               </span>
               <h1 className="text-2xl font-black tracking-tight text-white">
@@ -398,7 +398,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                   Valor Solicitado
                 </span>
-                <span className="text-lg font-black text-[#D4AF37] font-mono">
+                <span className="text-lg font-black text-white font-mono">
                   {formatBRL(submittedSummary.amount)}
                 </span>
               </div>
@@ -425,24 +425,24 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   return (
     <div className="min-h-screen bg-[#07080B] text-white py-6 px-3 sm:py-12 sm:px-6 relative overflow-x-hidden">
       {/* Background luxury ambient glow */}
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,_rgba(212,175,55,0.1)_0%,_transparent_50%),radial-gradient(circle_at_80%_100%,_rgba(16,185,129,0.06)_0%,_transparent_50%)]" />
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,_rgba(255,255,255,0.08)_0%,_transparent_50%),radial-gradient(circle_at_80%_100%,_rgba(16,185,129,0.06)_0%,_transparent_50%)]" />
 
       <div className="max-w-2xl mx-auto relative z-10 space-y-6">
         {/* Header Card */}
-        <div className="bg-[#101218]/95 backdrop-blur-xl border border-[#D4AF37]/25 rounded-[32px] p-6 sm:p-8 shadow-2xl">
+        <div className="bg-[#101218]/95 backdrop-blur-xl border border-white/20 rounded-[32px] p-6 sm:p-8 shadow-2xl">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
             <NexusLogo className="w-16 h-16 shrink-0" />
             <div className="flex-1 space-y-2">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/25 text-[#D4AF37] text-[9px] font-black uppercase tracking-[0.25em]">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/10 border border-white/25 text-[#F5F5F7] text-[9px] font-black uppercase tracking-[0.25em]">
                 <Lock className="w-3 h-3" />
                 Cadastro Seguro de Crédito
               </div>
               <div className="space-y-0.5">
                 <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white uppercase">
-                  Nexus <span className="text-[#D4AF37]">Private</span>
+                  Nexus <span className="text-[#E5E5E5]">Private</span>
                 </h1>
                 <p className="text-xs sm:text-sm font-bold text-slate-200 flex items-center justify-center sm:justify-start gap-1.5">
-                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#D4AF37]">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-[#F5F5F7]">
                     Credor:
                   </span>
                   <span>
@@ -474,7 +474,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
           {/* Section 1: Dados Pessoais */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-white/10 text-[#F5F5F7] flex items-center justify-center">
                 <User className="w-4 h-4" />
               </div>
               <div>
@@ -498,7 +498,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Ex: João da Silva Santos"
-                  className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                  className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-white px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                 />
               </div>
 
@@ -522,7 +522,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                         ? isValidCPF(cpf)
                           ? "border-emerald-500/50"
                           : "border-red-500/60"
-                        : "border-white/10 focus:border-[#D4AF37]"
+                        : "border-white/10 focus:border-white"
                     )}
                   />
                 </div>
@@ -545,7 +545,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     onChange={(e) => setPhone(formatBrPhone(e.target.value))}
                     placeholder="(00) 00000-0000"
                     maxLength={15}
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-white pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
                   />
                 </div>
               </div>
@@ -562,14 +562,14 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="seuemail@exemplo.com"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-white pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
               </div>
 
               <div className="sm:col-span-2 pt-2">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5 space-y-3">
-                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#F5F5F7]">
                     <MapPin className="w-3.5 h-3.5" />
                     <span>Endereço Residencial *</span>
                   </div>
@@ -587,7 +587,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
           {/* Section 2: Profissão e Renda */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-white/10 text-[#F5F5F7] flex items-center justify-center">
                 <Briefcase className="w-4 h-4" />
               </div>
               <div>
@@ -611,7 +611,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   onClick={() => setIsProfessionDropdownOpen((o) => !o)}
                   className={cn(
                     "w-full rounded-2xl bg-white/[0.04] border px-4 py-3.5 text-sm text-left flex items-center justify-between gap-2 transition-all",
-                    isProfessionDropdownOpen ? "border-[#D4AF37]" : "border-white/10 hover:border-white/20"
+                    isProfessionDropdownOpen ? "border-white" : "border-white/10 hover:border-white/20"
                   )}
                 >
                   <span className={profession ? "text-white font-semibold truncate" : "text-slate-500"}>
@@ -620,13 +620,13 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   <ChevronDown
                     className={cn(
                       "w-4 h-4 text-slate-400 shrink-0 transition-transform",
-                      isProfessionDropdownOpen && "rotate-180 text-[#D4AF37]"
+                      isProfessionDropdownOpen && "rotate-180 text-white"
                     )}
                   />
                 </button>
 
                 {isProfessionDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-[#151821] border border-[#D4AF37]/30 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden">
+                  <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-[#151821] border border-white/25 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden">
                     <div className="p-2.5 border-b border-white/10 bg-black/40">
                       <div className="relative">
                         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -636,7 +636,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                           onChange={(e) => setProfessionSearch(e.target.value)}
                           placeholder="Buscar profissão (ex: Motorista, Vendedor)..."
                           autoFocus
-                          className="w-full rounded-xl bg-white/5 border border-white/10 focus:border-[#D4AF37] pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
+                          className="w-full rounded-xl bg-white/5 border border-white/10 focus:border-white pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none"
                         />
                       </div>
                     </div>
@@ -651,7 +651,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                               setCustomProfession(professionSearch);
                               setIsProfessionDropdownOpen(false);
                             }}
-                            className="px-3 py-1.5 rounded-lg bg-[#D4AF37] text-black text-[10px] font-black uppercase tracking-wider"
+                            className="px-3 py-1.5 rounded-lg bg-[#F5F5F7] text-black text-[10px] font-black uppercase tracking-wider"
                           >
                             Usar "{professionSearch}"
                           </button>
@@ -659,7 +659,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                       ) : (
                         (Object.entries(groupedProfessions) as [string, string[]][]).map(([category, items]) => (
                           <div key={category}>
-                            <div className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-[#D4AF37]/80">
+                            <div className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-white/75">
                               {category}
                             </div>
                             {items.map((item) => (
@@ -673,7 +673,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                                 className={cn(
                                   "w-full text-left px-3 py-2 rounded-xl text-xs transition-colors flex items-center justify-between",
                                   profession === item
-                                    ? "bg-[#D4AF37] text-black font-bold"
+                                    ? "bg-[#F5F5F7] text-black font-bold"
                                     : "text-slate-200 hover:bg-white/10"
                                 )}
                               >
@@ -695,7 +695,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={customProfession}
                     onChange={(e) => setCustomProfession(e.target.value)}
                     placeholder="Digite sua profissão..."
-                    className="mt-2 w-full rounded-2xl bg-white/[0.04] border border-[#D4AF37]/40 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none"
+                    className="mt-2 w-full rounded-2xl bg-white/[0.04] border border-white/30 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none"
                   />
                 )}
               </div>
@@ -705,7 +705,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   Renda Mensal (R$) *
                 </label>
                 <div className="relative">
-                  <span className="text-xs font-black text-[#D4AF37] absolute left-4 top-1/2 -translate-y-1/2">
+                  <span className="text-xs font-black text-[#F5F5F7] absolute left-4 top-1/2 -translate-y-1/2">
                     R$
                   </span>
                   <input
@@ -715,7 +715,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={monthlyIncomeStr}
                     onChange={(e) => setMonthlyIncomeStr(formatCurrencyInputBRL(e.target.value))}
                     placeholder="0,00"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono font-bold"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-white pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono font-bold"
                   />
                 </div>
               </div>
@@ -767,7 +767,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                         })
                       )
                     }
-                    className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-[#D4AF37]/15 border border-white/10 hover:border-[#D4AF37]/40 text-[11px] font-bold text-slate-300 hover:text-[#D4AF37] transition-all font-mono"
+                    className="px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/10 border border-white/10 hover:border-white/40 text-[11px] font-bold text-slate-300 hover:text-white transition-all font-mono"
                   >
                     R$ {val.toLocaleString('pt-BR')}
                   </button>
@@ -776,15 +776,15 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
 
               {/* Simulação de Juros (10% ao mês) */}
               {simulatedAmount > 0 ? (
-                <div className="rounded-2xl bg-gradient-to-br from-[#D4AF37]/[0.08] via-emerald-500/[0.04] to-transparent border border-[#D4AF37]/30 p-4 sm:p-5 space-y-4">
+                <div className="rounded-2xl bg-gradient-to-br from-white/[0.08] via-emerald-500/[0.04] to-transparent border border-white/25 p-4 sm:p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Calculator className="w-4 h-4 text-[#D4AF37]" />
+                      <Calculator className="w-4 h-4 text-[#F5F5F7]" />
                       <span className="text-[11px] font-black uppercase tracking-wider text-white">
                         Simulação do Empréstimo
                       </span>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">
+                    <span className="px-2.5 py-1 rounded-lg bg-white/10 border border-white/25 text-[10px] font-black uppercase tracking-widest text-[#F5F5F7]">
                       Juros: 10% ao mês
                     </span>
                   </div>
@@ -798,11 +798,11 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                         {formatBRL(simulatedAmount)}
                       </span>
                     </div>
-                    <div className="rounded-xl bg-black/40 border border-[#D4AF37]/25 p-3">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-[#D4AF37] block">
+                    <div className="rounded-xl bg-black/40 border border-white/25 p-3">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-[#E5E5E5] block">
                         Juros (10% ao mês)
                       </span>
-                      <span className="text-sm sm:text-base font-black text-[#D4AF37] font-mono mt-0.5 block">
+                      <span className="text-sm sm:text-base font-black text-white font-mono mt-0.5 block">
                         {formatBRL(simulatedInterest)}
                       </span>
                     </div>
@@ -826,15 +826,15 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     </p>
                     <p>
                       • <strong className="text-white">Renovação mensal:</strong> Caso precise de mais prazo, você pode pagar apenas os juros de{' '}
-                      <strong className="text-[#D4AF37] font-mono">{formatBRL(simulatedInterest)}</strong> para renovar por mais 30 dias.
+                      <strong className="text-white font-mono">{formatBRL(simulatedInterest)}</strong> para renovar por mais 30 dias.
                     </p>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-2xl bg-white/[0.02] border border-white/10 px-4 py-3 flex items-center gap-2.5 text-xs text-slate-400">
-                  <Calculator className="w-4 h-4 text-[#D4AF37] shrink-0" />
+                  <Calculator className="w-4 h-4 text-[#F5F5F7] shrink-0" />
                   <span>
-                    Taxa da Nexus Private: <strong className="text-[#D4AF37]">10% ao mês</strong>. Digite ou selecione um valor acima para visualizar sua simulação.
+                    Taxa da Nexus Private: <strong className="text-white">10% ao mês</strong>. Digite ou selecione um valor acima para visualizar sua simulação.
                   </span>
                 </div>
               )}
@@ -844,7 +844,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
           {/* Section 4: Dados para Recebimento */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
-              <div className="w-8 h-8 rounded-xl bg-[#D4AF37]/15 text-[#D4AF37] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-white/10 text-[#F5F5F7] flex items-center justify-center">
                 <Landmark className="w-4 h-4" />
               </div>
               <div>
@@ -857,10 +857,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
               </div>
             </div>
 
-            <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-[#D4AF37] shrink-0 mt-0.5" />
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.06] border border-white/25 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-[#F5F5F7] shrink-0 mt-0.5" />
               <div className="space-y-0.5">
-                <p className="text-[11px] font-black uppercase tracking-wider text-[#D4AF37]">
+                <p className="text-[11px] font-black uppercase tracking-wider text-white">
                   Titularidade Obrigatória do Solicitante
                 </p>
                 <p className="text-xs text-slate-300 leading-relaxed">
@@ -876,7 +876,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 className={cn(
                   "py-3 px-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
                   receivingType === 'PIX'
-                    ? "bg-[#D4AF37] text-black shadow-lg"
+                    ? "bg-[#F5F5F7] text-black shadow-lg"
                     : "text-slate-400 hover:text-white"
                 )}
               >
@@ -889,7 +889,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 className={cn(
                   "py-3 px-4 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2",
                   receivingType === 'CONTA_BANCARIA'
-                    ? "bg-[#D4AF37] text-black shadow-lg"
+                    ? "bg-[#F5F5F7] text-black shadow-lg"
                     : "text-slate-400 hover:text-white"
                 )}
               >
@@ -899,7 +899,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
             </div>
 
             <div className="rounded-2xl bg-white/[0.03] border border-white/10 px-4 py-3 flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
-              <Info className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-[#F5F5F7] shrink-0 mt-0.5" />
               {receivingType === 'PIX' ? (
                 <span>
                   <strong className="text-white">Recebimento via PIX:</strong> Após a aprovação, o valor será transferido na hora via PIX para a chave informada abaixo (CPF, celular, e-mail ou chave aleatória vinculada ao seu CPF).
@@ -924,7 +924,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                         e.target.value as 'CPF' | 'Celular' | 'E-mail' | 'Aleatória'
                       )
                     }
-                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white outline-none transition-all"
+                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white outline-none transition-all"
                   >
                     <option value="CPF">CPF</option>
                     <option value="Celular">Celular / WhatsApp</option>
@@ -949,7 +949,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                             setPixKey(cpf);
                           }
                         }}
-                        className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] hover:underline"
+                        className="text-[9px] font-black uppercase tracking-wider text-[#F5F5F7] hover:underline"
                       >
                         Preencher automático
                       </button>
@@ -961,7 +961,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={pixKey}
                     onChange={(e) => setPixKey(e.target.value)}
                     placeholder="Informe sua chave PIX"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
 
@@ -972,7 +972,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   <select
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
-                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white outline-none transition-all"
+                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white outline-none transition-all"
                   >
                     <option value="">Selecione o banco (opcional)</option>
                     {POPULAR_BANKS.map((bank) => (
@@ -992,7 +992,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                       <button
                         type="button"
                         onClick={() => setAccountHolder(fullName)}
-                        className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] hover:underline shrink-0"
+                        className="text-[9px] font-black uppercase tracking-wider text-[#F5F5F7] hover:underline shrink-0"
                       >
                         Usar meu nome
                       </button>
@@ -1003,7 +1003,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={accountHolder}
                     onChange={(e) => setAccountHolder(e.target.value)}
                     placeholder={fullName ? `${fullName} (mesma titularidade)` : 'Mesmo nome do solicitante'}
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -1019,7 +1019,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={bankName}
                     onChange={(e) => setBankName(e.target.value)}
                     placeholder="Ex: Nubank, Itaú, Bradesco"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
 
@@ -1030,7 +1030,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                   <select
                     value={accountType}
                     onChange={(e) => setAccountType(e.target.value as 'Corrente' | 'Poupança')}
-                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white outline-none transition-all"
+                    className="w-full rounded-2xl bg-[#161922] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white outline-none transition-all"
                   >
                     <option value="Corrente">Conta Corrente</option>
                     <option value="Poupança">Conta Poupança</option>
@@ -1047,7 +1047,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={bankAgency}
                     onChange={(e) => setBankAgency(e.target.value)}
                     placeholder="0001"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
                   />
                 </div>
 
@@ -1061,7 +1061,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={bankAccount}
                     onChange={(e) => setBankAccount(e.target.value)}
                     placeholder="123456-7"
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
                   />
                 </div>
 
@@ -1074,7 +1074,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                       <button
                         type="button"
                         onClick={() => setAccountHolder(fullName)}
-                        className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] hover:underline shrink-0"
+                        className="text-[9px] font-black uppercase tracking-wider text-[#F5F5F7] hover:underline shrink-0"
                       >
                         Usar meu nome
                       </button>
@@ -1085,18 +1085,18 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={accountHolder}
                     onChange={(e) => setAccountHolder(e.target.value)}
                     placeholder={fullName ? `${fullName} (mesma titularidade)` : 'Mesmo nome completo do solicitante'}
-                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
               </div>
             )}
 
-            <label className="flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-[#D4AF37]/40 cursor-pointer transition-all">
+            <label className="flex items-start gap-3 p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/40 cursor-pointer transition-all">
               <input
                 type="checkbox"
                 checked={confirmSameHolder}
                 onChange={(e) => setConfirmSameHolder(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37] shrink-0 cursor-pointer"
+                className="mt-0.5 w-4 h-4 rounded accent-[#F5F5F7] shrink-0 cursor-pointer"
               />
               <span className="text-xs text-slate-300 leading-relaxed">
                 Declaro que a conta bancária ou Chave PIX informada acima é de <strong className="text-white">minha própria titularidade</strong> (mesmo nome e CPF de quem está solicitando o empréstimo).
@@ -1112,21 +1112,21 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Alguma observação adicional sobre sua solicitação (opcional)..."
-                className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
+                className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#F5F5F7] px-4 py-3 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
               />
             </div>
           </div>
 
           {/* Final Terms & Simulation Agreement */}
-          <label className="flex items-start gap-3 p-4 rounded-2xl bg-[#D4AF37]/[0.06] border border-[#D4AF37]/35 hover:border-[#D4AF37]/65 cursor-pointer transition-all">
+          <label className="flex items-start gap-3 p-4 rounded-2xl bg-white/[0.05] border border-white/30 hover:border-white/55 cursor-pointer transition-all">
             <input
               type="checkbox"
               checked={confirmTerms}
               onChange={(e) => setConfirmTerms(e.target.checked)}
-              className="mt-0.5 w-4 h-4 rounded accent-[#D4AF37] shrink-0 cursor-pointer"
+              className="mt-0.5 w-4 h-4 rounded accent-[#F5F5F7] shrink-0 cursor-pointer"
             />
             <span className="text-xs text-slate-200 leading-relaxed">
-              Li e <strong className="text-white">concordo com os termos da simulação da Nexus Private</strong> (juros de <strong className="text-[#D4AF37]">10% ao mês</strong>
+              Li e <strong className="text-white">concordo com os termos da simulação da Nexus Private</strong> (juros de <strong className="text-white">10% ao mês</strong>
               {simulatedAmount > 0 ? `, equivalente a ${formatBRL(simulatedInterest)} de juros mensais e ${formatBRL(simulatedTotal)} para quitação em 30 dias` : ''}, formas de recebimento e regras de pagamento), confirmando que todas as informações enviadas são verdadeiras.
             </span>
           </label>
@@ -1134,7 +1134,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 sm:py-5 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-amber-400 to-[#AA7C11] text-black font-black text-xs sm:text-sm uppercase tracking-[0.2em] shadow-[0_10px_35px_rgba(212,175,55,0.3)] hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-60"
+            className="w-full py-4 sm:py-5 rounded-2xl bg-gradient-to-r from-white via-[#E5E5E5] to-[#D4D4D8] text-black font-black text-xs sm:text-sm uppercase tracking-[0.2em] shadow-[0_10px_35px_rgba(255,255,255,0.22)] hover:brightness-105 active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-60"
           >
             {isSubmitting ? (
               <>

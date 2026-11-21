@@ -51,7 +51,7 @@ export function getAsaasStatusMeta(status?: string | null): AsaasStatusMeta {
         label: 'Em Análise Asaas',
         isPaid: false,
         isOverdue: false,
-        badgeClass: 'text-amber-300 border-amber-500/30 bg-amber-500/10'
+        badgeClass: 'text-slate-200 border-white/25 bg-white/10'
       };
     case 'REFUNDED':
     case 'REFUND_REQUESTED':
@@ -69,7 +69,7 @@ export function getAsaasStatusMeta(status?: string | null): AsaasStatusMeta {
         label: 'Aguardando Pagamento',
         isPaid: false,
         isOverdue: false,
-        badgeClass: 'text-[#D4AF37] border-[#D4AF37]/30 bg-[#D4AF37]/10'
+        badgeClass: 'text-[#F5F5F7] border-white/30 bg-white/10'
       };
   }
 }

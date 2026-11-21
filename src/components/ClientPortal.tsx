@@ -130,7 +130,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <NexusLogo className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
             <span className="text-sm sm:text-base font-bold tracking-tight text-white whitespace-nowrap shrink-0">
-              Nexus <span className="text-[#D4AF37]">Private</span>
+              Nexus <span className="text-[#E5E5E5]">Private</span>
             </span>
           </div>
 
@@ -141,7 +141,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
               className={cn(
                 'px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0',
                 activeView === 'ativas'
-                  ? 'bg-[#D4AF37] text-black'
+                  ? 'bg-[#F5F5F7] text-black'
                   : 'text-slate-400 hover:text-white'
               )}
             >
@@ -154,7 +154,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
               className={cn(
                 'px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0',
                 activeView === 'historico'
-                  ? 'bg-[#D4AF37] text-black'
+                  ? 'bg-[#F5F5F7] text-black'
                   : 'text-slate-400 hover:text-white'
               )}
             >
@@ -190,7 +190,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-2xl border border-white/10 bg-[#101218] p-5 space-y-1.5">
             <span className="text-xs font-medium text-slate-400 block">Saldo Total em Aberto</span>
-            <p className="text-2xl font-bold text-[#D4AF37] font-mono tabular-nums">
+            <p className="text-2xl font-bold text-white font-mono tabular-nums">
               {formatBRL(summary.totalOpen)}
             </p>
           </div>
@@ -268,7 +268,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
                           {asaasMeta && (
                             <div className="flex items-center gap-2 text-xs">
                               <span className="text-slate-400">Cobrança Asaas:</span>
-                              <span className={cn('font-semibold', asaasMeta.isPaid ? 'text-emerald-400' : asaasMeta.isOverdue ? 'text-rose-400' : 'text-[#D4AF37]')}>
+                              <span className={cn('font-semibold', asaasMeta.isPaid ? 'text-emerald-400' : asaasMeta.isOverdue ? 'text-rose-400' : 'text-[#F5F5F7]')}>
                                 {asaasMeta.label}
                               </span>
                             </div>
@@ -292,7 +292,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
                         </div>
                         <div>
                           <span className="text-slate-400 block">Juros ({(loan.interestRate * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%)</span>
-                          <span className="font-semibold text-[#D4AF37] font-mono tabular-nums mt-0.5 block">
+                          <span className="font-semibold text-[#F5F5F7] font-mono tabular-nums mt-0.5 block">
                             {formatBRL(Math.max(0, loan.totalBruto - loan.capital))}
                           </span>
                         </div>
@@ -323,7 +323,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
                             <button
                               type="button"
                               onClick={() => setSelectedChargeLoan(loan)}
-                              className="px-4 py-2.5 rounded-xl bg-[#D4AF37] hover:brightness-110 text-black text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0"
+                              className="px-4 py-2.5 rounded-xl bg-[#F5F5F7] hover:bg-white text-black text-xs font-bold flex items-center gap-2 transition-all whitespace-nowrap shrink-0"
                             >
                               <QrCode className="w-4 h-4" />
                               Pagar com PIX / Ver QR Code
@@ -336,7 +336,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
                                 rel="noopener noreferrer"
                                 className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white text-xs font-semibold flex items-center gap-2 transition-all whitespace-nowrap shrink-0"
                               >
-                                <FileText className="w-4 h-4 text-[#D4AF37]" />
+                                <FileText className="w-4 h-4 text-[#F5F5F7]" />
                                 Abrir Boleto / Fatura
                                 <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
                               </a>
@@ -411,7 +411,7 @@ export const ClientPortal: React.FC<ClientPortalProps> = ({
             {/* Action / Payment History */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <History className="w-4 h-4 text-[#D4AF37]" />
+                <History className="w-4 h-4 text-[#F5F5F7]" />
                 <h2 className="text-lg font-semibold text-white">Histórico de Movimentações</h2>
               </div>
 

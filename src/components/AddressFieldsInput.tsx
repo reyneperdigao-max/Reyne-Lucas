@@ -86,8 +86,8 @@ export const AddressFieldsInput: React.FC<AddressFieldsInputProps> = ({
     'w-full rounded-2xl border outline-none transition-all text-sm',
     compact ? 'px-3.5 py-3' : 'px-4 py-3.5',
     isDark
-      ? 'bg-white/[0.04] border-white/10 focus:border-[#D4AF37] text-white placeholder:text-slate-600'
-      : 'bg-slate-50 border-slate-200 focus:border-[#D4AF37] text-slate-900 placeholder:text-slate-400'
+      ? 'bg-white/[0.04] border-white/10 focus:border-white text-white placeholder:text-slate-600'
+      : 'bg-slate-50 border-slate-200 focus:border-slate-900 text-slate-900 placeholder:text-slate-400'
   );
 
   const labelClass = cn(
@@ -122,8 +122,12 @@ export const AddressFieldsInput: React.FC<AddressFieldsInputProps> = ({
             className={cn(
               'px-4 rounded-2xl border font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 shrink-0',
               isSearchingCep
-                ? 'opacity-70 cursor-wait bg-[#D4AF37]/20 border-[#D4AF37]/30 text-[#D4AF37]'
-                : 'bg-[#D4AF37]/15 hover:bg-[#D4AF37] text-[#D4AF37] hover:text-black border-[#D4AF37]/35'
+                ? isDark
+                  ? 'opacity-70 cursor-wait bg-white/15 border-white/30 text-white'
+                  : 'opacity-70 cursor-wait bg-slate-200 border-slate-300 text-slate-800'
+                : isDark
+                ? 'bg-white/10 hover:bg-[#F5F5F7] text-[#F5F5F7] hover:text-black border-white/30'
+                : 'bg-slate-900 hover:bg-black text-white border-slate-900'
             )}
           >
             {isSearchingCep ? (
@@ -144,7 +148,7 @@ export const AddressFieldsInput: React.FC<AddressFieldsInputProps> = ({
           <div
             className={cn(
               'flex items-center gap-1.5 text-[11px] font-bold ml-1 pt-0.5',
-              cepFeedback.type === 'success' ? 'text-emerald-400' : 'text-amber-400'
+              cepFeedback.type === 'success' ? 'text-emerald-400' : 'text-rose-400'
             )}
           >
             {cepFeedback.type === 'success' ? (

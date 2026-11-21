@@ -1,68 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180" fill="none">
   <defs>
-    <linearGradient id="matteBg" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1E1F24" />
-      <stop offset="48%" stop-color="#101114" />
-      <stop offset="100%" stop-color="#070709" />
+    <linearGradient id="obsidianGlossBg" x1="0" y1="0" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#141518" />
+      <stop offset="45%" stop-color="#050507" />
+      <stop offset="100%" stop-color="#000000" />
     </linearGradient>
-    <radialGradient id="topSheen" cx="50%" cy="18%" r="72%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.09" />
-      <stop offset="55%" stop-color="#D4AF37" stop-opacity="0.03" />
+    <linearGradient id="glassSheen" x1="20" y1="0" x2="155" y2="135" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22" />
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.06" />
+      <stop offset="46%" stop-color="#000000" stop-opacity="0" />
       <stop offset="100%" stop-color="#000000" stop-opacity="0" />
-    </radialGradient>
-    <linearGradient id="squircleRim" x1="12" y1="8" x2="168" y2="172" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#4A4C52" stop-opacity="0.7" />
-      <stop offset="50%" stop-color="#222428" stop-opacity="0.35" />
-      <stop offset="100%" stop-color="#090A0C" stop-opacity="0.8" />
     </linearGradient>
-    <linearGradient id="goldFrame" x1="28" y1="22" x2="152" y2="158" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FFF4C2" />
-      <stop offset="28%" stop-color="#ECC76D" />
-      <stop offset="65%" stop-color="#C89735" />
-      <stop offset="100%" stop-color="#966A1A" />
+    <linearGradient id="squirclePlatinumRim" x1="12" y1="8" x2="168" y2="172" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E5E5E5" stop-opacity="0.9" />
+      <stop offset="28%" stop-color="#78787D" stop-opacity="0.45" />
+      <stop offset="72%" stop-color="#38383C" stop-opacity="0.65" />
+      <stop offset="100%" stop-color="#B8B8BC" stop-opacity="0.5" />
     </linearGradient>
-    <linearGradient id="goldInner" x1="36" y1="30" x2="144" y2="150" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FCEBB0" />
-      <stop offset="55%" stop-color="#D4A642" />
-      <stop offset="100%" stop-color="#9B6E1D" />
+    <linearGradient id="platinumFrame" x1="28" y1="22" x2="152" y2="158" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="30%" stop-color="#E5E5E5" />
+      <stop offset="68%" stop-color="#A3A3A6" />
+      <stop offset="100%" stop-color="#D4D4D8" />
     </linearGradient>
-    <linearGradient id="goldLetters" x1="50" y1="54" x2="132" y2="128" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FFF2BC" />
-      <stop offset="35%" stop-color="#E7BD5B" />
-      <stop offset="75%" stop-color="#C99633" />
-      <stop offset="100%" stop-color="#9F701C" />
+    <linearGradient id="platinumInner" x1="36" y1="30" x2="144" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F9F9F9" />
+      <stop offset="55%" stop-color="#B7B7B5" />
+      <stop offset="100%" stop-color="#E5E5E5" />
+    </linearGradient>
+    <linearGradient id="platinumLetters" x1="50" y1="54" x2="132" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="38%" stop-color="#E5E5E5" />
+      <stop offset="72%" stop-color="#B0B0B3" />
+      <stop offset="100%" stop-color="#F5F5F7" />
     </linearGradient>
   </defs>
 
-  <!-- Squircle Matte Obsidian Base -->
-  <rect x="2" y="2" width="176" height="176" rx="40" ry="40" fill="url(#matteBg)" stroke="url(#squircleRim)" stroke-width="1.5" />
-  <rect x="2" y="2" width="176" height="176" rx="40" ry="40" fill="url(#topSheen)" />
+  <!-- Glossy Obsidian Squircle -->
+  <rect x="2" y="2" width="176" height="176" rx="40" ry="40" fill="url(#obsidianGlossBg)" stroke="url(#squirclePlatinumRim)" stroke-width="2" />
+  <path d="M42 2 H138 C160 2 178 20 178 42 V64 C132 82 72 104 2 118 V42 C2 20 20 2 42 2 Z" fill="url(#glassSheen)" />
 
-  <!-- Outer Bevelled Gold Hexagon -->
+  <!-- Outer Bevelled Silver-White Hexagon -->
   <polygon
     points="90,22 149,56 149,124 90,158 31,124 31,56"
-    fill="#0D0E10"
-    stroke="url(#goldFrame)"
+    fill="#030304"
+    stroke="url(#platinumFrame)"
     stroke-width="6.5"
     stroke-linejoin="miter"
   />
 
-  <!-- Inner Clean Gold Hexagon -->
+  <!-- Inner Clean Silver-White Hexagon -->
   <polygon
     points="90,33.5 139,61.8 139,118.2 90,146.5 41,118.2 41,61.8"
     fill="none"
-    stroke="url(#goldInner)"
+    stroke="url(#platinumInner)"
     stroke-width="2.2"
     stroke-linejoin="miter"
   />
 
-  <!-- Bold Sculpted NP Monogram (No dots/diamonds) -->
-  <g transform="translate(0, 1.5)" opacity="0.55">
+  <!-- Bold Sculpted NP Monogram -->
+  <g transform="translate(0, 1.5)" opacity="0.65">
     <path d="M51 61 H60.5 L77 100.5 V61 H86.5 V119 H77 L60.5 79.5 V119 H51 Z" fill="#000000" />
     <path d="M93.5 61 H114.5 C127 61 134 68.5 134 79 C134 89.5 127 97 114.5 97 H103 V119 H93.5 Z M103 70 V88 H113.5 C120 88 124 84.5 124 79 C124 73.5 120 70 113.5 70 Z" fill="#000000" fill-rule="evenodd" />
   </g>
   <g>
-    <path d="M51 61 H60.5 L77 100.5 V61 H86.5 V119 H77 L60.5 79.5 V119 H51 Z" fill="url(#goldLetters)" />
-    <path d="M93.5 61 H114.5 C127 61 134 68.5 134 79 C134 89.5 127 97 114.5 97 H103 V119 H93.5 Z M103 70 V88 H113.5 C120 88 124 84.5 124 79 C124 73.5 120 70 113.5 70 Z" fill="url(#goldLetters)" fill-rule="evenodd" />
+    <path d="M51 61 H60.5 L77 100.5 V61 H86.5 V119 H77 L60.5 79.5 V119 H51 Z" fill="url(#platinumLetters)" />
+    <path d="M93.5 61 H114.5 C127 61 134 68.5 134 79 C134 89.5 127 97 114.5 97 H103 V119 H93.5 Z M103 70 V88 H113.5 C120 88 124 84.5 124 79 C124 73.5 120 70 113.5 70 Z" fill="url(#platinumLetters)" fill-rule="evenodd" />
   </g>
 </svg>

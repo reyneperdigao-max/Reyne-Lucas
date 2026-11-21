@@ -202,16 +202,19 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
         className={cn(
           "rounded-[32px] border p-6 sm:p-8 relative overflow-hidden transition-all",
           isDark
-            ? "bg-gradient-to-br from-[#121319] via-[#0d0e13] to-black border-[#D4AF37]/25 shadow-2xl"
+            ? "bg-gradient-to-br from-[#121319] via-[#0d0e13] to-black border-white/20 shadow-2xl"
             : "bg-white border-slate-200 shadow-xl"
         )}
       >
-        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-[#D4AF37]/10 blur-3xl pointer-events-none" />
+        <div className="absolute -top-24 -right-24 w-64 h-64 rounded-full bg-white/[0.06] blur-3xl pointer-events-none" />
 
         <div className="relative z-10 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] shrink-0">
+              <div className={cn(
+                "w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0",
+                isDark ? "bg-white/10 border-white/25 text-[#F5F5F7]" : "bg-slate-100 border-slate-200 text-slate-900"
+              )}>
                 <Link2 className="w-6 h-6" />
               </div>
               <div>
@@ -230,7 +233,9 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                         "px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border",
                         activeLink.active
                           ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                          : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                          : isDark
+                          ? "bg-white/10 text-slate-200 border-white/25"
+                          : "bg-slate-100 text-slate-700 border-slate-300"
                       )}
                     >
                       {activeLink.active ? 'Ativo' : 'Pausado'}
@@ -252,8 +257,8 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                     "px-3.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-2 active:scale-95",
                     activeLink.active
                       ? isDark
-                        ? "bg-white/5 border-white/10 text-slate-300 hover:bg-amber-500/10 hover:text-amber-400"
-                        : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-amber-50"
+                        ? "bg-white/5 border-white/10 text-slate-300 hover:bg-white/15 hover:text-white"
+                        : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
                       : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
                   )}
                 >
@@ -269,8 +274,8 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                 className={cn(
                   "px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all flex items-center gap-2 active:scale-95",
                   isDark
-                    ? "bg-[#D4AF37]/10 border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/20"
-                    : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                    ? "bg-white/10 border-white/25 text-[#F5F5F7] hover:bg-white/20"
+                    : "bg-slate-100 border-slate-300 text-slate-900 hover:bg-slate-200"
                 )}
               >
                 <RefreshCw className={cn("w-3.5 h-3.5", isGeneratingLink && "animate-spin")} />
@@ -285,15 +290,15 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
               <div
                 className={cn(
                   "flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 rounded-2xl border",
-                  isDark ? "bg-[#D4AF37]/[0.06] border-[#D4AF37]/25" : "bg-amber-50/80 border-amber-200"
+                  isDark ? "bg-white/[0.05] border-white/20" : "bg-slate-100/90 border-slate-200"
                 )}
               >
                 <div>
                   <p className={cn("text-xs font-black uppercase tracking-[0.2em]", isDark ? "text-white" : "text-slate-900")}>
-                    Nexus <span className="text-[#D4AF37]">Private</span>
+                    Nexus <span className={isDark ? "text-[#E5E5E5]" : "text-slate-600"}>Private</span>
                   </p>
                   <p className={cn("text-xs font-bold mt-0.5", isDark ? "text-slate-300" : "text-slate-700")}>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#D4AF37] mr-1.5">
+                    <span className={cn("text-[10px] font-black uppercase tracking-wider mr-1.5", isDark ? "text-[#F5F5F7]" : "text-slate-900")}>
                       Credor:
                     </span>
                     {resolvedLenderName}
@@ -318,7 +323,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                   <p
                     className={cn(
                       "text-xs font-mono truncate select-all",
-                      isDark ? "text-[#FFF5C0]" : "text-slate-800"
+                      isDark ? "text-[#F5F5F7]" : "text-slate-800"
                     )}
                   >
                     {registrationUrl}
@@ -386,7 +391,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
               </div>
             </div>
           ) : (
-            <div className="p-6 rounded-2xl border border-dashed border-[#D4AF37]/30 text-center space-y-3">
+            <div className={cn("p-6 rounded-2xl border border-dashed text-center space-y-3", isDark ? "border-white/25" : "border-slate-300")}>
               <p className="text-xs text-slate-400">
                 Clique em <strong>Gerar Link</strong> para criar seu link exclusivo de cadastro online.
               </p>
@@ -495,14 +500,17 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                 className={cn(
                   "rounded-[32px] border p-6 sm:p-7 space-y-5 transition-all relative overflow-hidden",
                   isDark
-                    ? "bg-white/[0.02] border-white/10 hover:border-[#D4AF37]/30"
+                    ? "bg-white/[0.02] border-white/10 hover:border-white/30"
                     : "bg-white border-slate-200 shadow-lg"
                 )}
               >
                 {/* Header */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-12 h-12 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/30 flex items-center justify-center text-[#D4AF37] font-black text-base uppercase shrink-0">
+                    <div className={cn(
+                      "w-12 h-12 rounded-2xl border flex items-center justify-center font-black text-base uppercase shrink-0",
+                      isDark ? "bg-white/10 border-white/25 text-[#F5F5F7]" : "bg-slate-100 border-slate-300 text-slate-900"
+                    )}>
                       {reg.fullName.charAt(0)}
                     </div>
                     <div className="min-w-0">
@@ -525,7 +533,9 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                     className={cn(
                       "px-3 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest border shrink-0",
                       reg.status === 'pending'
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                        ? isDark
+                          ? "bg-white/10 text-[#F5F5F7] border-white/25"
+                          : "bg-slate-100 text-slate-800 border-slate-300"
                         : reg.status === 'approved'
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
                         : "bg-rose-500/10 text-rose-400 border-rose-500/25"
@@ -544,13 +554,13 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                   <div
                     className={cn(
                       "p-3.5 rounded-2xl border",
-                      isDark ? "bg-[#D4AF37]/5 border-[#D4AF37]/20" : "bg-amber-50/70 border-amber-200"
+                      isDark ? "bg-white/[0.05] border-white/20" : "bg-slate-100/80 border-slate-200"
                     )}
                   >
-                    <span className="text-[9px] font-black uppercase tracking-widest text-[#D4AF37] block mb-1">
+                    <span className={cn("text-[9px] font-black uppercase tracking-widest block mb-1", isDark ? "text-[#E5E5E5]" : "text-slate-600")}>
                       Valor Solicitado
                     </span>
-                    <p className="text-base font-black text-[#D4AF37] font-mono">
+                    <p className={cn("text-base font-black font-mono", isDark ? "text-white" : "text-slate-900")}>
                       {formatBRL(reg.requestedAmount)}
                     </p>
                   </div>
@@ -647,7 +657,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
 
                   {reg.email && (
                     <div className="flex items-start gap-2.5">
-                      <Mail className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
+                      <Mail className={cn("w-4 h-4 shrink-0 mt-0.5", isDark ? "text-[#F5F5F7]" : "text-slate-700")} />
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
                           E-mail (Portal e Cobranças)
@@ -678,9 +688,9 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                     )}
                   >
                     <div className="flex items-start gap-2.5 min-w-0">
-                      <Landmark className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
+                      <Landmark className={cn("w-4 h-4 shrink-0 mt-0.5", isDark ? "text-[#F5F5F7]" : "text-slate-700")} />
                       <div className="min-w-0">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-[#D4AF37] block">
+                        <span className={cn("text-[9px] font-black uppercase tracking-wider block", isDark ? "text-[#E5E5E5]" : "text-slate-600")}>
                           Dados para Recebimento ({reg.receivingType === 'PIX' ? 'PIX' : 'Conta Bancária'})
                         </span>
                         <p className={cn("text-xs font-bold break-words mt-0.5", isDark ? "text-white" : "text-slate-900")}>
@@ -828,9 +838,9 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
             </div>
 
             {/* Client Receiving Details for Transfer */}
-            <div className="p-4 rounded-2xl bg-[#D4AF37]/10 border border-[#D4AF37]/25 space-y-2">
+            <div className="p-4 rounded-2xl bg-white/[0.08] border border-white/25 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] font-black uppercase tracking-widest text-[#D4AF37]">
+                <span className="text-[9px] font-black uppercase tracking-widest text-[#F5F5F7]">
                   Dados para Transferência ao Cliente
                 </span>
                 <button
@@ -858,7 +868,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                     Valor Aprovado (R$)
                   </label>
                   <div className="relative">
-                    <DollarSign className="w-4 h-4 text-[#D4AF37] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <DollarSign className="w-4 h-4 text-[#F5F5F7] absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       inputMode="numeric"
@@ -940,7 +950,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                     className={cn(
                       "py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
                       approvalStatus === 'Agendado'
-                        ? "bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]"
+                        ? "bg-white/15 border-white text-white"
                         : "bg-white/5 border-white/10 text-slate-400"
                     )}
                   >
@@ -963,7 +973,7 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 block">
                     Total a Receber
                   </span>
-                  <span className="text-base font-black text-[#D4AF37] font-mono">
+                  <span className="text-base font-black text-[#F5F5F7] font-mono">
                     {formatBRL(previewTotal)}
                   </span>
                 </div>
