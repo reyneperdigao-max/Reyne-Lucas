@@ -50,6 +50,8 @@ import {
   UserPlus,
   KeyRound,
   Link2,
+  CreditCard,
+  RefreshCw,
 } from 'lucide-react';
 import { 
   collection, 
@@ -69,6 +71,8 @@ import {
   onAuthStateChanged, 
   User,
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   EmailAuthProvider,
   reauthenticateWithCredential
 } from 'firebase/auth';
@@ -83,11 +87,23 @@ import { NexusLogo } from './components/NexusLogo';
 import { PublicRegistrationPage } from './components/PublicRegistrationPage';
 import { OnlineRegistrationTab } from './components/OnlineRegistrationTab';
 import { AddressFieldsInput } from './components/AddressFieldsInput';
+import { AsaasChargeModal } from './components/AsaasChargeModal';
+import { ClientPortal } from './components/ClientPortal';
+import {
+  AsaasBillingType,
+  AsaasChargeInfo,
+  AsaasServerStatus,
+  createAsaasCharge,
+  fetchAsaasServerStatus,
+  getAsaasStatusMeta,
+  syncAsaasCharge
+} from './utils/asaasApi';
 import {
   StructuredAddress,
   EMPTY_STRUCTURED_ADDRESS,
   formatStructuredAddress,
-  parseStructuredAddress
+  parseStructuredAddress,
+  formatCPF
 } from './utils/brFormatters';
 import { RegistrationLink, ClientRegistration } from './types/registration';
 // @ts-expect-error - image import from assets without type declaration file
@@ -370,6 +386,8 @@ interface Loan {
   clientPhone?: string;
   clientAddress?: string;
   clientCpf?: string;
+  clientEmail?: string;
+  clientUid?: string;
   clientProfession?: string;
   clientMonthlyIncome?: number;
   clientReceivingDetails?: string;
@@ -384,6 +402,16 @@ interface Loan {
   status: 'Pendente' | 'Pago' | 'Atrasado' | 'Agendado';
   uid: string;
   createdAt: string;
+  asaasChargeId?: string | null;
+  asaasCustomerId?: string | null;
+  asaasBillingType?: string | null;
+  asaasStatus?: string | null;
+  asaasInvoiceUrl?: string | null;
+  asaasBankSlipUrl?: string | null;
+  asaasPixPayload?: string | null;
+  asaasPixQrCode?: string | null;
+  asaasBoletoLine?: string | null;
+  asaasLastSyncAt?: string | null;
 }
 
 interface SystemAction {
@@ -395,6 +423,8 @@ interface SystemAction {
   interestAmount?: number;
   paymentMethod?: 'DINHEIRO' | 'PIX';
   clientName: string;
+  clientEmail?: string;
+  clientUid?: string;
   loanId: string;
   date: string;
   uid: string;
@@ -714,6 +744,10 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isClientSignupMode, setIsClientSignupMode] = useState(false);
+  const [clientSignupName, setClientSignupName] = useState('');
+  const [clientSignupCpf, setClientSignupCpf] = useState('');
+  const pendingSignupInfoRef = useRef<{ name: string; cpf: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, setIsFaceIDSupported] = useState(false);
   const [isFaceIDRegistered, setIsFaceIDRegistered] = useState(() => {
@@ -834,7 +868,15 @@ export default function App() {
   const [payingLoan, setPayingLoan] = useState<Loan | null>(null);
   const [viewingContract, setViewingContract] = useState<Loan[] | null>(null);
   const [isEditingDetail, setIsEditingDetail] = useState(false);
-  const [editClientData, setEditClientData] = useState({ phone: '', address: '' });
+  const [editClientData, setEditClientData] = useState({ phone: '', address: '', email: '', cpf: '' });
+  const [asaasModalLoan, setAsaasModalLoan] = useState<Loan | null>(null);
+  const [syncingAsaasId, setSyncingAsaasId] = useState<string | null>(null);
+  const [asaasServerStatus, setAsaasServerStatus] = useState<AsaasServerStatus>({ configured: false, environment: 'sandbox' });
+  const [copiedClientAppUrl, setCopiedClientAppUrl] = useState(false);
+
+  useEffect(() => {
+    fetchAsaasServerStatus().then(setAsaasServerStatus).catch(() => {});
+  }, []);
   const [loanAddressStruct, setLoanAddressStruct] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [editAddressStruct, setEditAddressStruct] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [selectedLoansForUnified, setSelectedLoansForUnified] = useState<string[]>([]);
@@ -843,6 +885,7 @@ export default function App() {
     phone: string, 
     address: string,
     cpf?: string,
+    email?: string,
     profession?: string,
     monthlyIncome?: number,
     receivingDetails?: string,
@@ -908,6 +951,8 @@ export default function App() {
 
   const [filterDate, setFilterDate] = useState('');
   const [userProfile, setUserProfile] = useState<{ 
+    role?: 'admin' | 'user' | 'client',
+    cpf?: string,
     displayName?: string, 
     pixKey?: string, 
     pixName?: string, 
@@ -999,7 +1044,7 @@ export default function App() {
 
   // --- Auto Reset Status ---
   useEffect(() => {
-    if (!user || loans.length === 0) return;
+    if (!user || !userProfile || userProfile.role === 'client' || loans.length === 0) return;
     
     // Reset status from 'Pago' to 'Pendente' when the next month starts
     const today = startOfDay(new Date());
@@ -1027,7 +1072,7 @@ export default function App() {
       };
       resetLoans();
     }
-  }, [loans, user, lastCheckDate]);
+  }, [loans, user, userProfile, lastCheckDate]);
 
   const getAccentColorHex = () => {
     switch (systemSettings.accentColor) {
@@ -1483,6 +1528,9 @@ export default function App() {
     clientName: '',
     clientPhone: '',
     clientAddress: '',
+    clientCpf: '',
+    clientEmail: '',
+    asaasBillingType: 'UNDEFINED' as AsaasBillingType | 'NONE',
     capital: '',
     interestRate: '', // No default
     date: format(new Date(), 'yyyy-MM-dd'),
@@ -1704,6 +1752,8 @@ export default function App() {
         unsubProfile = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const profile = docSnap.data() as { 
+              role?: 'admin' | 'user' | 'client',
+              cpf?: string,
               displayName?: string, 
               pixKey?: string, 
               pixName?: string, 
@@ -1731,15 +1781,23 @@ export default function App() {
             setSavedAccount(accInfo);
           } else {
             // Create profile if doesn't exist
-            setDoc(userRef, {
-              email: u.email,
-              role: 'user',
+            const normalizedEmail = (u.email || '').trim().toLowerCase();
+            const signupInfo = pendingSignupInfoRef.current;
+            const assignedRole: 'admin' | 'client' = normalizedEmail === 'reyneperdigao@gmail.com' ? 'admin' : 'client';
+            const newProfilePayload: Record<string, unknown> = {
+              email: normalizedEmail || u.email || '',
+              role: assignedRole,
               uid: u.uid,
-              displayName: u.displayName || '',
+              displayName: signupInfo?.name || u.displayName || '',
               pixKey: '',
               pixName: '',
               pixBank: ''
-            }, { merge: true }).catch(err => {
+            };
+            if (signupInfo?.cpf) {
+              newProfilePayload.cpf = signupInfo.cpf;
+            }
+            pendingSignupInfoRef.current = null;
+            setDoc(userRef, newProfilePayload, { merge: true }).catch(err => {
               handleFirestoreError(err, OperationType.WRITE, `users/${u.uid}`);
             });
           }
@@ -1848,6 +1906,58 @@ export default function App() {
           break;
         default:
           setError("Falha ao entrar. Tente novamente.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleClientSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = clientSignupName.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanCpf = clientSignupCpf.trim();
+    if (cleanName.length < 3) {
+      setError("Informe seu nome completo (mínimo 3 letras).");
+      return;
+    }
+    if (!cleanEmail || !password || password.length < 6) {
+      setError("Informe um e-mail válido e uma senha com pelo menos 6 caracteres.");
+      return;
+    }
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      pendingSignupInfoRef.current = { name: cleanName, cpf: cleanCpf };
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      await updateProfile(cred.user, { displayName: cleanName }).catch(() => {});
+      const assignedRole = cleanEmail === 'reyneperdigao@gmail.com' ? 'admin' : 'client';
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        email: cleanEmail,
+        role: assignedRole,
+        uid: cred.user.uid,
+        displayName: cleanName,
+        ...(cleanCpf ? { cpf: cleanCpf } : {}),
+        pixKey: '',
+        pixName: '',
+        pixBank: ''
+      }, { merge: true });
+      setIsClientSignupMode(false);
+    } catch (err: unknown) {
+      pendingSignupInfoRef.current = null;
+      const error = err as { code?: string };
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          setError("Este e-mail já possui conta. Clique em 'Já tenho conta' para entrar.");
+          break;
+        case 'auth/weak-password':
+          setError("A senha deve ter pelo menos 6 caracteres.");
+          break;
+        case 'auth/invalid-email':
+          setError("E-mail inválido.");
+          break;
+        default:
+          setError("Não foi possível criar a conta. Tente novamente.");
       }
     } finally {
       setIsSubmitting(false);
@@ -2166,11 +2276,79 @@ export default function App() {
   useEffect(() => {
     if (!user || !isAuthReady) {
       setLoans([]);
+      setActions([]);
       setLoading(false);
       return;
     }
 
+    if (!userProfile) {
+      setLoading(true);
+      return;
+    }
+
     setLoading(true);
+    const isClientPortalUser =
+      userProfile.role === 'client' &&
+      (user.email || '').trim().toLowerCase() !== 'reyneperdigao@gmail.com';
+
+    if (isClientPortalUser) {
+      const normalizedEmail = (user.email || '').trim().toLowerCase();
+      if (!normalizedEmail) {
+        setLoans([]);
+        setActions([]);
+        setLoading(false);
+        return;
+      }
+
+      const qClientLoans = query(
+        collection(db, 'loans'),
+        where('clientEmail', '==', normalizedEmail)
+      );
+
+      const unsubscribeClientLoans = onSnapshot(qClientLoans, (snapshot) => {
+        const loanData: Loan[] = [];
+        snapshot.forEach((docSnap) => {
+          const rawLoan = { id: docSnap.id, ...docSnap.data() } as Loan;
+          loanData.push(enrichLoanWithAccruedInterest(rawLoan));
+        });
+        loanData.sort((a, b) => {
+          const timeA = toDate(a.createdAt)?.getTime() || toDate(a.date)?.getTime() || 0;
+          const timeB = toDate(b.createdAt)?.getTime() || toDate(b.date)?.getTime() || 0;
+          return timeB - timeA;
+        });
+        setLoans(loanData);
+        setLoading(false);
+      }, (err) => {
+        console.error('Error listening to client loans:', err);
+        setLoading(false);
+      });
+
+      const qClientActions = query(
+        collection(db, 'actions'),
+        where('clientEmail', '==', normalizedEmail)
+      );
+
+      const unsubscribeClientActions = onSnapshot(qClientActions, (snapshot) => {
+        const actionData: SystemAction[] = [];
+        snapshot.forEach((docSnap) => {
+          actionData.push({ id: docSnap.id, ...docSnap.data() } as SystemAction);
+        });
+        actionData.sort((a, b) => {
+          const timeA = toDate(a.date)?.getTime() || 0;
+          const timeB = toDate(b.date)?.getTime() || 0;
+          return timeB - timeA;
+        });
+        setActions(actionData);
+      }, (err) => {
+        console.error('Error listening to client actions:', err);
+      });
+
+      return () => {
+        unsubscribeClientLoans();
+        unsubscribeClientActions();
+      };
+    }
+
     const q = query(
       collection(db, 'loans'),
       where('uid', '==', user.uid)
@@ -2302,7 +2480,7 @@ export default function App() {
       unsubscribeRegLinks();
       unsubscribeRegistrations();
     };
-  }, [user, isAuthReady]);
+  }, [user, isAuthReady, userProfile?.role]);
 
   const handleGenerateRegistrationLink = async () => {
     if (!user) return;
@@ -2372,6 +2550,31 @@ export default function App() {
     }
   };
 
+  const handleAttachAsaasCharge = async (loanId: string, info: AsaasChargeInfo) => {
+    try {
+      await updateDoc(doc(db, 'loans', loanId), { ...info });
+      setAsaasModalLoan((prev) => (prev && prev.id === loanId ? { ...prev, ...info } : prev));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `loans/${loanId}`);
+    }
+  };
+
+  const handleQuickSyncAsaas = async (loan: Loan) => {
+    if (!loan.asaasChargeId) return;
+    setSyncingAsaasId(loan.id);
+    try {
+      const res = await syncAsaasCharge(loan.asaasChargeId);
+      if (!res.ok || !res.data) {
+        setError(res.error || 'Falha ao consultar status no Asaas.');
+        return;
+      }
+      await handleAttachAsaasCharge(loan.id, res.data);
+      setAddSuccess(`Status Asaas atualizado (${getAsaasStatusMeta(res.data.asaasStatus).label}).`);
+    } finally {
+      setSyncingAsaasId(null);
+    }
+  };
+
   const handleApproveRegistration = async (
     reg: ClientRegistration,
     approval: {
@@ -2387,12 +2590,14 @@ export default function App() {
       const capitalRounded = Math.round(approval.capital * 100) / 100;
       const interestRateDec = approval.interestRatePercent / 100;
       const totalBrutoRounded = Math.round(capitalRounded * (1 + interestRateDec) * 100) / 100;
+      const normalizedEmail = reg.email ? reg.email.trim().toLowerCase() : '';
 
-      const newLoanPayload = {
+      const newLoanPayload: Record<string, unknown> = {
         clientName: reg.fullName.trim().slice(0, 120),
         clientPhone: reg.phone.trim().slice(0, 50),
         clientAddress: reg.address.trim().slice(0, 300),
         clientCpf: reg.cpf.trim().slice(0, 20),
+        ...(normalizedEmail ? { clientEmail: normalizedEmail } : {}),
         clientProfession: reg.profession.trim().slice(0, 100),
         clientMonthlyIncome: reg.monthlyIncome,
         clientReceivingDetails: reg.receivingDetails.trim().slice(0, 500),
@@ -2421,13 +2626,36 @@ export default function App() {
       const isScheduled = approval.status === 'Agendado';
       await logAction(
         isScheduled ? 'loan_scheduled' : 'loan_created',
-        `${isScheduled ? 'Agendamento aprovado via Cadastro Online' : 'Crédito aprovado via Cadastro Online'} para ${newLoanPayload.clientName}`,
-        newLoanPayload.clientName,
+        `${isScheduled ? 'Agendamento aprovado via Cadastro Online' : 'Crédito aprovado via Cadastro Online'} para ${String(newLoanPayload.clientName)}`,
+        String(newLoanPayload.clientName),
         loanRef.id,
-        capitalRounded
+        capitalRounded,
+        undefined,
+        undefined,
+        undefined,
+        normalizedEmail || undefined
       );
 
-      setAddSuccess(`Crédito de ${newLoanPayload.clientName} aprovado! Cliente adicionado à lista.`);
+      let asaasNote = '';
+      if (!isScheduled) {
+        const asaasRes = await createAsaasCharge({
+          loanId: loanRef.id,
+          clientName: String(newLoanPayload.clientName),
+          clientCpf: reg.cpf,
+          clientPhone: reg.phone,
+          clientEmail: normalizedEmail || undefined,
+          amount: totalBrutoRounded > 0 ? totalBrutoRounded : capitalRounded,
+          dueDate: approval.dueDate,
+          description: `Empréstimo Nexus Private - ${String(newLoanPayload.clientName)}`,
+          billingType: 'UNDEFINED'
+        });
+        if (asaasRes.ok) {
+          await updateDoc(doc(db, 'loans', loanRef.id), { ...asaasRes.data }).catch(() => {});
+          asaasNote = ' Cobrança Asaas (Pix/Boleto) gerada!';
+        }
+      }
+
+      setAddSuccess(`Crédito de ${String(newLoanPayload.clientName)} aprovado! Cliente adicionado à lista.${asaasNote}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'client_registrations');
     }
@@ -2463,10 +2691,12 @@ export default function App() {
     amount?: number,
     capitalAmount?: number,
     interestAmount?: number,
-    paymentMethod?: 'DINHEIRO' | 'PIX'
+    paymentMethod?: 'DINHEIRO' | 'PIX',
+    clientEmail?: string
   ) => {
     if (!user) return null;
     try {
+      const resolvedEmail = (clientEmail || loans.find(l => l.id === loanId)?.clientEmail || '').trim().toLowerCase();
       const actionData: Partial<SystemAction> & Record<string, unknown> = {
         type,
         description,
@@ -2480,6 +2710,7 @@ export default function App() {
         confirmed: type === 'payment_received' ? false : true
       };
       if (paymentMethod) actionData.paymentMethod = paymentMethod;
+      if (resolvedEmail) actionData.clientEmail = resolvedEmail;
       const docRef = await addDoc(collection(db, 'actions'), actionData);
       return { id: docRef.id, ...actionData } as SystemAction;
     } catch (err: unknown) {
@@ -2494,10 +2725,15 @@ export default function App() {
       const clientLoans = loans.filter(l => l.clientName === viewingClientDetail.name);
       if (clientLoans.length === 0) return;
 
+      const cleanEmail = editClientData.email.trim().toLowerCase();
+      const cleanCpf = editClientData.cpf.trim();
+
       const batch = clientLoans.map(l => 
         updateDoc(doc(db, 'loans', l.id), {
           clientPhone: editClientData.phone,
-          clientAddress: editClientData.address
+          clientAddress: editClientData.address,
+          ...(cleanEmail ? { clientEmail: cleanEmail } : {}),
+          ...(cleanCpf ? { clientCpf: cleanCpf } : {})
         })
       );
 
@@ -2505,7 +2741,9 @@ export default function App() {
       setViewingClientDetail(prev => prev ? { 
         ...prev, 
         phone: editClientData.phone, 
-        address: editClientData.address 
+        address: editClientData.address,
+        ...(cleanEmail ? { email: cleanEmail } : {}),
+        ...(cleanCpf ? { cpf: cleanCpf } : {})
       } : null);
       setIsEditingDetail(false);
       setAddSuccess("Dados do cliente atualizados com sucesso!");
@@ -2542,11 +2780,15 @@ export default function App() {
 
     const capitalNum = parseLocaleNumber(newLoan.capital);
     const interestRateNum = parseLocaleNumber(newLoan.interestRate) / 100;
+    const normalizedClientEmail = newLoan.clientEmail.trim().toLowerCase();
+    const cleanClientCpf = newLoan.clientCpf.trim().slice(0, 20);
     
-    const loanData = {
+    const loanData: Record<string, unknown> = {
       clientName: newLoan.clientName,
       clientPhone: newLoan.clientPhone,
       clientAddress: newLoan.clientAddress,
+      ...(cleanClientCpf ? { clientCpf: cleanClientCpf } : {}),
+      ...(normalizedClientEmail ? { clientEmail: normalizedClientEmail } : {}),
       date: newLoan.date,
       dueDate: newLoan.dueDate,
       capital: Math.round(capitalNum * 100) / 100,
@@ -2563,13 +2805,15 @@ export default function App() {
           updateData.status = newLoan.status;
         }
         await updateDoc(doc(db, 'loans', editingLoanId), updateData);
-        await logAction('loan_updated', `Empréstimo atualizado para ${loanData.clientName}`, loanData.clientName, editingLoanId, loanData.capital);
+        await logAction('loan_updated', `Empréstimo atualizado para ${newLoan.clientName}`, newLoan.clientName, editingLoanId, Number(loanData.capital), undefined, undefined, undefined, normalizedClientEmail || undefined);
         
-        // If name, phone or address changed, bulk update all other loans for this client
+        // If name, phone, address, cpf or email changed, bulk update all other loans for this client
         if (oldLoan && (
           oldLoan.clientName !== newLoan.clientName || 
           oldLoan.clientPhone !== newLoan.clientPhone ||
-          oldLoan.clientAddress !== newLoan.clientAddress
+          oldLoan.clientAddress !== newLoan.clientAddress ||
+          (oldLoan.clientCpf || '') !== cleanClientCpf ||
+          (oldLoan.clientEmail || '') !== normalizedClientEmail
         )) {
           const otherLoans = loans.filter(l => l.clientName === oldLoan.clientName && l.id !== editingLoanId);
           const batch = otherLoans.map(l => 
@@ -2577,6 +2821,8 @@ export default function App() {
               clientName: newLoan.clientName,
               clientPhone: newLoan.clientPhone,
               clientAddress: newLoan.clientAddress,
+              ...(cleanClientCpf ? { clientCpf: cleanClientCpf } : {}),
+              ...(normalizedClientEmail ? { clientEmail: normalizedClientEmail } : {}),
             })
           );
           await Promise.all(batch);
@@ -2591,15 +2837,39 @@ export default function App() {
         };
         const docRef = await addDoc(collection(db, 'loans'), newDocData);
         const isScheduled = (newLoan.status as string) === 'Agendado';
-    await logAction(
-      isScheduled ? 'loan_scheduled' : 'loan_created', 
-      `${isScheduled ? 'Agendamento' : 'Novo empréstimo'} para ${loanData.clientName}`, 
-      loanData.clientName, 
-      docRef.id, 
-      loanData.capital
-    );
+        await logAction(
+          isScheduled ? 'loan_scheduled' : 'loan_created', 
+          `${isScheduled ? 'Agendamento' : 'Novo empréstimo'} para ${newLoan.clientName}`, 
+          newLoan.clientName, 
+          docRef.id, 
+          Number(loanData.capital),
+          undefined,
+          undefined,
+          undefined,
+          normalizedClientEmail || undefined
+        );
+
         if (newDocData.status === 'Agendado') {
           setViewingScheduleReceipt({ id: docRef.id, ...newDocData, createdAt: new Date().toISOString() } as unknown as Loan);
+        } else if (newLoan.asaasBillingType !== 'NONE') {
+          const chargeAmount = Number(loanData.totalBruto) > 0 ? Number(loanData.totalBruto) : Number(loanData.capital);
+          const asaasRes = await createAsaasCharge({
+            loanId: docRef.id,
+            clientName: newLoan.clientName,
+            clientCpf: cleanClientCpf || undefined,
+            clientPhone: newLoan.clientPhone || undefined,
+            clientEmail: normalizedClientEmail || undefined,
+            amount: chargeAmount,
+            dueDate: newLoan.dueDate,
+            description: `Empréstimo Nexus Private - ${newLoan.clientName}`,
+            billingType: newLoan.asaasBillingType as AsaasBillingType
+          });
+          if (asaasRes.ok && asaasRes.data) {
+            await updateDoc(doc(db, 'loans', docRef.id), { ...asaasRes.data }).catch(() => {});
+            setAddSuccess('Empréstimo cadastrado e cobrança Asaas (Pix/Boleto) gerada!');
+          } else {
+            setAddSuccess(`Empréstimo salvo! Cobrança Asaas pendente: ${asaasRes.error || 'configure ASAAS_API_KEY'}`);
+          }
         }
       }
       
@@ -2609,6 +2879,9 @@ export default function App() {
         clientName: '',
         clientPhone: '',
         clientAddress: '',
+        clientCpf: '',
+        clientEmail: '',
+        asaasBillingType: 'UNDEFINED',
         capital: '',
         interestRate: '',
         date: format(new Date(), 'yyyy-MM-dd'),
@@ -2635,7 +2908,24 @@ export default function App() {
         date: format(newStartDate, 'yyyy-MM-dd'),
         dueDate: format(newEndDate, 'yyyy-MM-dd'),
       });
-      await logAction('loan_activated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital);
+      await logAction('loan_activated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital, undefined, undefined, undefined, loan.clientEmail);
+      if (!loan.asaasChargeId && (loan.clientCpf || loan.clientEmail)) {
+        const chargeAmount = Number(loan.totalBruto) > 0 ? Number(loan.totalBruto) : Number(loan.capital);
+        const asaasRes = await createAsaasCharge({
+          loanId: loan.id,
+          clientName: loan.clientName,
+          clientCpf: loan.clientCpf || undefined,
+          clientPhone: loan.clientPhone || undefined,
+          clientEmail: loan.clientEmail || undefined,
+          amount: chargeAmount,
+          dueDate: format(newEndDate, 'yyyy-MM-dd'),
+          description: `Empréstimo Nexus Private - ${loan.clientName}`,
+          billingType: 'UNDEFINED'
+        });
+        if (asaasRes.ok && asaasRes.data) {
+          await updateDoc(doc(db, 'loans', loan.id), { ...asaasRes.data }).catch(() => {});
+        }
+      }
       changeTab('Empréstimos');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `loans/${loan.id}`);
@@ -2708,6 +2998,9 @@ export default function App() {
       clientName: loan.clientName,
       clientPhone: loan.clientPhone || '',
       clientAddress: loan.clientAddress || '',
+      clientCpf: loan.clientCpf || '',
+      clientEmail: loan.clientEmail || '',
+      asaasBillingType: (loan.asaasBillingType as AsaasBillingType) || 'UNDEFINED',
       capital: loan.capital.toLocaleString('pt-BR', { minimumFractionDigits: 2 }),
       interestRate: (loan.interestRate * 100).toString(),
       date: loan.date,
@@ -3158,6 +3451,7 @@ export default function App() {
       phone: string, 
       address: string,
       cpf?: string,
+      email?: string,
       profession?: string,
       monthlyIncome?: number,
       receivingDetails?: string,
@@ -3179,6 +3473,7 @@ export default function App() {
         phone: loan.clientPhone || '', 
         address: loan.clientAddress || '',
         cpf: loan.clientCpf,
+        email: loan.clientEmail,
         profession: loan.clientProfession,
         monthlyIncome: loan.clientMonthlyIncome,
         receivingDetails: loan.clientReceivingDetails,
@@ -3213,6 +3508,7 @@ export default function App() {
       if (!existing.phone && loan.clientPhone) existing.phone = loan.clientPhone;
       if (!existing.address && loan.clientAddress) existing.address = loan.clientAddress;
       if (!existing.cpf && loan.clientCpf) existing.cpf = loan.clientCpf;
+      if (!existing.email && loan.clientEmail) existing.email = loan.clientEmail;
       if (!existing.profession && loan.clientProfession) existing.profession = loan.clientProfession;
       if (!existing.monthlyIncome && loan.clientMonthlyIncome) existing.monthlyIncome = loan.clientMonthlyIncome;
       if (!existing.receivingDetails && loan.clientReceivingDetails) existing.receivingDetails = loan.clientReceivingDetails;
@@ -3222,12 +3518,13 @@ export default function App() {
 
     // Enrich with registration profile data if missing from loans
     clientMap.forEach(client => {
-      if (!client.cpf || !client.profession || !client.receivingDetails) {
+      if (!client.cpf || !client.email || !client.profession || !client.receivingDetails) {
         const regMatch = clientRegistrations.find(
           r => r.fullName.trim().toLowerCase() === client.name.trim().toLowerCase()
         );
         if (regMatch) {
           if (!client.cpf) client.cpf = regMatch.cpf;
+          if (!client.email && regMatch.email) client.email = regMatch.email;
           if (!client.profession) client.profession = regMatch.profession;
           if (!client.monthlyIncome) client.monthlyIncome = regMatch.monthlyIncome;
           if (!client.receivingDetails) client.receivingDetails = regMatch.receivingDetails;
@@ -3736,7 +4033,7 @@ export default function App() {
 
   // --- Persistence ---
   useEffect(() => {
-    if (!user || !isAuthReady || !isSettingsLoaded) return;
+    if (!user || !isAuthReady || !isSettingsLoaded || !userProfile || userProfile.role === 'client') return;
     
     const timeoutId = setTimeout(() => {
       const saveSettings = async () => {
@@ -3752,7 +4049,7 @@ export default function App() {
     }, 2000); // 2 second debounce
 
     return () => clearTimeout(timeoutId);
-  }, [systemSettings, user, isAuthReady]);
+  }, [systemSettings, user, isAuthReady, isSettingsLoaded, userProfile]);
 
   useEffect(() => {
     if (addSuccess) {
@@ -3783,7 +4080,7 @@ export default function App() {
   if (!user) {
     return (
       <div 
-        className="relative flex min-h-screen overflow-hidden transition-all duration-700 bg-[#04040a]"
+        className="relative flex min-h-dvh overflow-hidden transition-all duration-700 bg-[#04040a] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
         style={{
           backgroundImage: `linear-gradient(to right, rgba(2, 2, 8, 0.45) 0%, rgba(2, 2, 8, 0.85) 100%), url(${luxuryBg})`,
           backgroundSize: 'cover',
@@ -4041,7 +4338,7 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              /* STANDARD EMAIL + PASSWORD FORM */
+              /* STANDARD EMAIL + PASSWORD FORM OR CLIENT SIGNUP */
               <div>
                 {savedAccount && (
                   <button
@@ -4050,13 +4347,123 @@ export default function App() {
                       setUseDifferentAccount(false);
                       setError(null);
                     }}
-                    className="mb-6 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] hover:underline bg-[#D4AF37]/10 border border-[#D4AF37]/30 px-3.5 py-2 rounded-xl transition-all"
+                    className="mb-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] hover:underline bg-[#D4AF37]/10 border border-[#D4AF37]/30 px-3.5 py-2 rounded-xl transition-all"
                   >
                     <UserIcon className="w-3.5 h-3.5" />
                     Voltar para conta de {savedAccount.displayName}
                   </button>
                 )}
 
+                <div className="flex items-center gap-1 p-1 rounded-2xl bg-white/[0.04] border border-white/10 mb-5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClientSignupMode(false);
+                      setError(null);
+                    }}
+                    className={cn(
+                      "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                      !isClientSignupMode ? "bg-[#D4AF37] text-black" : "text-slate-400 hover:text-white"
+                    )}
+                  >
+                    Já tenho conta
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClientSignupMode(true);
+                      setError(null);
+                    }}
+                    className={cn(
+                      "flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                      isClientSignupMode ? "bg-[#D4AF37] text-black" : "text-slate-400 hover:text-white"
+                    )}
+                  >
+                    1º Acesso (Cliente)
+                  </button>
+                </div>
+
+                {isClientSignupMode ? (
+                  <form onSubmit={handleClientSignup} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                      <div className="relative group">
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <input
+                          type="text"
+                          placeholder="Seu nome completo"
+                          value={clientSignupName}
+                          onChange={(e) => setClientSignupName(e.target.value)}
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">CPF (Opcional)</label>
+                      <div className="relative group">
+                        <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="000.000.000-00"
+                          value={clientSignupCpf}
+                          onChange={(e) => setClientSignupCpf(formatCPF(e.target.value))}
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail do Contrato</label>
+                      <div className="relative group">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <input
+                          type="email"
+                          placeholder="seu@email.com"
+                          value={email || ""}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Criar Senha (mín. 6 dígitos)</label>
+                      <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors text-slate-500 group-focus-within:text-[#D4AF37]" />
+                        <input
+                          type="password"
+                          placeholder="••••••••••••"
+                          value={password || ""}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full rounded-[16px] sm:rounded-[20px] py-3 sm:py-3.5 pl-12 pr-4 text-xs sm:text-sm transition-all border outline-none bg-white/[0.04] border-white/10 text-white placeholder:text-slate-600 focus:border-[#D4AF37]/50 focus:bg-white/[0.08]"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Utilize o mesmo e-mail informado ao credor para visualizar suas parcelas, histórico e opções de pagamento PIX/Boleto.
+                    </p>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full relative group pt-1"
+                    >
+                      <div className="relative w-full bg-gradient-to-br from-[#D4AF37] to-[#8a660a] text-white font-black uppercase tracking-[0.2em] text-[10px] sm:text-[11px] py-4 rounded-[16px] sm:rounded-[20px] shadow-2xl flex items-center justify-center gap-3 transition-all">
+                        {isSubmitting ? (
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        ) : (
+                          <span>Criar Minha Conta de Cliente</span>
+                        )}
+                      </div>
+                    </button>
+                  </form>
+                ) : (
                 <form onSubmit={handleEmailLogin} className="space-y-4 sm:space-y-6">
                   <div className="space-y-1.5 sm:space-y-2">
                     <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
@@ -4133,6 +4540,7 @@ export default function App() {
                     )}
                   </div>
                 </form>
+                )}
               </div>
             )}
           </motion.div>
@@ -4185,6 +4593,31 @@ export default function App() {
           </div>
         )}
       </div>
+    );
+  }
+
+  if (user && !userProfile) {
+    return (
+      <div className={cn(
+        "flex flex-col items-center justify-center h-screen gap-6 transition-colors duration-500",
+        theme === 'light' ? "bg-slate-50 text-slate-900" : "bg-black text-white"
+      )}>
+        <div className="w-12 h-12 border-[1px] border-brand-primary/30 border-t-brand-primary rounded-full animate-spin shadow-[0_0_30px_rgba(212,175,55,0.2)]" />
+        <span className="text-slate-500 font-black uppercase tracking-[0.4em] text-[9px]">Carregando Perfil</span>
+      </div>
+    );
+  }
+
+  if (userProfile?.role === 'client' && (user.email || '').trim().toLowerCase() !== 'reyneperdigao@gmail.com') {
+    return (
+      <ClientPortal
+        userEmail={user.email || ''}
+        displayName={userProfile.displayName || user.displayName || ''}
+        loans={loans}
+        actions={actions}
+        loading={loading}
+        onLogout={() => auth.signOut()}
+      />
     );
   }
 
@@ -4734,6 +5167,9 @@ export default function App() {
                         clientName: '',
                         clientPhone: '',
                         clientAddress: '',
+                        clientCpf: '',
+                        clientEmail: '',
+                        asaasBillingType: 'UNDEFINED',
                         capital: '',
                         interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
@@ -4759,6 +5195,9 @@ export default function App() {
                         clientName: '',
                         clientPhone: '',
                         clientAddress: '',
+                        clientCpf: '',
+                        clientEmail: '',
+                        asaasBillingType: 'UNDEFINED',
                         capital: '',
                         interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
@@ -4776,7 +5215,30 @@ export default function App() {
               )}
 
             {activeTab === 'Clientes' && (
-              <div className="flex gap-2 sm:gap-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = typeof window !== 'undefined' ? window.location.origin : '';
+                    if (url) {
+                      navigator.clipboard.writeText(url);
+                      setCopiedClientAppUrl(true);
+                      setTimeout(() => setCopiedClientAppUrl(false), 2500);
+                    }
+                  }}
+                  className={cn(
+                    "px-4 py-3 rounded-2xl font-black transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] border",
+                    copiedClientAppUrl
+                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                      : isDark
+                      ? "bg-white/5 text-slate-200 border-white/10 hover:border-brand-primary/40 hover:text-brand-primary"
+                      : "bg-white text-slate-800 border-slate-200 hover:border-brand-primary"
+                  )}
+                  title="Copiar link do aplicativo para o cliente acessar as cobranças"
+                >
+                  {copiedClientAppUrl ? <Check className="w-4 h-4" /> : <CreditCard className="w-4 h-4 text-[#D4AF37]" />}
+                  <span>{copiedClientAppUrl ? 'Link Copiado!' : 'App do Cliente'}</span>
+                </button>
                 <button
                   onClick={() => changeTab('Cadastro Online')}
                   className="bg-brand-primary text-slate-950 px-5 py-3 rounded-2xl font-black shadow-xl shadow-brand-primary/20 hover:shadow-brand-primary/40 transition-all flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] hover:-translate-y-0.5 active:translate-y-1 hover:brightness-105 border border-brand-primary"
@@ -5351,6 +5813,9 @@ export default function App() {
                                         clientName: client.name,
                                         clientPhone: client.phone || '',
                                         clientAddress: client.address || '',
+                                        clientCpf: client.cpf || '',
+                                        clientEmail: client.email || '',
+                                        asaasBillingType: 'UNDEFINED',
                                         capital: '',
                                         interestRate: '',
                                         date: format(new Date(), 'yyyy-MM-dd'),
@@ -5456,6 +5921,9 @@ export default function App() {
                                      clientName: client.name,
                                      clientPhone: client.phone || '',
                                      clientAddress: client.address || '',
+                                     clientCpf: client.cpf || '',
+                                     clientEmail: client.email || '',
+                                     asaasBillingType: 'UNDEFINED',
                                      capital: '',
                                      interestRate: '',
                                      date: format(new Date(), 'yyyy-MM-dd'),
@@ -6740,6 +7208,56 @@ export default function App() {
                             </div>
 
 
+                            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <h4 className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">
+                                    Integração Asaas (PIX &amp; Boleto)
+                                  </h4>
+                                  <p className="text-xs text-slate-400 mt-1">
+                                    {asaasServerStatus.configured
+                                      ? `Conectado no servidor (${asaasServerStatus.environment === 'production' ? 'Produção' : 'Sandbox'}). Cobranças geradas automaticamente ao criar/aprovar empréstimos.`
+                                      : 'Configure a variável de ambiente ASAAS_API_KEY nas configurações do servidor para ativar cobranças automáticas.'}
+                                  </p>
+                                </div>
+                                <span
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-lg border text-[10px] font-bold shrink-0",
+                                    asaasServerStatus.configured
+                                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                      : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                  )}
+                                >
+                                  {asaasServerStatus.configured ? 'Ativo' : 'Chave Pendente'}
+                                </span>
+                              </div>
+
+                              <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                                    Portal Exclusivo do Cliente
+                                  </span>
+                                  <p className="text-xs text-slate-400 mt-0.5 truncate">
+                                    Envie este link para o cliente acessar com o e-mail do contrato em &ldquo;1º Acesso (Cliente)&rdquo;.
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const url = typeof window !== 'undefined' ? window.location.origin : '';
+                                    if (url) {
+                                      navigator.clipboard.writeText(url);
+                                      setCopiedClientAppUrl(true);
+                                      setTimeout(() => setCopiedClientAppUrl(false), 2500);
+                                    }
+                                  }}
+                                  className="px-4 py-2.5 rounded-xl bg-[#D4AF37] text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shrink-0 hover:brightness-110 transition-all"
+                                >
+                                  {copiedClientAppUrl ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                  {copiedClientAppUrl ? 'Link Copiado!' : 'Copiar Link do App'}
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
                         {activeSettingsSection === 'mensagem' && (
@@ -7156,6 +7674,19 @@ export default function App() {
                                       {loan.clientName}
                                     </button>
                                     {loan.clientPhone && <div className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">{loan.clientPhone}</div>}
+                                    {loan.asaasChargeId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setAsaasModalLoan(loan)}
+                                        className={cn(
+                                          "mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[9px] font-bold transition-all hover:brightness-110",
+                                          getAsaasStatusMeta(loan.asaasStatus).badgeClass
+                                        )}
+                                      >
+                                        <CreditCard className="w-2.5 h-2.5" />
+                                        {getAsaasStatusMeta(loan.asaasStatus).label}
+                                      </button>
+                                    )}
                                   </>
                                 )}
                               </td>
@@ -7262,6 +7793,28 @@ export default function App() {
                                   )}
                                   {loan.status !== 'Agendado' && (
                                     <>
+                                      <button
+                                        onClick={() => setAsaasModalLoan(loan)}
+                                        className={cn(
+                                          "p-2 rounded-xl border transition-all active:scale-95",
+                                          loan.asaasChargeId
+                                            ? "bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 hover:bg-[#D4AF37] hover:text-black"
+                                            : "bg-white/5 text-slate-400 border-white/10 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37]"
+                                        )}
+                                        title={loan.asaasChargeId ? "Ver Cobrança Asaas (Pix/Boleto)" : "Gerar Cobrança Asaas"}
+                                      >
+                                        <CreditCard className="w-4 h-4" />
+                                      </button>
+                                      {loan.asaasChargeId && (
+                                        <button
+                                          onClick={() => handleQuickSyncAsaas(loan)}
+                                          disabled={syncingAsaasId === loan.id}
+                                          className="p-2 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white rounded-xl border border-white/10 transition-all disabled:opacity-50"
+                                          title="Sincronizar Status Asaas"
+                                        >
+                                          <RefreshCw className={cn("w-4 h-4", syncingAsaasId === loan.id && "animate-spin")} />
+                                        </button>
+                                      )}
                                       <button 
                                         onClick={() => setViewingContract([loan])}
                                         className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-xl border border-emerald-500/20"
@@ -7409,6 +7962,19 @@ export default function App() {
                                 {loan.clientName}
                               </button>
                               <p className="text-slate-500 text-[10px] font-medium mt-1 uppercase tracking-widest">{loan.clientPhone || 'Sem Telefone'}</p>
+                              {loan.asaasChargeId && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAsaasModalLoan(loan)}
+                                  className={cn(
+                                    "mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[9px] font-bold transition-all active:scale-95",
+                                    getAsaasStatusMeta(loan.asaasStatus).badgeClass
+                                  )}
+                                >
+                                  <CreditCard className="w-2.5 h-2.5" />
+                                  {getAsaasStatusMeta(loan.asaasStatus).label}
+                                </button>
+                              )}
                             </div>
                             <StatusBadge status={isOverdue(loan) ? 'Atrasado' : loan.status} isDark={isDark} />
                           </div>
@@ -7495,6 +8061,18 @@ export default function App() {
                               )}
                               {loan.status !== 'Agendado' && (
                                 <>
+                                  <button
+                                    onClick={() => setAsaasModalLoan(loan)}
+                                    className={cn(
+                                      "p-3.5 rounded-xl border active:scale-95 transition-all",
+                                      loan.asaasChargeId
+                                        ? "bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30"
+                                        : "bg-white/5 text-slate-300 border-white/10"
+                                    )}
+                                    title={loan.asaasChargeId ? "Ver Cobrança Asaas" : "Gerar Cobrança Asaas"}
+                                  >
+                                    <CreditCard className="w-5 h-5" />
+                                  </button>
                                   <button 
                                     onClick={() => setViewingContract([loan])}
                                     className="p-3.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 active:scale-95 transition-all"
@@ -7576,6 +8154,9 @@ export default function App() {
                       clientName: '',
                       clientPhone: '',
                       clientAddress: '',
+                      clientCpf: '',
+                      clientEmail: '',
+                      asaasBillingType: 'UNDEFINED',
                       capital: '',
                       interestRate: '',
                       date: format(new Date(), 'yyyy-MM-dd'),
@@ -7610,7 +8191,9 @@ export default function App() {
                             ...newLoan, 
                             clientName: name,
                             clientPhone: existingClient.phone || newLoan.clientPhone,
-                            clientAddress: existingClient.address || newLoan.clientAddress
+                            clientAddress: existingClient.address || newLoan.clientAddress,
+                            clientCpf: existingClient.cpf || newLoan.clientCpf,
+                            clientEmail: existingClient.email || newLoan.clientEmail
                           });
                           if (existingClient.address) {
                             setLoanAddressStruct(parseStructuredAddress(existingClient.address));
@@ -7638,6 +8221,29 @@ export default function App() {
                         const val = formatPhoneInput(e.target.value);
                         setNewLoan({...newLoan, clientPhone: val});
                       }}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">CPF do Cliente (Asaas)</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="000.000.000-00"
+                      className="w-full glass-input py-3 sm:py-4"
+                      value={newLoan.clientCpf || ""}
+                      onChange={(e) => setNewLoan({...newLoan, clientCpf: formatCPF(e.target.value)})}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">E-mail do Cliente (Portal &amp; Asaas)</label>
+                    <input
+                      type="email"
+                      placeholder="cliente@email.com"
+                      className="w-full glass-input py-3 sm:py-4"
+                      value={newLoan.clientEmail || ""}
+                      onChange={(e) => setNewLoan({...newLoan, clientEmail: e.target.value})}
                     />
                   </div>
 
@@ -7738,6 +8344,21 @@ export default function App() {
                         value={newLoan.dueDate || ""}
                         onChange={(e) => setNewLoan({...newLoan, dueDate: e.target.value})}
                       />
+                    </div>
+                  )}
+                  {!editingLoanId && newLoan.status !== 'Agendado' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Cobrança Asaas Automática</label>
+                      <select
+                        className="w-full glass-input py-3 sm:py-4 bg-[#14161c] text-white"
+                        value={newLoan.asaasBillingType}
+                        onChange={(e) => setNewLoan({...newLoan, asaasBillingType: e.target.value as AsaasBillingType | 'NONE'})}
+                      >
+                        <option value="UNDEFINED">Pix e Boleto (Gerar Automático)</option>
+                        <option value="PIX">Somente PIX (Gerar Automático)</option>
+                        <option value="BOLETO">Somente Boleto (Gerar Automático)</option>
+                        <option value="NONE">Não gerar cobrança agora</option>
+                      </select>
                     </div>
                   )}
                 </div>
@@ -8290,6 +8911,9 @@ export default function App() {
                         clientName: clientName || '',
                         clientPhone: clientMatch?.phone || '',
                         clientAddress: clientMatch?.address || '',
+                        clientCpf: clientMatch?.cpf || '',
+                        clientEmail: clientMatch?.email || '',
+                        asaasBillingType: 'UNDEFINED',
                         capital: '',
                         interestRate: '',
                         date: format(new Date(), 'yyyy-MM-dd'),
@@ -8403,6 +9027,21 @@ export default function App() {
                                 title="Pagamento"
                               >
                                 <DollarSign className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setViewingClientLoans(null);
+                                  setAsaasModalLoan(loan);
+                                }}
+                                className={cn(
+                                  "p-2 rounded-xl transition-all active:scale-95 border",
+                                  loan.asaasChargeId
+                                    ? "bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30 hover:bg-[#D4AF37] hover:text-black"
+                                    : "bg-white/5 text-slate-400 border-white/10 hover:bg-[#D4AF37]/20 hover:text-[#D4AF37]"
+                                )}
+                                title={loan.asaasChargeId ? "Ver Cobrança Asaas (Pix/Boleto)" : "Gerar Cobrança Asaas"}
+                              >
+                                <CreditCard className="w-4 h-4" />
                               </button>
                               {loan.status !== 'Pago' && (
                                  <button 
@@ -8708,6 +9347,23 @@ export default function App() {
                         )}
                       </div>
                       <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">E-mail (Portal do Cliente &amp; Asaas)</span>
+                        {isEditingDetail ? (
+                          <input 
+                            type="email"
+                            value={editClientData.email}
+                            onChange={(e) => setEditClientData(prev => ({ ...prev, email: e.target.value }))}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-brand-primary outline-none transition-all"
+                            placeholder="cliente@email.com"
+                          />
+                        ) : (
+                          <p className={cn("text-sm font-bold flex items-center gap-2", isDark ? "text-white" : "text-slate-900")}>
+                            <Mail className="w-4 h-4 text-[#D4AF37]" />
+                            {viewingClientDetail.email || "Não informado"}
+                          </p>
+                        )}
+                      </div>
+                      <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Endereço Residencial</span>
                         {isEditingDetail ? (
                           <AddressFieldsInput
@@ -8725,16 +9381,27 @@ export default function App() {
                           </p>
                         )}
                       </div>
-                      {(viewingClientDetail.cpf || viewingClientDetail.profession || viewingClientDetail.monthlyIncome || viewingClientDetail.receivingDetails) && (
+                      {(isEditingDetail || viewingClientDetail.cpf || viewingClientDetail.profession || viewingClientDetail.monthlyIncome || viewingClientDetail.receivingDetails) && (
                         <>
-                          {(viewingClientDetail.cpf || viewingClientDetail.profession) && (
+                          {(isEditingDetail || viewingClientDetail.cpf || viewingClientDetail.profession) && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              {viewingClientDetail.cpf && (
+                              {(isEditingDetail || viewingClientDetail.cpf) && (
                                 <div className={cn("p-4 rounded-2xl border", isDark ? "bg-white/5 border-white/5" : "bg-white border-slate-100 shadow-sm")}>
                                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">CPF</span>
-                                  <p className={cn("text-sm font-bold font-mono", isDark ? "text-white" : "text-slate-900")}>
-                                    {viewingClientDetail.cpf}
-                                  </p>
+                                  {isEditingDetail ? (
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={editClientData.cpf}
+                                      onChange={(e) => setEditClientData(prev => ({ ...prev, cpf: formatCPF(e.target.value) }))}
+                                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:border-brand-primary outline-none transition-all font-mono"
+                                      placeholder="000.000.000-00"
+                                    />
+                                  ) : (
+                                    <p className={cn("text-sm font-bold font-mono", isDark ? "text-white" : "text-slate-900")}>
+                                      {viewingClientDetail.cpf}
+                                    </p>
+                                  )}
                                 </div>
                               )}
                               {viewingClientDetail.profession && (
@@ -8795,6 +9462,9 @@ export default function App() {
                           clientName: viewingClientDetail.name,
                           clientPhone: viewingClientDetail.phone || '',
                           clientAddress: viewingClientDetail.address || '',
+                          clientCpf: viewingClientDetail.cpf || '',
+                          clientEmail: viewingClientDetail.email || '',
+                          asaasBillingType: 'UNDEFINED',
                           capital: '',
                           interestRate: '',
                           date: format(new Date(), 'yyyy-MM-dd'),
@@ -8889,7 +9559,9 @@ export default function App() {
                       onClick={() => {
                         setEditClientData({
                           phone: viewingClientDetail.phone || '',
-                          address: viewingClientDetail.address || ''
+                          address: viewingClientDetail.address || '',
+                          email: viewingClientDetail.email || '',
+                          cpf: viewingClientDetail.cpf || ''
                         });
                         setEditAddressStruct(parseStructuredAddress(viewingClientDetail.address));
                         setIsEditingDetail(true);
@@ -9434,6 +10106,15 @@ export default function App() {
       )}
 
       {/* Modal de Confirmação de PIX */}
+      {asaasModalLoan && (
+        <AsaasChargeModal
+          loan={asaasModalLoan}
+          isDark={isDark}
+          canGenerate={true}
+          onClose={() => setAsaasModalLoan(null)}
+          onChargeUpdated={handleAttachAsaasCharge}
+        />
+      )}
       </div>
 
       {/* Floating Action Button - Mobile */}
@@ -9478,6 +10159,9 @@ export default function App() {
                           clientName: '',
                           clientPhone: '',
                           clientAddress: '',
+                          clientCpf: '',
+                          clientEmail: '',
+                          asaasBillingType: 'UNDEFINED',
                           capital: '',
                           interestRate: '',
                           date: format(new Date(), 'yyyy-MM-dd'),
@@ -9511,6 +10195,9 @@ export default function App() {
                           clientName: '',
                           clientPhone: '',
                           clientAddress: '',
+                          clientCpf: '',
+                          clientEmail: '',
+                          asaasBillingType: 'UNDEFINED',
                           capital: '',
                           interestRate: '',
                           date: format(new Date(), 'yyyy-MM-dd'),

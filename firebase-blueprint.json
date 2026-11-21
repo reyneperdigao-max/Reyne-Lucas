@@ -22,6 +22,16 @@
           "maxLength": 20,
           "description": "The CPF of the client."
         },
+        "clientEmail": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Lowercase email of the client for portal login and Asaas billing."
+        },
+        "clientUid": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Optional Firebase UID of the end client."
+        },
         "clientProfession": {
           "type": "string",
           "maxLength": 100,
@@ -41,6 +51,16 @@
           "maxLength": 128,
           "description": "Optional reference to the online registration document."
         },
+        "asaasChargeId": { "type": "string", "maxLength": 128, "description": "Asaas payment ID." },
+        "asaasCustomerId": { "type": "string", "maxLength": 128, "description": "Asaas customer ID." },
+        "asaasBillingType": { "type": "string", "maxLength": 30, "description": "Asaas billing type." },
+        "asaasStatus": { "type": "string", "maxLength": 40, "description": "Current Asaas payment status." },
+        "asaasInvoiceUrl": { "type": "string", "maxLength": 500, "description": "Asaas checkout invoice URL." },
+        "asaasBankSlipUrl": { "type": "string", "maxLength": 500, "description": "Asaas boleto PDF URL." },
+        "asaasPixPayload": { "type": "string", "maxLength": 1000, "description": "Asaas Pix copy-paste EMV payload." },
+        "asaasPixQrCode": { "type": "string", "maxLength": 200000, "description": "Asaas Pix QR code base64 image." },
+        "asaasBoletoLine": { "type": "string", "maxLength": 200, "description": "Asaas boleto digitable line." },
+        "asaasLastSyncAt": { "type": "string", "format": "date-time", "maxLength": 50, "description": "Last Asaas sync timestamp." },
         "date": {
           "type": "string",
           "format": "date",
@@ -95,8 +115,9 @@
       "properties": {
         "email": { "type": "string" },
         "displayName": { "type": "string", "description": "The custom name of the user for receipts." },
-        "role": { "type": "string", "enum": ["admin", "user"] },
+        "role": { "type": "string", "enum": ["admin", "user", "client"] },
         "uid": { "type": "string" },
+        "cpf": { "type": "string", "maxLength": 20 },
         "pixKey": { "type": "string" },
         "pixName": { "type": "string" },
         "pixBank": { "type": "string" },
@@ -117,6 +138,8 @@
         "interestAmount": { "type": "number" },
         "paymentMethod": { "type": "string", "enum": ["DINHEIRO", "PIX"] },
         "clientName": { "type": "string" },
+        "clientEmail": { "type": "string", "maxLength": 256 },
+        "clientUid": { "type": "string", "maxLength": 128 },
         "loanId": { "type": "string" },
         "date": { "type": "string", "format": "date-time" },
         "uid": { "type": "string" },
@@ -184,6 +207,7 @@
         "linkId": { "type": "string", "maxLength": 128 },
         "fullName": { "type": "string", "minLength": 3, "maxLength": 120 },
         "cpf": { "type": "string", "minLength": 11, "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 256 },
         "phone": { "type": "string", "minLength": 8, "maxLength": 30 },
         "address": { "type": "string", "minLength": 5, "maxLength": 300 },
         "profession": { "type": "string", "minLength": 2, "maxLength": 100 },

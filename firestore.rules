@@ -23,6 +23,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == resource.data.uid;
     }
 
+    function isClientLoanOwner() {
+      return isSignedIn() && (
+        ('clientUid' in resource.data && resource.data.clientUid == request.auth.uid) ||
+        ('clientEmail' in resource.data && resource.data.clientEmail is string && request.auth.token.email is string && resource.data.clientEmail == request.auth.token.email.lower())
+      );
+    }
+
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -53,8 +60,9 @@ service cloud.firestore {
       let requiredFields = ['role', 'uid'];
       return data.keys().hasAll(requiredFields) &&
              (data.email == null || (data.email is string && data.email.size() < 256)) &&
-             data.role in ['admin', 'user'] &&
+             data.role in ['admin', 'user', 'client'] &&
              data.uid == request.auth.uid &&
+             (!('cpf' in data) || (data.cpf == null || (data.cpf is string && data.cpf.size() <= 20))) &&
              (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100)) &&
              (!('pixKey' in data) || (data.pixKey is string && data.pixKey.size() <= 200)) &&
              (!('pixName' in data) || (data.pixName is string && data.pixName.size() <= 100)) &&
@@ -79,10 +87,22 @@ service cloud.firestore {
              (!('clientPhone' in data) || (data.clientPhone is string && data.clientPhone.size() <= 50)) &&
              (!('clientAddress' in data) || (data.clientAddress is string && data.clientAddress.size() <= 300)) &&
              (!('clientCpf' in data) || (data.clientCpf is string && data.clientCpf.size() <= 20)) &&
+             (!('clientEmail' in data) || (data.clientEmail == null || (data.clientEmail is string && data.clientEmail.size() <= 256))) &&
+             (!('clientUid' in data) || (data.clientUid == null || (data.clientUid is string && data.clientUid.size() <= 128))) &&
              (!('clientProfession' in data) || (data.clientProfession is string && data.clientProfession.size() <= 100)) &&
              (!('clientMonthlyIncome' in data) || (data.clientMonthlyIncome is number && data.clientMonthlyIncome >= 0)) &&
              (!('clientReceivingDetails' in data) || (data.clientReceivingDetails is string && data.clientReceivingDetails.size() <= 500)) &&
-             (!('registrationId' in data) || (data.registrationId is string && data.registrationId.size() <= 128));
+             (!('registrationId' in data) || (data.registrationId is string && data.registrationId.size() <= 128)) &&
+             (!('asaasChargeId' in data) || (data.asaasChargeId == null || (data.asaasChargeId is string && data.asaasChargeId.size() <= 128))) &&
+             (!('asaasCustomerId' in data) || (data.asaasCustomerId == null || (data.asaasCustomerId is string && data.asaasCustomerId.size() <= 128))) &&
+             (!('asaasBillingType' in data) || (data.asaasBillingType == null || (data.asaasBillingType is string && data.asaasBillingType.size() <= 30))) &&
+             (!('asaasStatus' in data) || (data.asaasStatus == null || (data.asaasStatus is string && data.asaasStatus.size() <= 40))) &&
+             (!('asaasInvoiceUrl' in data) || (data.asaasInvoiceUrl == null || (data.asaasInvoiceUrl is string && data.asaasInvoiceUrl.size() <= 500))) &&
+             (!('asaasBankSlipUrl' in data) || (data.asaasBankSlipUrl == null || (data.asaasBankSlipUrl is string && data.asaasBankSlipUrl.size() <= 500))) &&
+             (!('asaasPixPayload' in data) || (data.asaasPixPayload == null || (data.asaasPixPayload is string && data.asaasPixPayload.size() <= 1000))) &&
+             (!('asaasPixQrCode' in data) || (data.asaasPixQrCode == null || (data.asaasPixQrCode is string && data.asaasPixQrCode.size() <= 200000))) &&
+             (!('asaasBoletoLine' in data) || (data.asaasBoletoLine == null || (data.asaasBoletoLine is string && data.asaasBoletoLine.size() <= 200))) &&
+             (!('asaasLastSyncAt' in data) || (data.asaasLastSyncAt == null || (data.asaasLastSyncAt is string && data.asaasLastSyncAt.size() <= 50)));
     }
 
     function isCreatedAtImmutable() {
@@ -102,6 +122,8 @@ service cloud.firestore {
              data.loanId is string && data.loanId.size() <= 128 &&
              data.date is string && data.date.size() <= 50 &&
              data.uid == request.auth.uid &&
+             (!('clientEmail' in data) || (data.clientEmail == null || (data.clientEmail is string && data.clientEmail.size() <= 256))) &&
+             (!('clientUid' in data) || (data.clientUid == null || (data.clientUid is string && data.clientUid.size() <= 128))) &&
              (!('amount' in data) || (data.amount == null || data.amount is number)) &&
              (!('capitalAmount' in data) || (data.capitalAmount == null || data.capitalAmount is number)) &&
              (!('interestAmount' in data) || (data.interestAmount == null || data.interestAmount is number)) &&
@@ -147,7 +169,7 @@ service cloud.firestore {
         'receivingDetails', 'status', 'submittedAt'
       ];
       let allowedFields = [
-        'uid', 'linkId', 'fullName', 'cpf', 'phone', 'address', 'profession',
+        'uid', 'linkId', 'fullName', 'cpf', 'email', 'phone', 'address', 'profession',
         'monthlyIncome', 'requestedAmount', 'receivingType', 'pixKeyType',
         'pixKey', 'bankName', 'bankAgency', 'bankAccount', 'accountHolder',
         'receivingDetails', 'notes', 'status', 'submittedAt', 'approvedAt',
@@ -159,6 +181,7 @@ service cloud.firestore {
              isValidId(data.linkId) &&
              data.fullName is string && data.fullName.size() >= 3 && data.fullName.size() <= 120 &&
              data.cpf is string && data.cpf.size() >= 11 && data.cpf.size() <= 20 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 256)) &&
              data.phone is string && data.phone.size() >= 8 && data.phone.size() <= 30 &&
              data.address is string && data.address.size() >= 5 && data.address.size() <= 300 &&
              data.profession is string && data.profession.size() >= 2 && data.profession.size() <= 100 &&
@@ -187,7 +210,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
       allow list: if (isOwner(userId) || isAdmin());
-      allow create: if isOwner(userId) && isValidUser(incoming()) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming()) && isValidId(userId) &&
+                    (incoming().role == 'client' || isAdmin());
       allow update: if (isOwner(userId) || isAdmin()) && (isValidUser(incoming()) || isAdmin()) && isValidId(userId) &&
                     incoming().uid == existing().uid &&
                     (incoming().role == existing().role || isAdmin());
@@ -200,23 +224,25 @@ service cloud.firestore {
     }
 
     match /loans/{loanId} {
-      allow get: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
-      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow get: if isVerifiedUser() && (isDocOwner() || isAdmin() || isClientLoanOwner()) && isValidId(loanId);
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isClientLoanOwner());
       allow create: if isVerifiedUser() && isValidLoan(incoming()) && isActiveTimestamp() && isValidId(loanId);
       allow update: if isVerifiedUser() && isValidId(loanId) && (isAdmin() || (isDocOwner() && isValidLoan(incoming()) &&
                     incoming().uid == existing().uid &&
                     isCreatedAtImmutable() && (
                       // Action: Financial/Status (Amortization, Payment, Renewal, Payoff)
                       (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capital', 'totalBruto', 'capitalPago', 'jurosPagos', 'date', 'dueDate'])) ||
+                      // Action: Asaas Charge Sync/Update
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['asaasChargeId', 'asaasCustomerId', 'asaasBillingType', 'asaasStatus', 'asaasInvoiceUrl', 'asaasBankSlipUrl', 'asaasPixPayload', 'asaasPixQrCode', 'asaasBoletoLine', 'asaasLastSyncAt'])) ||
                       // Action: General Info Edit
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'clientCpf', 'clientProfession', 'clientMonthlyIncome', 'clientReceivingDetails', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos']))
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'clientCpf', 'clientEmail', 'clientUid', 'clientProfession', 'clientMonthlyIncome', 'clientReceivingDetails', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos', 'asaasChargeId', 'asaasCustomerId', 'asaasBillingType', 'asaasStatus', 'asaasInvoiceUrl', 'asaasBankSlipUrl', 'asaasPixPayload', 'asaasPixQrCode', 'asaasBoletoLine', 'asaasLastSyncAt']))
                     )));
       allow delete: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
     }
 
     match /actions/{actionId} {
-      allow get: if isVerifiedUser() && isDocOwner() && isValidId(actionId);
-      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow get: if isVerifiedUser() && (isDocOwner() || isClientLoanOwner()) && isValidId(actionId);
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isClientLoanOwner());
       allow create: if isVerifiedUser() && isValidAction(incoming()) && isValidId(actionId);
       allow update: if isVerifiedUser() && (isAdmin() || (isDocOwner() && isValidAction(incoming()) &&
                     incoming().uid == existing().uid &&

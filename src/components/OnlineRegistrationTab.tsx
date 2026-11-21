@@ -22,7 +22,8 @@ import {
   Users,
   X,
   Calendar,
-  Sparkles
+  Sparkles,
+  Mail
 } from 'lucide-react';
 import { format, addMonths } from 'date-fns';
 import { cn } from '../lib/utils';
@@ -643,6 +644,20 @@ export const OnlineRegistrationTab: React.FC<OnlineRegistrationTabProps> = ({
                       </a>
                     </div>
                   </div>
+
+                  {reg.email && (
+                    <div className="flex items-start gap-2.5">
+                      <Mail className="w-4 h-4 text-[#D4AF37] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 block">
+                          E-mail (Portal e Cobranças)
+                        </span>
+                        <span className={cn("font-bold", isDark ? "text-slate-200" : "text-slate-800")}>
+                          {reg.email}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex items-start gap-2.5">
                     <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />

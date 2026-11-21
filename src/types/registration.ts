@@ -13,6 +13,7 @@ export interface ClientRegistration {
   linkId: string;
   fullName: string;
   cpf: string;
+  email?: string;
   phone: string;
   address: string;
   profession: string;

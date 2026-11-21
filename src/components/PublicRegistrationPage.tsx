@@ -18,7 +18,8 @@ import {
   ArrowRight,
   Lock,
   Calculator,
-  Info
+  Info,
+  Mail
 } from 'lucide-react';
 import { db } from '../firebase';
 import { cn } from '../lib/utils';
@@ -66,6 +67,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   // Form states
   const [fullName, setFullName] = useState('');
   const [cpf, setCpf] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [structuredAddress, setStructuredAddress] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [profession, setProfession] = useState('');
@@ -286,6 +288,10 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
         status: 'pending',
         submittedAt: new Date().toISOString()
       };
+
+      if (email.trim()) {
+        payload.email = email.trim().toLowerCase().slice(0, 256);
+      }
 
       if (receivingType === 'PIX') {
         payload.pixKeyType = pixKeyType;
@@ -540,6 +546,23 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     placeholder="(00) 00000-0000"
                     maxLength={15}
                     className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  E-mail (Para acesso ao Portal do Cliente e Cobranças) *
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="seuemail@exemplo.com"
+                    className="w-full rounded-2xl bg-white/[0.04] border border-white/10 focus:border-[#D4AF37] pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-slate-600 outline-none transition-all"
                   />
                 </div>
               </div>
