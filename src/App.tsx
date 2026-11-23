@@ -52,6 +52,7 @@ import {
   Link2,
   CreditCard,
   RefreshCw,
+  Smartphone,
 } from 'lucide-react';
 import { 
   collection, 
@@ -62,6 +63,7 @@ import {
   updateDoc, 
   doc, 
   deleteDoc,
+  getDoc,
   getDocs,
   setDoc,
   serverTimestamp,
@@ -89,15 +91,31 @@ import { OnlineRegistrationTab } from './components/OnlineRegistrationTab';
 import { AddressFieldsInput } from './components/AddressFieldsInput';
 import { AsaasChargeModal } from './components/AsaasChargeModal';
 import { ClientPortal } from './components/ClientPortal';
+import { ClientContractPortal } from './components/ClientContractPortal';
 import {
   AsaasBillingType,
   AsaasChargeInfo,
   AsaasServerStatus,
+  UserAsaasConfigView,
+  ackAsaasReconciliation,
+  clearUserAsaasConfig,
   createAsaasCharge,
   fetchAsaasServerStatus,
+  fetchPendingAsaasReconciliations,
+  fetchUserAsaasConfig,
   getAsaasStatusMeta,
-  syncAsaasCharge
+  saveUserAsaasConfig,
+  syncAsaasCharge,
+  syncContractsBillingRegistry,
+  testUserAsaasConfig
 } from './utils/asaasApi';
+import {
+  ClientPortalOperationType,
+  PendingAsaasReconciliation,
+  buildClientPortalUrl,
+  computeNextDueDateISO,
+  generateClientAccessToken
+} from './types/clientPortal';
 import {
   StructuredAddress,
   EMPTY_STRUCTURED_ADDRESS,
@@ -412,6 +430,8 @@ interface Loan {
   asaasPixQrCode?: string | null;
   asaasBoletoLine?: string | null;
   asaasLastSyncAt?: string | null;
+  clientAccessToken?: string | null;
+  clientPortalEnabled?: boolean | null;
 }
 
 interface SystemAction {
@@ -422,6 +442,8 @@ interface SystemAction {
   capitalAmount?: number;
   interestAmount?: number;
   paymentMethod?: 'DINHEIRO' | 'PIX';
+  operationType?: ClientPortalOperationType | 'PAGAMENTO';
+  asaasChargeId?: string | null;
   clientName: string;
   clientEmail?: string;
   clientUid?: string;
@@ -739,6 +761,10 @@ export default function App() {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('cadastro');
   });
+  const [clientPortalToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('cliente');
+  });
   const [user, setUser] = useState<User | null>(null);
   const [viewingClientLoans, setViewingClientLoans] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -811,7 +837,7 @@ export default function App() {
       }
     }
   }, []);
-  const [activeSettingsSection, setActiveSettingsSection] = useState<'menu' | 'regras' | 'mensagem' | 'aparencia' | 'dados'>('menu');
+  const [activeSettingsSection, setActiveSettingsSection] = useState<'menu' | 'perfil' | 'recebimentos' | 'asaas' | 'regras' | 'mensagem' | 'aparencia' | 'dados'>('menu');
   const [loans, setLoans] = useState<Loan[]>([]);
   const [actions, setActions] = useState<SystemAction[]>([]);
   const [monthlyClosures, setMonthlyClosures] = useState<MonthlyClosure[]>([]);
@@ -871,12 +897,52 @@ export default function App() {
   const [editClientData, setEditClientData] = useState({ phone: '', address: '', email: '', cpf: '' });
   const [asaasModalLoan, setAsaasModalLoan] = useState<Loan | null>(null);
   const [syncingAsaasId, setSyncingAsaasId] = useState<string | null>(null);
-  const [asaasServerStatus, setAsaasServerStatus] = useState<AsaasServerStatus>({ configured: false, environment: 'sandbox' });
+  const [asaasServerStatus, setAsaasServerStatus] = useState<AsaasServerStatus>({ configured: false, environment: 'sandbox', source: 'none' });
+  const [userAsaasConfig, setUserAsaasConfig] = useState<UserAsaasConfigView | null>(null);
+  const [asaasApiKeyInput, setAsaasApiKeyInput] = useState('');
+  const [showAsaasApiKey, setShowAsaasApiKey] = useState(false);
+  const [asaasEnvInput, setAsaasEnvInput] = useState<'sandbox' | 'production'>('sandbox');
+  const [asaasWebhookTokenInput, setAsaasWebhookTokenInput] = useState('');
+  const [showAsaasWebhookToken, setShowAsaasWebhookToken] = useState(false);
+  const [isSavingAsaasConfig, setIsSavingAsaasConfig] = useState(false);
+  const [isTestingAsaasConfig, setIsTestingAsaasConfig] = useState(false);
+  const [isClearingAsaasConfig, setIsClearingAsaasConfig] = useState(false);
+  const [confirmClearAsaasConfig, setConfirmClearAsaasConfig] = useState(false);
+  const [copiedAsaasWebhookUrl, setCopiedAsaasWebhookUrl] = useState(false);
+  const [asaasConfigFeedback, setAsaasConfigFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [copiedClientAppUrl, setCopiedClientAppUrl] = useState(false);
+  const [copiedClientAppLoanId, setCopiedClientAppLoanId] = useState<string | null>(null);
+  const [clientAppShareToast, setClientAppShareToast] = useState<{
+    loanId: string;
+    clientName: string;
+    clientPhone?: string;
+    url: string;
+  } | null>(null);
+  const reconcilingChargeIdsRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchAsaasServerStatus().then(setAsaasServerStatus).catch(() => {});
-  }, []);
+  const syncUserAsaasMetadataToFirestore = async (uid: string, cfg: UserAsaasConfigView | null) => {
+    try {
+      const ref = doc(db, 'users', uid, 'integrations', 'asaas');
+      if (!cfg || !cfg.configured || cfg.source !== 'user') {
+        await deleteDoc(ref).catch(() => {});
+        return;
+      }
+      await setDoc(ref, {
+        uid,
+        configured: Boolean(cfg.configured),
+        environment: cfg.environment === 'production' ? 'production' : 'sandbox',
+        apiKeyMasked: (cfg.apiKeyMasked || '••••').slice(0, 40),
+        hasWebhookToken: Boolean(cfg.hasWebhookToken),
+        webhookTokenMasked: cfg.webhookTokenMasked ? cfg.webhookTokenMasked.slice(0, 40) : null,
+        webhookUrl: (cfg.webhookUrl || '').slice(0, 300),
+        lastTestedAt: cfg.lastTestedAt ? cfg.lastTestedAt.slice(0, 50) : null,
+        lastTestOk: cfg.lastTestOk ?? null,
+        updatedAt: (cfg.updatedAt || new Date().toISOString()).slice(0, 50)
+      });
+    } catch (err) {
+      console.warn('Não foi possível sincronizar metadados Asaas no Firestore:', err);
+    }
+  };
   const [loanAddressStruct, setLoanAddressStruct] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [editAddressStruct, setEditAddressStruct] = useState<StructuredAddress>({ ...EMPTY_STRUCTURED_ADDRESS });
   const [selectedLoansForUnified, setSelectedLoansForUnified] = useState<string[]>([]);
@@ -972,6 +1038,51 @@ export default function App() {
     );
     return (picked || 'Credor Autorizado').trim().slice(0, 100);
   }, [userProfile?.displayName, userProfile?.pixName, user?.displayName, user?.email]);
+
+  useEffect(() => {
+    if (cadastroLinkId || clientPortalToken) return;
+    if (!user || !isAuthReady) {
+      setUserAsaasConfig(null);
+      setAsaasApiKeyInput('');
+      setAsaasWebhookTokenInput('');
+      setAsaasConfigFeedback(null);
+      setAsaasServerStatus({ configured: false, environment: 'sandbox', source: 'none' });
+      return;
+    }
+
+    const isClientUser =
+      userProfile?.role === 'client' &&
+      (user.email || '').trim().toLowerCase() !== 'reyneperdigao@gmail.com';
+    if (isClientUser) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const [statusRes, configRes] = await Promise.all([
+          fetchAsaasServerStatus(idToken),
+          fetchUserAsaasConfig(idToken)
+        ]);
+        if (cancelled) return;
+        setAsaasServerStatus(statusRes);
+        if (configRes.ok && configRes.data) {
+          setUserAsaasConfig(configRes.data);
+          setAsaasEnvInput(configRes.data.environment);
+          setAsaasServerStatus({
+            configured: configRes.data.configured,
+            environment: configRes.data.environment,
+            source: configRes.data.source
+          });
+        }
+      } catch {
+        // Non-blocking initialization
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, isAuthReady, userProfile?.role, cadastroLinkId, clientPortalToken]);
   const [theme] = useState<'light' | 'dark'>(() => {
     const saved = localStorage.getItem('nexus_theme');
     return (saved as 'light' | 'dark') || 'dark';
@@ -2247,14 +2358,14 @@ export default function App() {
 
   // Auto-trigger Face ID biometric scanner immediately upon opening app on mobile with saved account (Banco Inter style)
   useEffect(() => {
-    if (isMobile && isAuthReady && !user && savedAccount && !useDifferentAccount && !hasAutoTriggeredFaceID.current) {
+    if (!cadastroLinkId && !clientPortalToken && isMobile && isAuthReady && !user && savedAccount && !useDifferentAccount && !hasAutoTriggeredFaceID.current) {
       hasAutoTriggeredFaceID.current = true;
       const timer = setTimeout(() => {
         handleLoginWithFaceID();
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [isMobile, isAuthReady, user, savedAccount, useDifferentAccount]);
+  }, [cadastroLinkId, clientPortalToken, isMobile, isAuthReady, user, savedAccount, useDifferentAccount]);
 
 
   // Keep payingLoan in sync with loans array
@@ -2274,7 +2385,7 @@ export default function App() {
 
   // --- Firestore Logic ---
   useEffect(() => {
-    if (!user || !isAuthReady) {
+    if (cadastroLinkId || clientPortalToken || !user || !isAuthReady) {
       setLoans([]);
       setActions([]);
       setLoading(false);
@@ -2550,6 +2661,414 @@ export default function App() {
     }
   };
 
+  const round2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
+  const computeLoanPeriodInterest = (loan: Pick<Loan, 'capital' | 'interestRate' | 'totalBruto'>) => {
+    const cap = round2(loan.capital);
+    const bruto = round2(loan.totalBruto);
+    let interest = Math.max(0, round2(bruto - cap));
+    if (interest <= 0 && cap > 0 && (loan.interestRate || 0) > 0) {
+      interest = round2(cap * loan.interestRate);
+    }
+    return interest;
+  };
+
+  const buildPortalPayload = (loan: Loan, token: string) => {
+    const capital = round2(loan.capital);
+    const interestRate = Math.max(0, Number(loan.interestRate) || 0);
+    const periodInterest = computeLoanPeriodInterest(loan);
+    const totalBruto = capital <= 0 ? 0 : round2(Math.max(loan.totalBruto || 0, capital + periodInterest));
+
+    return {
+      token,
+      loanId: loan.id,
+      uid: loan.uid || user?.uid || '',
+      lenderName: (resolvedLenderName || 'Nexus Private').slice(0, 100),
+      clientName: (loan.clientName || 'Cliente').slice(0, 120),
+      capital,
+      interestRate,
+      periodInterest,
+      totalBruto,
+      date: (loan.date || '').slice(0, 20),
+      dueDate: (loan.dueDate || '').slice(0, 20),
+      status: loan.status,
+      capitalPago: round2(loan.capitalPago || 0),
+      jurosPagos: round2(loan.jurosPagos || 0),
+      asaasCustomerId: loan.asaasCustomerId || null,
+      active: loan.clientPortalEnabled !== false,
+      updatedAt: new Date().toISOString()
+    };
+  };
+
+  const syncLoanToPortal = async (
+    loan: Loan,
+    overrideToken?: string,
+    backfillActions = false
+  ): Promise<string | null> => {
+    if (!user) return null;
+    if (loan.status === 'Agendado' && !overrideToken && !loan.clientAccessToken) return null;
+
+    const token = overrideToken || loan.clientAccessToken || generateClientAccessToken();
+    try {
+      if (!loan.clientAccessToken) {
+        await updateDoc(doc(db, 'loans', loan.id), {
+          clientAccessToken: token,
+          clientPortalEnabled: true
+        });
+      }
+
+      const payload = buildPortalPayload({ ...loan, clientAccessToken: token }, token);
+      await setDoc(doc(db, 'client_portals', token), payload);
+
+      if (backfillActions) {
+        const pastPayments = actions.filter(
+          (a) => a.loanId === loan.id && a.type === 'payment_received' && (a.amount || 0) > 0
+        );
+        await Promise.all(
+          pastPayments.map((act) => {
+            const capAmt = round2(act.capitalAmount || 0);
+            const intAmt = round2(act.interestAmount || 0);
+            const inferredOp: ClientPortalOperationType | 'PAGAMENTO' =
+              act.operationType ||
+              (capAmt > 0 && intAmt > 0 && loan.capital <= 0
+                ? 'QUITACAO'
+                : capAmt > 0
+                ? 'AMORTIZACAO'
+                : intAmt > 0
+                ? 'JUROS'
+                : 'PAGAMENTO');
+            return setDoc(doc(db, 'client_portals', token, 'payments', act.id), {
+              id: act.id,
+              token,
+              loanId: loan.id,
+              uid: user.uid,
+              operationType: inferredOp,
+              amount: round2(act.amount || 0),
+              interestAmount: intAmt,
+              amortizedAmount: capAmt,
+              paymentMethod: act.paymentMethod === 'DINHEIRO' ? 'DINHEIRO' : 'PIX',
+              description: (act.description || 'Pagamento registrado').slice(0, 500),
+              asaasChargeId: act.asaasChargeId || null,
+              date: act.date || new Date().toISOString()
+            }).catch(() => {});
+          })
+        );
+      }
+      return token;
+    } catch (err) {
+      console.error('Erro ao sincronizar portal exclusivo do cliente:', err);
+      return null;
+    }
+  };
+
+  const recordPortalPaymentEntry = async (
+    loan: Loan,
+    payment: {
+      id: string;
+      operationType: ClientPortalOperationType | 'PAGAMENTO';
+      amount: number;
+      interestAmount: number;
+      amortizedAmount: number;
+      paymentMethod: 'PIX' | 'DINHEIRO';
+      description: string;
+      asaasChargeId?: string | null;
+      date?: string;
+    }
+  ) => {
+    if (!user || payment.amount <= 0) return;
+    try {
+      const token = await syncLoanToPortal(loan);
+      if (!token) return;
+      await setDoc(doc(db, 'client_portals', token, 'payments', payment.id), {
+        id: payment.id,
+        token,
+        loanId: loan.id,
+        uid: user.uid,
+        operationType: payment.operationType,
+        amount: round2(payment.amount),
+        interestAmount: round2(payment.interestAmount),
+        amortizedAmount: round2(payment.amortizedAmount),
+        paymentMethod: payment.paymentMethod,
+        description: payment.description.slice(0, 500),
+        asaasChargeId: payment.asaasChargeId || null,
+        date: payment.date || new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Erro ao registrar histórico de pagamento no portal do cliente:', err);
+    }
+  };
+
+  const buildWhatsAppPortalShareHref = (clientName: string, clientPhone: string | undefined, url: string) => {
+    const firstName = (clientName || 'Cliente').trim().split(' ')[0];
+    const message = `Olá ${firstName}! Segue o link exclusivo do seu aplicativo *Nexus Private* para acompanhar seu contrato e realizar pagamentos via PIX (somente juros, amortização ou quitação):\n\n${url}`;
+    const digits = (clientPhone || '').replace(/\D/g, '');
+    if (digits.length >= 10) {
+      const normalized = digits.startsWith('55') ? digits : `55${digits}`;
+      return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
+    }
+    return `https://wa.me/?text=${encodeURIComponent(message)}`;
+  };
+
+  const handleCopyClientAppLink = async (loan: Loan) => {
+    if (!user) return;
+    const isNewToken = !loan.clientAccessToken;
+    const token = loan.clientAccessToken || generateClientAccessToken();
+
+    const ensured = await syncLoanToPortal(loan, token, isNewToken);
+    const activeToken = ensured || token;
+    const url = buildClientPortalUrl(activeToken);
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      }
+    } catch {
+      // Clipboard may be restricted in non-HTTPS contexts; toast provides link & WhatsApp send
+    }
+
+    try {
+      const idToken = await user.getIdToken();
+      await syncContractsBillingRegistry(idToken, [
+        {
+          token: activeToken,
+          loanId: loan.id,
+          lenderName: resolvedLenderName || 'Nexus Private',
+          clientName: loan.clientName,
+          clientCpf: loan.clientCpf,
+          clientPhone: loan.clientPhone,
+          clientEmail: loan.clientEmail,
+          asaasCustomerId: loan.asaasCustomerId || null,
+          capital: round2(loan.capital),
+          interestRate: loan.interestRate || 0,
+          periodInterest: computeLoanPeriodInterest(loan),
+          totalBruto: round2(loan.totalBruto),
+          date: loan.date,
+          dueDate: loan.dueDate,
+          status: loan.status,
+          capitalPago: round2(loan.capitalPago || 0),
+          jurosPagos: round2(loan.jurosPagos || 0)
+        }
+      ]);
+    } catch {
+      // Non-blocking background sync
+    }
+
+    setCopiedClientAppLoanId(loan.id);
+    setTimeout(() => {
+      setCopiedClientAppLoanId((prev) => (prev === loan.id ? null : prev));
+    }, 3000);
+
+    setClientAppShareToast({
+      loanId: loan.id,
+      clientName: loan.clientName,
+      clientPhone: loan.clientPhone,
+      url
+    });
+  };
+
+  // Sync admin contracts + customer Asaas billing metadata to server registry
+  useEffect(() => {
+    if (cadastroLinkId || clientPortalToken || !user || !isAuthReady || !userProfile) return;
+    const isClientUser =
+      userProfile.role === 'client' &&
+      (user.email || '').trim().toLowerCase() !== 'reyneperdigao@gmail.com';
+    if (isClientUser || loans.length === 0) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const tokenEnabledLoans = loans.filter(
+          (l) => l.status !== 'Agendado' && l.clientAccessToken
+        );
+        if (tokenEnabledLoans.length === 0) return;
+
+        const idToken = await user.getIdToken();
+        await syncContractsBillingRegistry(
+          idToken,
+          tokenEnabledLoans.map((l) => ({
+            token: String(l.clientAccessToken),
+            loanId: l.id,
+            lenderName: resolvedLenderName || 'Nexus Private',
+            clientName: l.clientName,
+            clientCpf: l.clientCpf,
+            clientPhone: l.clientPhone,
+            clientEmail: l.clientEmail,
+            asaasCustomerId: l.asaasCustomerId || null,
+            capital: round2(l.capital),
+            interestRate: l.interestRate || 0,
+            periodInterest: computeLoanPeriodInterest(l),
+            totalBruto: round2(l.totalBruto),
+            date: l.date,
+            dueDate: l.dueDate,
+            status: l.status,
+            capitalPago: round2(l.capitalPago || 0),
+            jurosPagos: round2(l.jurosPagos || 0)
+          }))
+        );
+      } catch {
+        // Silent background registry sync
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [loans, user, isAuthReady, userProfile, resolvedLenderName, cadastroLinkId, clientPortalToken]);
+
+  // Auto-reconcile Asaas webhook settlements from server ledger into Firestore cleanly and idempotently
+  useEffect(() => {
+    if (cadastroLinkId || clientPortalToken || loading || !user || !isAuthReady || !userProfile) return;
+    const isClientUser =
+      userProfile.role === 'client' &&
+      (user.email || '').trim().toLowerCase() !== 'reyneperdigao@gmail.com';
+    if (isClientUser) return;
+
+    const reconcileFromServer = async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const pending: PendingAsaasReconciliation[] = await fetchPendingAsaasReconciliations(idToken);
+        if (pending.length === 0) return;
+
+        for (const rec of pending) {
+          if (reconcilingChargeIdsRef.current.has(rec.asaasChargeId)) continue;
+          reconcilingChargeIdsRef.current.add(rec.asaasChargeId);
+
+          try {
+            const loan =
+              loans.find((l) => l.id === rec.loanId) ||
+              loans.find((l) => l.clientAccessToken === rec.token);
+
+            if (!loan) {
+              continue;
+            }
+
+            const paymentDocRef = doc(db, 'client_portals', rec.token, 'payments', rec.asaasChargeId);
+            const existingPaymentSnap = await getDoc(paymentDocRef);
+
+            let updatedLoanSnapshot: Loan = loan;
+            if (!existingPaymentSnap.exists()) {
+              const rate = Math.max(0, loan.interestRate || 0);
+              const todayStr = (rec.settledAt || new Date().toISOString()).slice(0, 10);
+              let loanPatch: Record<string, unknown> = {};
+              let description = '';
+              let capDelta = 0;
+              const intDelta = round2(rec.interestAmount);
+
+              if (rec.operationType === 'JUROS') {
+                const nextDue = rec.dueDateAfter || computeNextDueDateISO(loan.dueDate);
+                const newJurosPagos = round2((loan.jurosPagos || 0) + intDelta);
+                const newTotalBruto = round2(loan.capital * (1 + rate));
+                loanPatch = {
+                  date: todayStr,
+                  dueDate: nextDue,
+                  status: 'Pago',
+                  totalBruto: newTotalBruto,
+                  capitalPago: round2(loan.capitalPago || 0),
+                  jurosPagos: newJurosPagos
+                };
+                description = `Renovação com pagamento de juros (${formatCurrency(intDelta)}) via PIX Asaas`;
+              } else if (rec.operationType === 'AMORTIZACAO') {
+                capDelta = round2(Math.min(loan.capital, rec.amortizedAmount));
+                const newCapital = round2(Math.max(0, loan.capital - capDelta));
+                const newCapitalPago = round2((loan.capitalPago || 0) + capDelta);
+                const newJurosPagos = round2((loan.jurosPagos || 0) + intDelta);
+                const nextDue = rec.dueDateAfter || computeNextDueDateISO(loan.dueDate);
+                const newTotalBruto = round2(newCapital * (1 + rate));
+                loanPatch = {
+                  capital: newCapital,
+                  capitalPago: newCapitalPago,
+                  jurosPagos: newJurosPagos,
+                  date: todayStr,
+                  dueDate: nextDue,
+                  totalBruto: newTotalBruto,
+                  status: newCapital === 0 ? 'Pago' : 'Pendente'
+                };
+                description = `Amortização (${formatCurrency(capDelta)}) + Juros (${formatCurrency(intDelta)}) via PIX Asaas`;
+              } else {
+                // QUITACAO
+                capDelta = round2(loan.capital);
+                const newCapitalPago = round2((loan.capitalPago || 0) + capDelta);
+                const newJurosPagos = round2((loan.jurosPagos || 0) + intDelta);
+                loanPatch = {
+                  capital: 0,
+                  totalBruto: 0,
+                  capitalPago: newCapitalPago,
+                  jurosPagos: newJurosPagos,
+                  status: 'Pago'
+                };
+                description = `Quitação Total (${formatCurrency(rec.totalAmount)}) via PIX Asaas`;
+              }
+
+              await updateDoc(doc(db, 'loans', loan.id), loanPatch);
+              updatedLoanSnapshot = { ...loan, ...loanPatch } as Loan;
+
+              const actionData: Record<string, unknown> = {
+                type: 'payment_received',
+                description,
+                clientName: loan.clientName,
+                loanId: loan.id,
+                amount: round2(rec.totalAmount),
+                capitalAmount: capDelta,
+                interestAmount: intDelta,
+                paymentMethod: 'PIX',
+                operationType: rec.operationType,
+                asaasChargeId: rec.asaasChargeId,
+                date: rec.settledAt || new Date().toISOString(),
+                uid: user.uid,
+                confirmed: true
+              };
+              if (loan.clientEmail) {
+                actionData.clientEmail = loan.clientEmail.trim().toLowerCase();
+              }
+              await addDoc(collection(db, 'actions'), actionData);
+
+              await setDoc(paymentDocRef, {
+                id: rec.asaasChargeId,
+                token: rec.token,
+                loanId: loan.id,
+                uid: user.uid,
+                operationType: rec.operationType,
+                amount: round2(rec.totalAmount),
+                interestAmount: intDelta,
+                amortizedAmount: capDelta,
+                paymentMethod: 'PIX',
+                description: description.slice(0, 500),
+                asaasChargeId: rec.asaasChargeId,
+                date: rec.settledAt || new Date().toISOString()
+              });
+
+              await syncLoanToPortal(updatedLoanSnapshot, rec.token);
+
+              const chargeDocRef = doc(db, 'client_portals', rec.token, 'charges', rec.asaasChargeId);
+              const chargeSnap = await getDoc(chargeDocRef);
+              if (chargeSnap.exists()) {
+                await updateDoc(chargeDocRef, {
+                  asaasStatus: rec.asaasStatus,
+                  settled: true,
+                  settledAt: rec.settledAt || new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                }).catch(() => {});
+              }
+
+              setAddSuccess(`Pagamento PIX Asaas confirmado para ${loan.clientName} (${formatCurrency(rec.totalAmount)})!`);
+            } else {
+              await syncLoanToPortal(updatedLoanSnapshot, rec.token);
+            }
+
+            await ackAsaasReconciliation(idToken, rec.asaasChargeId);
+          } catch (err) {
+            console.error('Erro na reconciliação Asaas:', err);
+          } finally {
+            reconcilingChargeIdsRef.current.delete(rec.asaasChargeId);
+          }
+        }
+      } catch {
+        // Non-blocking poll
+      }
+    };
+
+    reconcileFromServer();
+    const interval = setInterval(reconcileFromServer, 12000);
+    return () => clearInterval(interval);
+  }, [loans, loading, user, isAuthReady, userProfile, cadastroLinkId, clientPortalToken]);
+
   const handleAttachAsaasCharge = async (loanId: string, info: AsaasChargeInfo) => {
     try {
       await updateDoc(doc(db, 'loans', loanId), { ...info });
@@ -2563,7 +3082,8 @@ export default function App() {
     if (!loan.asaasChargeId) return;
     setSyncingAsaasId(loan.id);
     try {
-      const res = await syncAsaasCharge(loan.asaasChargeId);
+      const idToken = user ? await user.getIdToken() : undefined;
+      const res = await syncAsaasCharge(loan.asaasChargeId, idToken);
       if (!res.ok || !res.data) {
         setError(res.error || 'Falha ao consultar status no Asaas.');
         return;
@@ -2572,6 +3092,126 @@ export default function App() {
       setAddSuccess(`Status Asaas atualizado (${getAsaasStatusMeta(res.data.asaasStatus).label}).`);
     } finally {
       setSyncingAsaasId(null);
+    }
+  };
+
+  const handleSaveUserAsaasConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user) return;
+    setIsSavingAsaasConfig(true);
+    setAsaasConfigFeedback(null);
+    setConfirmClearAsaasConfig(false);
+    try {
+      const idToken = await user.getIdToken();
+      const trimmedKey = asaasApiKeyInput.trim();
+      const trimmedWebhook = asaasWebhookTokenInput.trim();
+      const res = await saveUserAsaasConfig(
+        {
+          apiKey: trimmedKey || undefined,
+          environment: asaasEnvInput,
+          webhookToken: trimmedWebhook || undefined,
+          updateWebhookToken: Boolean(trimmedWebhook)
+        },
+        idToken
+      );
+
+      if (!res.ok || !res.data) {
+        setAsaasConfigFeedback({
+          type: 'error',
+          text: res.error || 'Não foi possível salvar a configuração do Asaas.'
+        });
+        return;
+      }
+
+      setUserAsaasConfig(res.data);
+      setAsaasServerStatus({
+        configured: res.data.configured,
+        environment: res.data.environment,
+        source: res.data.source
+      });
+      setAsaasApiKeyInput('');
+      setAsaasWebhookTokenInput('');
+      setShowAsaasApiKey(false);
+      setShowAsaasWebhookToken(false);
+      await syncUserAsaasMetadataToFirestore(user.uid, res.data);
+      setAsaasConfigFeedback({
+        type: 'success',
+        text: res.message || 'Configuração Asaas salva com segurança!'
+      });
+    } finally {
+      setIsSavingAsaasConfig(false);
+    }
+  };
+
+  const handleTestUserAsaasConfig = async () => {
+    if (!user) return;
+    setIsTestingAsaasConfig(true);
+    setAsaasConfigFeedback(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await testUserAsaasConfig(
+        {
+          apiKey: asaasApiKeyInput.trim() || undefined,
+          environment: asaasEnvInput
+        },
+        idToken
+      );
+      if (res.data) {
+        setUserAsaasConfig(res.data);
+        setAsaasServerStatus({
+          configured: res.data.configured,
+          environment: res.data.environment,
+          source: res.data.source
+        });
+        await syncUserAsaasMetadataToFirestore(user.uid, res.data);
+      }
+      if (!res.ok) {
+        setAsaasConfigFeedback({
+          type: 'error',
+          text: res.error || 'Falha na validação com o Asaas. Verifique a API Key e o ambiente.'
+        });
+        return;
+      }
+      setAsaasConfigFeedback({
+        type: 'success',
+        text: res.message || 'Conexão validada com sucesso no Asaas!'
+      });
+    } finally {
+      setIsTestingAsaasConfig(false);
+    }
+  };
+
+  const handleClearUserAsaasConfig = async () => {
+    if (!user) return;
+    setIsClearingAsaasConfig(true);
+    setAsaasConfigFeedback(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await clearUserAsaasConfig(idToken);
+      if (!res.ok || !res.data) {
+        setAsaasConfigFeedback({
+          type: 'error',
+          text: res.error || 'Não foi possível limpar a configuração Asaas.'
+        });
+        return;
+      }
+      setUserAsaasConfig(res.data);
+      setAsaasServerStatus({
+        configured: res.data.configured,
+        environment: res.data.environment,
+        source: res.data.source
+      });
+      setAsaasApiKeyInput('');
+      setAsaasWebhookTokenInput('');
+      setAsaasEnvInput('sandbox');
+      setConfirmClearAsaasConfig(false);
+      await syncUserAsaasMetadataToFirestore(user.uid, null);
+      setAsaasConfigFeedback({
+        type: 'success',
+        text: res.message || 'Configuração Asaas removida desta conta.'
+      });
+    } finally {
+      setIsClearingAsaasConfig(false);
     }
   };
 
@@ -2591,6 +3231,7 @@ export default function App() {
       const interestRateDec = approval.interestRatePercent / 100;
       const totalBrutoRounded = Math.round(capitalRounded * (1 + interestRateDec) * 100) / 100;
       const normalizedEmail = reg.email ? reg.email.trim().toLowerCase() : '';
+      const clientAccessToken = generateClientAccessToken();
 
       const newLoanPayload: Record<string, unknown> = {
         clientName: reg.fullName.trim().slice(0, 120),
@@ -2611,7 +3252,9 @@ export default function App() {
         uid: user.uid,
         createdAt: serverTimestamp(),
         capitalPago: 0,
-        jurosPagos: 0
+        jurosPagos: 0,
+        clientAccessToken,
+        clientPortalEnabled: true
       };
 
       const loanRef = await addDoc(collection(db, 'loans'), newLoanPayload);
@@ -2624,6 +3267,17 @@ export default function App() {
       });
 
       const isScheduled = approval.status === 'Agendado';
+      if (!isScheduled) {
+        await syncLoanToPortal(
+          {
+            id: loanRef.id,
+            ...(newLoanPayload as unknown as Omit<Loan, 'id'>),
+            createdAt: new Date().toISOString()
+          } as Loan,
+          clientAccessToken
+        );
+      }
+
       await logAction(
         isScheduled ? 'loan_scheduled' : 'loan_created',
         `${isScheduled ? 'Agendamento aprovado via Cadastro Online' : 'Crédito aprovado via Cadastro Online'} para ${String(newLoanPayload.clientName)}`,
@@ -2638,20 +3292,26 @@ export default function App() {
 
       let asaasNote = '';
       if (!isScheduled) {
-        const asaasRes = await createAsaasCharge({
-          loanId: loanRef.id,
-          clientName: String(newLoanPayload.clientName),
-          clientCpf: reg.cpf,
-          clientPhone: reg.phone,
-          clientEmail: normalizedEmail || undefined,
-          amount: totalBrutoRounded > 0 ? totalBrutoRounded : capitalRounded,
-          dueDate: approval.dueDate,
-          description: `Empréstimo Nexus Private - ${String(newLoanPayload.clientName)}`,
-          billingType: 'UNDEFINED'
-        });
+        const idToken = await user.getIdToken();
+        const asaasRes = await createAsaasCharge(
+          {
+            loanId: loanRef.id,
+            clientName: String(newLoanPayload.clientName),
+            clientCpf: reg.cpf,
+            clientPhone: reg.phone,
+            clientEmail: normalizedEmail || undefined,
+            amount: totalBrutoRounded > 0 ? totalBrutoRounded : capitalRounded,
+            dueDate: approval.dueDate,
+            description: `Empréstimo Nexus Private - ${String(newLoanPayload.clientName)}`,
+            billingType: 'UNDEFINED'
+          },
+          idToken
+        );
         if (asaasRes.ok) {
           await updateDoc(doc(db, 'loans', loanRef.id), { ...asaasRes.data }).catch(() => {});
           asaasNote = ' Cobrança Asaas (Pix/Boleto) gerada!';
+        } else if (asaasRes.needsUserConfig) {
+          asaasNote = ' Configure sua chave Asaas em Ajustes > Integração Asaas para emitir cobranças automáticas.';
         }
       }
 
@@ -2692,7 +3352,9 @@ export default function App() {
     capitalAmount?: number,
     interestAmount?: number,
     paymentMethod?: 'DINHEIRO' | 'PIX',
-    clientEmail?: string
+    clientEmail?: string,
+    operationType?: ClientPortalOperationType | 'PAGAMENTO',
+    asaasChargeId?: string
   ) => {
     if (!user) return null;
     try {
@@ -2711,6 +3373,8 @@ export default function App() {
       };
       if (paymentMethod) actionData.paymentMethod = paymentMethod;
       if (resolvedEmail) actionData.clientEmail = resolvedEmail;
+      if (operationType) actionData.operationType = operationType;
+      if (asaasChargeId) actionData.asaasChargeId = asaasChargeId;
       const docRef = await addDoc(collection(db, 'actions'), actionData);
       return { id: docRef.id, ...actionData } as SystemAction;
     } catch (err: unknown) {
@@ -2805,6 +3469,15 @@ export default function App() {
           updateData.status = newLoan.status;
         }
         await updateDoc(doc(db, 'loans', editingLoanId), updateData);
+        if (oldLoan?.clientAccessToken) {
+          await syncLoanToPortal(
+            {
+              ...oldLoan,
+              ...updateData
+            } as Loan,
+            oldLoan.clientAccessToken
+          );
+        }
         await logAction('loan_updated', `Empréstimo atualizado para ${newLoan.clientName}`, newLoan.clientName, editingLoanId, Number(loanData.capital), undefined, undefined, undefined, normalizedClientEmail || undefined);
         
         // If name, phone, address, cpf or email changed, bulk update all other loans for this client
@@ -2826,17 +3499,40 @@ export default function App() {
             })
           );
           await Promise.all(batch);
+          await Promise.all(
+            otherLoans
+              .filter((l) => Boolean(l.clientAccessToken))
+              .map((l) =>
+                syncLoanToPortal(
+                  { ...l, clientName: newLoan.clientName } as Loan,
+                  l.clientAccessToken as string
+                )
+              )
+          );
         }
       } else {
+        const clientAccessToken = generateClientAccessToken();
         const newDocData = {
           ...loanData,
           status: newLoan.status || 'Pendente',
           createdAt: serverTimestamp(),
           capitalPago: 0,
-          jurosPagos: 0
+          jurosPagos: 0,
+          clientAccessToken,
+          clientPortalEnabled: true
         };
         const docRef = await addDoc(collection(db, 'loans'), newDocData);
         const isScheduled = (newLoan.status as string) === 'Agendado';
+        if (!isScheduled) {
+          await syncLoanToPortal(
+            {
+              id: docRef.id,
+              ...(newDocData as unknown as Omit<Loan, 'id'>),
+              createdAt: new Date().toISOString()
+            } as Loan,
+            clientAccessToken
+          );
+        }
         await logAction(
           isScheduled ? 'loan_scheduled' : 'loan_created', 
           `${isScheduled ? 'Agendamento' : 'Novo empréstimo'} para ${newLoan.clientName}`, 
@@ -2853,22 +3549,28 @@ export default function App() {
           setViewingScheduleReceipt({ id: docRef.id, ...newDocData, createdAt: new Date().toISOString() } as unknown as Loan);
         } else if (newLoan.asaasBillingType !== 'NONE') {
           const chargeAmount = Number(loanData.totalBruto) > 0 ? Number(loanData.totalBruto) : Number(loanData.capital);
-          const asaasRes = await createAsaasCharge({
-            loanId: docRef.id,
-            clientName: newLoan.clientName,
-            clientCpf: cleanClientCpf || undefined,
-            clientPhone: newLoan.clientPhone || undefined,
-            clientEmail: normalizedClientEmail || undefined,
-            amount: chargeAmount,
-            dueDate: newLoan.dueDate,
-            description: `Empréstimo Nexus Private - ${newLoan.clientName}`,
-            billingType: newLoan.asaasBillingType as AsaasBillingType
-          });
+          const idToken = await user.getIdToken();
+          const asaasRes = await createAsaasCharge(
+            {
+              loanId: docRef.id,
+              clientName: newLoan.clientName,
+              clientCpf: cleanClientCpf || undefined,
+              clientPhone: newLoan.clientPhone || undefined,
+              clientEmail: normalizedClientEmail || undefined,
+              amount: chargeAmount,
+              dueDate: newLoan.dueDate,
+              description: `Empréstimo Nexus Private - ${newLoan.clientName}`,
+              billingType: newLoan.asaasBillingType as AsaasBillingType
+            },
+            idToken
+          );
           if (asaasRes.ok && asaasRes.data) {
             await updateDoc(doc(db, 'loans', docRef.id), { ...asaasRes.data }).catch(() => {});
             setAddSuccess('Empréstimo cadastrado e cobrança Asaas (Pix/Boleto) gerada!');
+          } else if (asaasRes.needsUserConfig) {
+            setAddSuccess('Empréstimo salvo! Para cobranças automáticas, configure sua API Key em Ajustes > Integração Asaas.');
           } else {
-            setAddSuccess(`Empréstimo salvo! Cobrança Asaas pendente: ${asaasRes.error || 'configure ASAAS_API_KEY'}`);
+            setAddSuccess(`Empréstimo salvo! Cobrança Asaas pendente: ${asaasRes.error || 'configure sua chave em Ajustes > Integração Asaas'}`);
           }
         }
       }
@@ -2902,26 +3604,35 @@ export default function App() {
       
       const newStartDate = new Date();
       const newEndDate = addDays(newStartDate, daysDiff);
+      const token = loan.clientAccessToken || generateClientAccessToken();
 
-      await updateDoc(doc(db, 'loans', loan.id), {
-        status: 'Pendente',
+      const activationPatch = {
+        status: 'Pendente' as const,
         date: format(newStartDate, 'yyyy-MM-dd'),
         dueDate: format(newEndDate, 'yyyy-MM-dd'),
-      });
+        clientAccessToken: token,
+        clientPortalEnabled: true
+      };
+      await updateDoc(doc(db, 'loans', loan.id), activationPatch);
+      await syncLoanToPortal({ ...loan, ...activationPatch }, token);
       await logAction('loan_activated', `Empréstimo efetivado para ${loan.clientName}`, loan.clientName, loan.id, loan.capital, undefined, undefined, undefined, loan.clientEmail);
-      if (!loan.asaasChargeId && (loan.clientCpf || loan.clientEmail)) {
+      if (!loan.asaasChargeId && (loan.clientCpf || loan.clientEmail) && user) {
         const chargeAmount = Number(loan.totalBruto) > 0 ? Number(loan.totalBruto) : Number(loan.capital);
-        const asaasRes = await createAsaasCharge({
-          loanId: loan.id,
-          clientName: loan.clientName,
-          clientCpf: loan.clientCpf || undefined,
-          clientPhone: loan.clientPhone || undefined,
-          clientEmail: loan.clientEmail || undefined,
-          amount: chargeAmount,
-          dueDate: format(newEndDate, 'yyyy-MM-dd'),
-          description: `Empréstimo Nexus Private - ${loan.clientName}`,
-          billingType: 'UNDEFINED'
-        });
+        const idToken = await user.getIdToken();
+        const asaasRes = await createAsaasCharge(
+          {
+            loanId: loan.id,
+            clientName: loan.clientName,
+            clientCpf: loan.clientCpf || undefined,
+            clientPhone: loan.clientPhone || undefined,
+            clientEmail: loan.clientEmail || undefined,
+            amount: chargeAmount,
+            dueDate: format(newEndDate, 'yyyy-MM-dd'),
+            description: `Empréstimo Nexus Private - ${loan.clientName}`,
+            billingType: 'UNDEFINED'
+          },
+          idToken
+        );
         if (asaasRes.ok && asaasRes.data) {
           await updateDoc(doc(db, 'loans', loan.id), { ...asaasRes.data }).catch(() => {});
         }
@@ -3020,6 +3731,7 @@ export default function App() {
     const newCapital = Math.round(Math.max(0, payingLoan.capital - amount) * 100) / 100;
     const newTotalBruto = Math.round(newCapital * (1 + (payingLoan.interestRate || 0)) * 100) / 100;
     const newCapitalPago = Math.round(((payingLoan.capitalPago || 0) + amount) * 100) / 100;
+    const newStatus = newCapital === 0 ? 'Pago' : payingLoan.status;
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
@@ -3027,13 +3739,33 @@ export default function App() {
         totalBruto: newTotalBruto,
         capitalPago: newCapitalPago,
         jurosPagos: payingLoan.jurosPagos || 0,
-        status: newCapital === 0 ? 'Pago' : payingLoan.status
+        status: newStatus
       });
       
       const methodText = method ? ` via ${method}` : '';
       const description = `Amortização de capital: ${formatCurrency(amount)}${methodText}`;
 
-      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0, method);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, amount, amount, 0, method, payingLoan.clientEmail, 'AMORTIZACAO');
+
+      await recordPortalPaymentEntry(
+        {
+          ...payingLoan,
+          capital: newCapital,
+          totalBruto: newTotalBruto,
+          capitalPago: newCapitalPago,
+          status: newStatus
+        },
+        {
+          id: action?.id || `pay_${Date.now()}`,
+          operationType: 'AMORTIZACAO',
+          amount,
+          interestAmount: 0,
+          amortizedAmount: amount,
+          paymentMethod: method === 'DINHEIRO' ? 'DINHEIRO' : 'PIX',
+          description,
+          date: action?.date
+        }
+      );
 
       setAmortizationAmount('');
       if (action) setLastAction(action);
@@ -3069,11 +3801,13 @@ export default function App() {
     }
     const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
     const newTotalBruto = Math.round(payingLoan.capital * (1 + (payingLoan.interestRate || 0)) * 100) / 100;
+    const formattedDate = format(today, 'yyyy-MM-dd');
+    const formattedDueDate = format(newDueDate, 'yyyy-MM-dd');
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
-        date: format(today, 'yyyy-MM-dd'),
-        dueDate: format(newDueDate, 'yyyy-MM-dd'),
+        date: formattedDate,
+        dueDate: formattedDueDate,
         totalBruto: newTotalBruto,
         capitalPago: payingLoan.capitalPago || 0,
         jurosPagos: newJurosPagos,
@@ -3082,7 +3816,28 @@ export default function App() {
 
       const methodText = method ? ` via ${method}` : '';
       const description = `Pagamento de juros: ${formatCurrency(interestAmount)}${methodText}`;
-      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method, payingLoan.clientEmail, 'JUROS');
+
+      await recordPortalPaymentEntry(
+        {
+          ...payingLoan,
+          date: formattedDate,
+          dueDate: formattedDueDate,
+          totalBruto: newTotalBruto,
+          jurosPagos: newJurosPagos,
+          status: 'Pago'
+        },
+        {
+          id: action?.id || `pay_${Date.now()}`,
+          operationType: 'JUROS',
+          amount: interestAmount,
+          interestAmount,
+          amortizedAmount: 0,
+          paymentMethod: method === 'DINHEIRO' ? 'DINHEIRO' : 'PIX',
+          description,
+          date: action?.date
+        }
+      );
 
       if (action) setLastAction(action);
     } catch (err) {
@@ -3117,11 +3872,13 @@ export default function App() {
     }
     const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
     const newTotalBruto = Math.round(payingLoan.capital * (1 + (payingLoan.interestRate || 0)) * 100) / 100;
+    const formattedDate = format(today, 'yyyy-MM-dd');
+    const formattedDueDate = format(newDueDate, 'yyyy-MM-dd');
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
-        date: format(today, 'yyyy-MM-dd'),
-        dueDate: format(newDueDate, 'yyyy-MM-dd'),
+        date: formattedDate,
+        dueDate: formattedDueDate,
         status: 'Pago',
         totalBruto: newTotalBruto,
         capitalPago: payingLoan.capitalPago || 0,
@@ -3130,7 +3887,28 @@ export default function App() {
 
       const methodText = method ? ` via ${method}` : '';
       const description = `Renovação com pagamento de juros: ${formatCurrency(interestAmount)}${methodText}`;
-      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, interestAmount, 0, interestAmount, method, payingLoan.clientEmail, 'JUROS');
+
+      await recordPortalPaymentEntry(
+        {
+          ...payingLoan,
+          date: formattedDate,
+          dueDate: formattedDueDate,
+          totalBruto: newTotalBruto,
+          jurosPagos: newJurosPagos,
+          status: 'Pago'
+        },
+        {
+          id: action?.id || `pay_${Date.now()}`,
+          operationType: 'JUROS',
+          amount: interestAmount,
+          interestAmount,
+          amortizedAmount: 0,
+          paymentMethod: method === 'DINHEIRO' ? 'DINHEIRO' : 'PIX',
+          description,
+          date: action?.date
+        }
+      );
 
       if (action) setLastAction(action);
     } catch (err) {
@@ -3145,20 +3923,43 @@ export default function App() {
     const payoffAmount = Math.round(payingLoan.totalBruto * 100) / 100;
     const interestAmount = Math.max(0, Math.round((payingLoan.totalBruto - payingLoan.capital) * 100) / 100);
     const capitalAmount = Math.round(payingLoan.capital * 100) / 100;
+    const newCapitalPago = Math.round(((payingLoan.capitalPago || 0) + capitalAmount) * 100) / 100;
+    const newJurosPagos = Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100;
     
     try {
       await updateDoc(doc(db, 'loans', payingLoan.id), {
         status: 'Pago',
         capital: 0,
         totalBruto: 0,
-        capitalPago: Math.round(((payingLoan.capitalPago || 0) + capitalAmount) * 100) / 100,
-        jurosPagos: Math.round(((payingLoan.jurosPagos || 0) + interestAmount) * 100) / 100
+        capitalPago: newCapitalPago,
+        jurosPagos: newJurosPagos
       });
 
       const methodText = method ? ` via ${method}` : '';
       const description = `Quitação Total: ${formatCurrency(payoffAmount)} (Capital: ${formatCurrency(capitalAmount)} + Juros: ${formatCurrency(interestAmount)}${methodText})`;
       
-      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount, capitalAmount, interestAmount, method);
+      const action = await logAction('payment_received', description, payingLoan.clientName, payingLoan.id, payoffAmount, capitalAmount, interestAmount, method, payingLoan.clientEmail, 'QUITACAO');
+
+      await recordPortalPaymentEntry(
+        {
+          ...payingLoan,
+          status: 'Pago',
+          capital: 0,
+          totalBruto: 0,
+          capitalPago: newCapitalPago,
+          jurosPagos: newJurosPagos
+        },
+        {
+          id: action?.id || `pay_${Date.now()}`,
+          operationType: 'QUITACAO',
+          amount: payoffAmount,
+          interestAmount,
+          amortizedAmount: capitalAmount,
+          paymentMethod: method === 'DINHEIRO' ? 'DINHEIRO' : 'PIX',
+          description,
+          date: action?.date
+        }
+      );
 
       if (action) setLastAction(action);
     } catch (err) {
@@ -3191,6 +3992,9 @@ export default function App() {
 
           const loanToDelete = loans.find(l => l.id === id);
           await deleteDoc(doc(db, 'loans', id));
+          if (loanToDelete?.clientAccessToken) {
+            await deleteDoc(doc(db, 'client_portals', loanToDelete.clientAccessToken)).catch(() => {});
+          }
           
           // Delete associated actions
           const q = query(
@@ -3237,6 +4041,9 @@ export default function App() {
         try {
           const loanToDelete = loans.find(l => l.id === id);
           await deleteDoc(doc(db, 'loans', id));
+          if (loanToDelete?.clientAccessToken) {
+            await deleteDoc(doc(db, 'client_portals', loanToDelete.clientAccessToken)).catch(() => {});
+          }
           
           // Delete associated actions
           const q = query(
@@ -3290,6 +4097,9 @@ export default function App() {
           // We delete each paid loan and its associated actions in parallel
           await Promise.all(paidLoans.map(async (loan) => {
             await deleteDoc(doc(db, 'loans', loan.id));
+            if (loan.clientAccessToken) {
+              await deleteDoc(doc(db, 'client_portals', loan.clientAccessToken)).catch(() => {});
+            }
             
             // Delete associated actions for this loan
             const q = query(
@@ -4065,6 +4875,10 @@ export default function App() {
   // --- Render Helpers ---
   if (cadastroLinkId) {
     return <PublicRegistrationPage linkId={cadastroLinkId} />;
+  }
+
+  if (clientPortalToken) {
+    return <ClientContractPortal token={clientPortalToken} />;
   }
 
   if (!isAuthReady) return (
@@ -5077,6 +5891,7 @@ export default function App() {
                          <span className="text-brand-primary">
                            {activeSettingsSection === 'perfil' && 'Perfil'}
                            {activeSettingsSection === 'recebimentos' && 'Receber'}
+                           {activeSettingsSection === 'asaas' && 'Integração Asaas'}
                            {activeSettingsSection === 'regras' && 'Regras'}
                            {activeSettingsSection === 'mensagem' && 'Mensagem'}
                            {activeSettingsSection === 'aparencia' && 'Aparência'}
@@ -7086,16 +7901,42 @@ export default function App() {
                       {[
                         { id: 'perfil', title: 'Perfil', subtitle: 'Identidade e Branding', icon: <UserIcon className="w-5 h-5" /> },
                         { id: 'recebimentos', title: 'Financeiro', subtitle: 'PIX e Instituição', icon: <Wallet className="w-5 h-5" /> },
+                        {
+                          id: 'asaas',
+                          title: 'Integração Asaas',
+                          subtitle: 'API Key, Ambiente & Webhook',
+                          icon: <CreditCard className="w-5 h-5" />,
+                          badge: asaasServerStatus.configured ? 'Ativo' : 'Pendente',
+                          badgeOk: asaasServerStatus.configured
+                        },
                         { id: 'mensagem', title: 'Cobrança', subtitle: 'Template WhatsApp', icon: <MessageCircle className="w-5 h-5" /> },
                         { id: 'dados', title: 'Ecossistema', subtitle: 'Backup e Segurança', icon: <Database className="w-5 h-5" /> },
                       ].map((item) => (
                         <button
                           key={item.id}
-                          onClick={() => setActiveSettingsSection(item.id as 'menu' | 'perfil' | 'recebimentos' | 'regras' | 'mensagem' | 'aparencia' | 'dados')}
-                          className="flex flex-col items-start gap-4 p-6 rounded-3xl transition-all border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-brand-primary/30 group"
+                          onClick={() => {
+                            setAsaasConfigFeedback(null);
+                            setConfirmClearAsaasConfig(false);
+                            setActiveSettingsSection(item.id as typeof activeSettingsSection);
+                          }}
+                          className="flex flex-col items-start gap-4 p-6 rounded-3xl transition-all border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-brand-primary/30 group relative"
                         >
-                          <div className="p-3 rounded-xl bg-white/5 text-slate-400 group-hover:text-brand-primary transition-colors">
-                            {item.icon}
+                          <div className="w-full flex items-center justify-between gap-2">
+                            <div className="p-3 rounded-xl bg-white/5 text-slate-400 group-hover:text-brand-primary transition-colors">
+                              {item.icon}
+                            </div>
+                            {'badge' in item && item.badge && (
+                              <span
+                                className={cn(
+                                  'px-2.5 py-1 rounded-lg border text-[9px] font-black uppercase tracking-wider',
+                                  item.badgeOk
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                    : 'bg-white/10 text-[#E5E5E5] border-white/25'
+                                )}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
                           </div>
                           <div className="text-left">
                             <h4 className="text-[10px] font-black uppercase tracking-widest text-white">{item.title}</h4>
@@ -7219,8 +8060,8 @@ export default function App() {
                                   </h4>
                                   <p className="text-xs text-slate-400 mt-1">
                                     {asaasServerStatus.configured
-                                      ? `Conectado no servidor (${asaasServerStatus.environment === 'production' ? 'Produção' : 'Sandbox'}). Cobranças geradas automaticamente ao criar/aprovar empréstimos.`
-                                      : 'Configure a variável de ambiente ASAAS_API_KEY nas configurações do servidor para ativar cobranças automáticas.'}
+                                      ? `Sua conta está conectada (${asaasServerStatus.environment === 'production' ? 'Produção' : 'Sandbox'}). Cobranças e portal do cliente utilizam a sua chave Asaas.`
+                                      : 'Configure sua própria API Key do Asaas em Ajustes > Integração Asaas para emitir PIX e boletos nesta conta.'}
                                   </p>
                                 </div>
                                 <span
@@ -7234,6 +8075,15 @@ export default function App() {
                                   {asaasServerStatus.configured ? 'Ativo' : 'Chave Pendente'}
                                 </span>
                               </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setActiveSettingsSection('asaas')}
+                                className="w-full py-2.5 px-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-[10px] font-black uppercase tracking-widest text-[#F5F5F7] flex items-center justify-center gap-2 transition-all"
+                              >
+                                <Settings2 className="w-3.5 h-3.5" />
+                                <span>Gerenciar Integração Asaas da Conta</span>
+                              </button>
 
                               <div className="pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div className="min-w-0">
@@ -7263,6 +8113,294 @@ export default function App() {
                             </div>
                           </div>
                         )}
+                        {activeSettingsSection === 'asaas' && (
+                          <form onSubmit={handleSaveUserAsaasConfig} className="space-y-6">
+                            {/* Account isolation & live status header */}
+                            <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <h4 className="text-xs font-black uppercase tracking-widest text-[#F5F5F7] flex items-center gap-2">
+                                    <ShieldCheck className="w-4 h-4 text-[#F5F5F7]" />
+                                    Conta Asaas Exclusiva
+                                  </h4>
+                                  <p className="text-xs text-slate-400 leading-relaxed">
+                                    As credenciais salvas aqui pertencem exclusivamente ao seu usuário e são usadas nas cobranças dos seus contratos e no Portal do Cliente.
+                                  </p>
+                                </div>
+                                <span
+                                  className={cn(
+                                    'px-2.5 py-1 rounded-lg border text-[10px] font-bold shrink-0',
+                                    asaasServerStatus.configured
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                      : 'bg-white/10 text-[#E5E5E5] border-white/25'
+                                  )}
+                                >
+                                  {asaasServerStatus.configured
+                                    ? asaasServerStatus.environment === 'production'
+                                      ? 'Produção Ativa'
+                                      : 'Sandbox Ativo'
+                                    : 'Não Configurado'}
+                                </span>
+                              </div>
+
+                              {userAsaasConfig?.configured && userAsaasConfig.apiKeyMasked && (
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-white/10 text-[11px] text-slate-400">
+                                  <span>
+                                    Chave atual:{' '}
+                                    <code className="font-mono text-slate-200 bg-black/40 px-2 py-0.5 rounded-md">
+                                      {userAsaasConfig.apiKeyMasked}
+                                    </code>
+                                  </span>
+                                  {userAsaasConfig.lastTestedAt && (
+                                    <span
+                                      className={cn(
+                                        'font-semibold',
+                                        userAsaasConfig.lastTestOk ? 'text-emerald-400' : 'text-rose-400'
+                                      )}
+                                    >
+                                      {userAsaasConfig.lastTestOk ? 'Conexão validada' : 'Falha no último teste'}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {!asaasServerStatus.configured && (
+                              <div className="p-4 rounded-2xl bg-white/[0.04] border border-white/15 flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
+                                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#F5F5F7]" />
+                                <div>
+                                  <p className="font-bold text-white">Chave Asaas ainda não cadastrada</p>
+                                  <p className="text-slate-400 mt-0.5">
+                                    Insira sua API Key do Asaas abaixo e clique em Salvar Configuração para habilitar cobranças PIX/Boleto e o checkout automático do Portal do Cliente.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Environment Selector */}
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block">
+                                Ambiente Asaas
+                              </label>
+                              <div className="grid grid-cols-2 gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setAsaasEnvInput('sandbox')}
+                                  className={cn(
+                                    'p-3.5 rounded-2xl border text-left transition-all',
+                                    asaasEnvInput === 'sandbox'
+                                      ? 'bg-white/10 border-[#F5F5F7] text-white'
+                                      : 'bg-white/[0.02] border-white/10 text-slate-400 hover:border-white/25'
+                                  )}
+                                >
+                                  <span className="text-xs font-black uppercase tracking-wider block">Sandbox</span>
+                                  <span className="text-[10px] text-slate-400 block mt-0.5">Ambiente de testes</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAsaasEnvInput('production')}
+                                  className={cn(
+                                    'p-3.5 rounded-2xl border text-left transition-all',
+                                    asaasEnvInput === 'production'
+                                      ? 'bg-white/10 border-[#F5F5F7] text-white'
+                                      : 'bg-white/[0.02] border-white/10 text-slate-400 hover:border-white/25'
+                                  )}
+                                >
+                                  <span className="text-xs font-black uppercase tracking-wider block">Produção</span>
+                                  <span className="text-[10px] text-slate-400 block mt-0.5">Cobranças reais PIX/Boleto</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Asaas API Key */}
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block">
+                                API Key do Asaas {userAsaasConfig?.configured && userAsaasConfig.source === 'user' ? '(Opcional para manter atual)' : ''}
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type={showAsaasApiKey ? 'text' : 'password'}
+                                  value={asaasApiKeyInput}
+                                  onChange={(e) => setAsaasApiKeyInput(e.target.value)}
+                                  autoComplete="off"
+                                  spellCheck={false}
+                                  placeholder={
+                                    userAsaasConfig?.configured && userAsaasConfig.source === 'user'
+                                      ? `Chave salva (${userAsaasConfig.apiKeyMasked}) · Cole nova chave para substituir`
+                                      : '$aact_... (cole sua API Key do painel Asaas)'
+                                  }
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-5 pr-12 py-4 text-xs font-mono text-white focus:border-[#F5F5F7] focus:outline-none transition-all placeholder:text-slate-600"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAsaasApiKey((v) => !v)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-400 hover:text-white transition-colors"
+                                  aria-label={showAsaasApiKey ? 'Ocultar API Key' : 'Mostrar API Key'}
+                                >
+                                  {showAsaasApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Webhook Token */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2 ml-1">
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                  Webhook Token (Segurança)
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const bytes = new Uint8Array(16);
+                                    crypto.getRandomValues(bytes);
+                                    const token =
+                                      'nxwh_' +
+                                      Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+                                    setAsaasWebhookTokenInput(token);
+                                    setShowAsaasWebhookToken(true);
+                                  }}
+                                  className="text-[10px] font-bold text-[#F5F5F7] hover:underline flex items-center gap-1"
+                                >
+                                  <KeyRound className="w-3 h-3" />
+                                  Gerar Token
+                                </button>
+                              </div>
+                              <div className="relative">
+                                <input
+                                  type={showAsaasWebhookToken ? 'text' : 'password'}
+                                  value={asaasWebhookTokenInput}
+                                  onChange={(e) => setAsaasWebhookTokenInput(e.target.value)}
+                                  autoComplete="off"
+                                  spellCheck={false}
+                                  placeholder={
+                                    userAsaasConfig?.hasWebhookToken
+                                      ? `Token configurado (${userAsaasConfig.webhookTokenMasked}) · Cole para substituir`
+                                      : 'Opcional · Defina um token para validar webhooks no Asaas'
+                                  }
+                                  className="w-full bg-white/5 border border-white/10 rounded-2xl pl-5 pr-12 py-4 text-xs font-mono text-white focus:border-[#F5F5F7] focus:outline-none transition-all placeholder:text-slate-600"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAsaasWebhookToken((v) => !v)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl text-slate-400 hover:text-white transition-colors"
+                                  aria-label={showAsaasWebhookToken ? 'Ocultar Token' : 'Mostrar Token'}
+                                >
+                                  {showAsaasWebhookToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Dedicated Webhook URL */}
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block">
+                                Sua URL Exclusiva de Webhook (Cole no Painel do Asaas)
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  readOnly
+                                  value={
+                                    userAsaasConfig?.webhookUrl ||
+                                    (typeof window !== 'undefined' && user
+                                      ? `${window.location.origin}/api/asaas/webhook/${user.uid}`
+                                      : '')
+                                  }
+                                  className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-4 py-3.5 text-[11px] font-mono text-slate-300 outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const urlToCopy =
+                                      userAsaasConfig?.webhookUrl ||
+                                      (typeof window !== 'undefined' && user
+                                        ? `${window.location.origin}/api/asaas/webhook/${user.uid}`
+                                        : '');
+                                    if (!urlToCopy) return;
+                                    navigator.clipboard.writeText(urlToCopy);
+                                    setCopiedAsaasWebhookUrl(true);
+                                    setTimeout(() => setCopiedAsaasWebhookUrl(false), 2500);
+                                  }}
+                                  className="px-4 py-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-[10px] font-black uppercase tracking-wider text-white flex items-center gap-1.5 shrink-0 transition-all"
+                                >
+                                  {copiedAsaasWebhookUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                  <span>{copiedAsaasWebhookUrl ? 'Copiado' : 'Copiar'}</span>
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-slate-500 ml-1 leading-relaxed">
+                                No Asaas, acesse <strong className="text-slate-300">Integrações &gt; Webhooks</strong> e cadastre esta URL com o mesmo token acima (cabeçalho <code className="text-slate-300">asaas-access-token</code>) para dar baixa automática em pagamentos PIX.
+                              </p>
+                            </div>
+
+                            {asaasConfigFeedback && (
+                              <div
+                                className={cn(
+                                  'p-4 rounded-2xl border text-xs font-semibold flex items-start gap-2.5',
+                                  asaasConfigFeedback.type === 'success'
+                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                                )}
+                              >
+                                {asaasConfigFeedback.type === 'success' ? (
+                                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                                ) : (
+                                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                )}
+                                <span>{asaasConfigFeedback.text}</span>
+                              </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="space-y-3 pt-2">
+                              <button
+                                type="submit"
+                                disabled={isSavingAsaasConfig || isTestingAsaasConfig || isClearingAsaasConfig}
+                                className="w-full py-4 bg-brand-primary text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.25em] hover:brightness-110 active:scale-[0.99] transition-all shadow-lg shadow-brand-primary/20 disabled:opacity-50"
+                              >
+                                {isSavingAsaasConfig ? 'Salvando Configuração...' : 'Salvar Configuração Asaas'}
+                              </button>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <button
+                                  type="button"
+                                  disabled={isSavingAsaasConfig || isTestingAsaasConfig || isClearingAsaasConfig}
+                                  onClick={handleTestUserAsaasConfig}
+                                  className="py-3.5 px-4 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-[10px] font-black uppercase tracking-widest text-white flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                >
+                                  <RefreshCw className={cn('w-3.5 h-3.5', isTestingAsaasConfig && 'animate-spin')} />
+                                  <span>{isTestingAsaasConfig ? 'Testando...' : 'Testar Conexão'}</span>
+                                </button>
+
+                                {confirmClearAsaasConfig ? (
+                                  <button
+                                    type="button"
+                                    disabled={isClearingAsaasConfig}
+                                    onClick={handleClearUserAsaasConfig}
+                                    className="py-3.5 px-4 rounded-2xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-[10px] font-black uppercase tracking-widest text-rose-300 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>{isClearingAsaasConfig ? 'Removendo...' : 'Confirmar Remoção'}</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      isSavingAsaasConfig ||
+                                      isTestingAsaasConfig ||
+                                      isClearingAsaasConfig ||
+                                      userAsaasConfig?.source !== 'user'
+                                    }
+                                    onClick={() => setConfirmClearAsaasConfig(true)}
+                                    className="py-3.5 px-4 rounded-2xl bg-white/[0.03] hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/30 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-rose-300 flex items-center justify-center gap-2 transition-all disabled:opacity-40"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Limpar Configuração</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </form>
+                        )}
+
                         {activeSettingsSection === 'mensagem' && (
                           <div className="space-y-8">
                             {/* Standard Template */}
@@ -7417,19 +8555,29 @@ export default function App() {
                           </div>
                         )}
 
-                        <button 
-                          onClick={() => {
-                            if (activeSettingsSection === 'perfil' || activeSettingsSection === 'recebimentos') {
-                              handleSaveProfile();
-                            } else if (activeSettingsSection === 'regras' || activeSettingsSection === 'mensagem' || activeSettingsSection === 'aparencia') {
-                              handleSaveSystemSettings(systemSettings);
-                            }
-                            setActiveSettingsSection('menu');
-                          }}
-                          className="w-full mt-8 py-5 bg-brand-primary text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-brand-primary/20"
-                        >
-                          Salvar Alterações e Voltar
-                        </button>
+                        {activeSettingsSection === 'asaas' ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveSettingsSection('menu')}
+                            className="w-full mt-4 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-2xl font-black text-[10px] uppercase tracking-[0.25em] transition-all"
+                          >
+                            Voltar aos Ajustes
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => {
+                              if (activeSettingsSection === 'perfil' || activeSettingsSection === 'recebimentos') {
+                                handleSaveProfile();
+                              } else if (activeSettingsSection === 'regras' || activeSettingsSection === 'mensagem' || activeSettingsSection === 'aparencia') {
+                                handleSaveSystemSettings(systemSettings);
+                              }
+                              setActiveSettingsSection('menu');
+                            }}
+                            className="w-full mt-8 py-5 bg-brand-primary text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-brand-primary/20"
+                          >
+                            Salvar Alterações e Voltar
+                          </button>
+                        )}
                       </div>
                     </motion.div>
                   )}
@@ -7797,6 +8945,24 @@ export default function App() {
                                   {loan.status !== 'Agendado' && (
                                     <>
                                       <button
+                                        type="button"
+                                        onClick={() => handleCopyClientAppLink(loan)}
+                                        className={cn(
+                                          "flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 whitespace-nowrap",
+                                          copiedClientAppLoanId === loan.id
+                                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                            : "bg-white/10 text-[#F5F5F7] border-white/20 hover:bg-[#F5F5F7] hover:text-black"
+                                        )}
+                                        title="Copiar link exclusivo do aplicativo do cliente para envio via WhatsApp"
+                                      >
+                                        {copiedClientAppLoanId === loan.id ? (
+                                          <Check className="w-3.5 h-3.5 shrink-0" />
+                                        ) : (
+                                          <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                                        )}
+                                        <span>{copiedClientAppLoanId === loan.id ? 'Link Copiado!' : 'Copiar Link do App do Cliente'}</span>
+                                      </button>
+                                      <button
                                         onClick={() => setAsaasModalLoan(loan)}
                                         className={cn(
                                           "p-2 rounded-xl border transition-all active:scale-95",
@@ -7953,6 +9119,23 @@ export default function App() {
                                   <span>Amortizar</span>
                                 </button>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyClientAppLink(loan)}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95",
+                                  copiedClientAppLoanId === loan.id
+                                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                    : "bg-white/10 text-[#F5F5F7] border-white/15 hover:bg-[#F5F5F7] hover:text-black"
+                                )}
+                              >
+                                {copiedClientAppLoanId === loan.id ? (
+                                  <Check className="w-4 h-4" />
+                                ) : (
+                                  <Smartphone className="w-4 h-4" />
+                                )}
+                                <span>{copiedClientAppLoanId === loan.id ? 'Link Copiado!' : 'Copiar Link do App do Cliente'}</span>
+                              </button>
                             </>
                           ) : (
                             <>
@@ -8115,6 +9298,25 @@ export default function App() {
                                   )}
                                 </button>
                           </div>
+                          {loan.status !== 'Agendado' && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyClientAppLink(loan)}
+                              className={cn(
+                                "w-full flex items-center justify-center gap-2 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all active:scale-95",
+                                copiedClientAppLoanId === loan.id
+                                  ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                  : "bg-white/10 text-[#F5F5F7] border-white/15 hover:bg-[#F5F5F7] hover:text-black"
+                              )}
+                            >
+                              {copiedClientAppLoanId === loan.id ? (
+                                <Check className="w-4 h-4" />
+                              ) : (
+                                <Smartphone className="w-4 h-4" />
+                              )}
+                              <span>{copiedClientAppLoanId === loan.id ? 'Link Copiado!' : 'Copiar Link do App do Cliente'}</span>
+                            </button>
+                          )}
                             </>
                           )}
                         </div>
@@ -8362,6 +9564,22 @@ export default function App() {
                         <option value="BOLETO">Somente Boleto (Gerar Automático)</option>
                         <option value="NONE">Não gerar cobrança agora</option>
                       </select>
+                      {!asaasServerStatus.configured && newLoan.asaasBillingType !== 'NONE' && (
+                        <p className="text-[11px] text-slate-400 px-1 leading-relaxed">
+                          Sua chave Asaas ainda não está cadastrada. O empréstimo será salvo normalmente e você poderá ativar o Asaas em{' '}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAdding(false);
+                              changeTab('Configurações');
+                              setActiveSettingsSection('asaas');
+                            }}
+                            className="text-[#F5F5F7] font-bold underline"
+                          >
+                            Ajustes &gt; Integração Asaas
+                          </button>.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -8679,9 +9897,28 @@ export default function App() {
                   >
                     {/* Loan Summary Section */}
                     <div className="glass-card p-6 bg-white/[0.02] border-white/[0.05] space-y-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-1 h-4 bg-brand-primary rounded-full shadow-[0_0_8px_rgba(99,102,241,0.4)]" />
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo do Empréstimo</h3>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-brand-primary rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]" />
+                          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Resumo do Empréstimo</h3>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyClientAppLink(payingLoan)}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95",
+                            copiedClientAppLoanId === payingLoan.id
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                              : "bg-white/10 text-[#F5F5F7] border-white/20 hover:bg-[#F5F5F7] hover:text-black"
+                          )}
+                        >
+                          {copiedClientAppLoanId === payingLoan.id ? (
+                            <Check className="w-3 h-3" />
+                          ) : (
+                            <Smartphone className="w-3 h-3" />
+                          )}
+                          <span>{copiedClientAppLoanId === payingLoan.id ? 'Link Copiado!' : 'Copiar Link do App do Cliente'}</span>
+                        </button>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
@@ -9020,6 +10257,24 @@ export default function App() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleCopyClientAppLink(loan)}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-2.5 py-2 rounded-xl transition-all active:scale-95 border text-[9px] font-black uppercase tracking-wider whitespace-nowrap",
+                                  copiedClientAppLoanId === loan.id
+                                    ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                    : "bg-white/10 text-[#F5F5F7] border-white/20 hover:bg-[#F5F5F7] hover:text-black"
+                                )}
+                                title="Copiar link exclusivo do aplicativo do cliente para envio via WhatsApp"
+                              >
+                                {copiedClientAppLoanId === loan.id ? (
+                                  <Check className="w-3.5 h-3.5 shrink-0" />
+                                ) : (
+                                  <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                                <span>{copiedClientAppLoanId === loan.id ? 'Link Copiado!' : 'Copiar Link do App do Cliente'}</span>
+                              </button>
                               <button 
                                 onClick={() => {
                                   setViewingClientLoans(null);
@@ -10114,9 +11369,73 @@ export default function App() {
           loan={asaasModalLoan}
           isDark={isDark}
           canGenerate={true}
+          asaasConfigured={asaasServerStatus.configured}
+          onOpenAsaasSettings={() => {
+            setAsaasModalLoan(null);
+            changeTab('Configurações');
+            setActiveSettingsSection('asaas');
+          }}
           onClose={() => setAsaasModalLoan(null)}
           onChargeUpdated={handleAttachAsaasCharge}
         />
+      )}
+
+      {/* Toast flutuante para envio direto do Link Exclusivo do App do Cliente via WhatsApp */}
+      {clientAppShareToast && (
+        <div className="fixed bottom-24 lg:bottom-6 right-4 sm:right-6 z-[180] w-[calc(100vw-2rem)] sm:w-96 rounded-[24px] bg-[#0B0B0D]/95 border border-white/15 shadow-[0_24px_60px_rgba(0,0,0,0.8)] backdrop-blur-xl p-4 sm:p-5 space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-white uppercase tracking-wider truncate">
+                  Link do App do Cliente copiado!
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  Contrato exclusivo de {clientAppShareToast.clientName}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setClientAppShareToast(null)}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/10 transition-colors"
+              title="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/10 text-[10px] font-mono text-slate-300 truncate">
+            {clientAppShareToast.url}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <a
+              href={buildWhatsAppPortalShareHref(
+                clientAppShareToast.clientName,
+                clientAppShareToast.clientPhone,
+                clientAppShareToast.url
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Enviar via WhatsApp
+            </a>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(clientAppShareToast.url).catch(() => {});
+              }}
+              className="px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-widest border border-white/10 transition-all"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
       </div>
 

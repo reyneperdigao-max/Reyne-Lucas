@@ -61,6 +61,8 @@
         "asaasPixQrCode": { "type": "string", "maxLength": 200000, "description": "Asaas Pix QR code base64 image." },
         "asaasBoletoLine": { "type": "string", "maxLength": 200, "description": "Asaas boleto digitable line." },
         "asaasLastSyncAt": { "type": "string", "format": "date-time", "maxLength": 50, "description": "Last Asaas sync timestamp." },
+        "clientAccessToken": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^cli_[a-zA-Z0-9_\\-]+$", "description": "Exclusive cryptographic access token for the isolated contract client portal." },
+        "clientPortalEnabled": { "type": "boolean", "description": "Whether the exclusive client portal link is active for this contract." },
         "date": {
           "type": "string",
           "format": "date",
@@ -137,6 +139,8 @@
         "capitalAmount": { "type": "number" },
         "interestAmount": { "type": "number" },
         "paymentMethod": { "type": "string", "enum": ["DINHEIRO", "PIX"] },
+        "operationType": { "type": "string", "enum": ["JUROS", "AMORTIZACAO", "QUITACAO", "PAGAMENTO"] },
+        "asaasChargeId": { "type": "string", "maxLength": 128 },
         "clientName": { "type": "string" },
         "clientEmail": { "type": "string", "maxLength": 256 },
         "clientUid": { "type": "string", "maxLength": 128 },
@@ -233,6 +237,115 @@
         "monthlyIncome", "requestedAmount", "receivingType", "accountHolder",
         "receivingDetails", "status", "submittedAt"
       ]
+    },
+    "client_portal": {
+      "title": "Isolated Client Contract Portal",
+      "description": "Token-isolated non-PII contract view for a single end-client contract link.",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^cli_[a-zA-Z0-9_\\-]+$" },
+        "loanId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "lenderName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "capital": { "type": "number" },
+        "interestRate": { "type": "number" },
+        "periodInterest": { "type": "number" },
+        "totalBruto": { "type": "number" },
+        "date": { "type": "string", "maxLength": 20 },
+        "dueDate": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["Pendente", "Pago", "Atrasado", "Agendado"] },
+        "capitalPago": { "type": "number" },
+        "jurosPagos": { "type": "number" },
+        "asaasCustomerId": { "type": "string", "maxLength": 128 },
+        "active": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": [
+        "token", "loanId", "uid", "lenderName", "clientName", "capital",
+        "interestRate", "periodInterest", "totalBruto", "date", "dueDate",
+        "status", "capitalPago", "jurosPagos", "active", "updatedAt"
+      ]
+    },
+    "client_portal_charge": {
+      "title": "Client Portal PIX Charge",
+      "description": "Tracks a generated Asaas PIX charge and its operation breakdown (JUROS, AMORTIZACAO, QUITACAO).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "token": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^cli_[a-zA-Z0-9_\\-]+$" },
+        "loanId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "operationType": { "type": "string", "enum": ["JUROS", "AMORTIZACAO", "QUITACAO"] },
+        "totalAmount": { "type": "number" },
+        "interestAmount": { "type": "number" },
+        "amortizedAmount": { "type": "number" },
+        "principalBefore": { "type": "number" },
+        "projectedNewCapital": { "type": "number" },
+        "dueDateBefore": { "type": "string", "maxLength": 20 },
+        "dueDateAfter": { "type": "string", "maxLength": 20 },
+        "billingType": { "type": "string", "enum": ["PIX"] },
+        "asaasChargeId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "asaasStatus": { "type": "string", "maxLength": 40 },
+        "asaasPixPayload": { "type": "string", "maxLength": 1000 },
+        "asaasPixQrCode": { "type": "string", "maxLength": 200000 },
+        "asaasInvoiceUrl": { "type": "string", "maxLength": 500 },
+        "asaasExpirationDate": { "type": "string", "maxLength": 50 },
+        "settled": { "type": "boolean" },
+        "settledAt": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": [
+        "id", "token", "loanId", "uid", "operationType", "totalAmount",
+        "interestAmount", "amortizedAmount", "principalBefore", "projectedNewCapital",
+        "dueDateBefore", "dueDateAfter", "billingType", "asaasChargeId",
+        "asaasStatus", "settled", "createdAt", "updatedAt"
+      ]
+    },
+    "client_portal_payment": {
+      "title": "Client Portal Payment History Item",
+      "description": "Verified payment record visible inside an isolated contract portal.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "token": { "type": "string", "minLength": 24, "maxLength": 128, "pattern": "^cli_[a-zA-Z0-9_\\-]+$" },
+        "loanId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "operationType": { "type": "string", "enum": ["JUROS", "AMORTIZACAO", "QUITACAO", "PAGAMENTO"] },
+        "amount": { "type": "number" },
+        "interestAmount": { "type": "number" },
+        "amortizedAmount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["PIX", "DINHEIRO"] },
+        "description": { "type": "string", "maxLength": 500 },
+        "asaasChargeId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": [
+        "id", "token", "loanId", "uid", "operationType", "amount",
+        "interestAmount", "amortizedAmount", "paymentMethod", "description", "date"
+      ]
+    },
+    "user_asaas_integration": {
+      "title": "User Asaas Integration Metadata",
+      "description": "Per-user non-secret Asaas integration state and masked metadata stored isolated per account.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "configured": { "type": "boolean" },
+        "environment": { "type": "string", "enum": ["sandbox", "production"] },
+        "apiKeyMasked": { "type": "string", "maxLength": 40 },
+        "hasWebhookToken": { "type": "boolean" },
+        "webhookTokenMasked": { "type": "string", "maxLength": 40 },
+        "webhookUrl": { "type": "string", "maxLength": 300 },
+        "lastTestedAt": { "type": "string", "format": "date-time", "maxLength": 50 },
+        "lastTestOk": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time", "maxLength": 50 }
+      },
+      "required": [
+        "uid", "configured", "environment", "apiKeyMasked",
+        "hasWebhookToken", "webhookUrl", "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -247,6 +360,10 @@
     "/users/{userId}/settings/{settingId}": {
       "schema": "system_settings",
       "description": "User-specific settings (e.g. system)."
+    },
+    "/users/{userId}/integrations/{integrationId}": {
+      "schema": "user_asaas_integration",
+      "description": "Per-user isolated Asaas integration metadata (non-secret status, environment, masked suffix)."
     },
     "/actions/{actionId}": {
       "schema": "system_action",
@@ -263,6 +380,19 @@
     "/client_registrations/{registrationId}": {
       "schema": "client_registration",
       "description": "Client credit registration requests submitted online."
+    },
+    "/client_portals/{token}": {
+      "schema": "client_portal",
+      "description": "Token-isolated client portal documents mapped 1:1 to a single contract."
+    },
+    "/client_portals/{token}/charges/{chargeId}": {
+      "schema": "client_portal_charge",
+      "description": "PIX charges with operation breakdown generated for a contract portal."
+    },
+    "/client_portals/{token}/payments/{paymentId}": {
+      "schema": "client_portal_payment",
+      "description": "Payment history ledger for a single contract portal."
     }
   }
 }
+

@@ -34,6 +34,10 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    function isValidPortalToken(token) {
+      return token is string && token.size() >= 24 && token.size() <= 128 && token.matches('^cli_[a-zA-Z0-9_\\-]+$');
+    }
+
     function incoming() {
       return request.resource.data;
     }
@@ -102,7 +106,9 @@ service cloud.firestore {
              (!('asaasPixPayload' in data) || (data.asaasPixPayload == null || (data.asaasPixPayload is string && data.asaasPixPayload.size() <= 1000))) &&
              (!('asaasPixQrCode' in data) || (data.asaasPixQrCode == null || (data.asaasPixQrCode is string && data.asaasPixQrCode.size() <= 200000))) &&
              (!('asaasBoletoLine' in data) || (data.asaasBoletoLine == null || (data.asaasBoletoLine is string && data.asaasBoletoLine.size() <= 200))) &&
-             (!('asaasLastSyncAt' in data) || (data.asaasLastSyncAt == null || (data.asaasLastSyncAt is string && data.asaasLastSyncAt.size() <= 50)));
+             (!('asaasLastSyncAt' in data) || (data.asaasLastSyncAt == null || (data.asaasLastSyncAt is string && data.asaasLastSyncAt.size() <= 50))) &&
+             (!('clientAccessToken' in data) || (data.clientAccessToken == null || isValidPortalToken(data.clientAccessToken))) &&
+             (!('clientPortalEnabled' in data) || (data.clientPortalEnabled == null || data.clientPortalEnabled is bool));
     }
 
     function isCreatedAtImmutable() {
@@ -128,6 +134,8 @@ service cloud.firestore {
              (!('capitalAmount' in data) || (data.capitalAmount == null || data.capitalAmount is number)) &&
              (!('interestAmount' in data) || (data.interestAmount == null || data.interestAmount is number)) &&
              (!('paymentMethod' in data) || (data.paymentMethod == null || data.paymentMethod in ['DINHEIRO', 'PIX'])) &&
+             (!('operationType' in data) || (data.operationType == null || data.operationType in ['JUROS', 'AMORTIZACAO', 'QUITACAO', 'PAGAMENTO'])) &&
+             (!('asaasChargeId' in data) || (data.asaasChargeId == null || (data.asaasChargeId is string && data.asaasChargeId.size() <= 128))) &&
              (!('confirmed' in data) || (data.confirmed == null || data.confirmed is bool));
     }
 
@@ -203,6 +211,131 @@ service cloud.firestore {
              (!('loanId' in data) || (data.loanId is string && data.loanId.size() <= 128));
     }
 
+    function isValidClientPortal(data) {
+      let requiredFields = [
+        'token', 'loanId', 'uid', 'lenderName', 'clientName', 'capital',
+        'interestRate', 'periodInterest', 'totalBruto', 'date', 'dueDate',
+        'status', 'capitalPago', 'jurosPagos', 'active', 'updatedAt'
+      ];
+      let allowedFields = [
+        'token', 'loanId', 'uid', 'lenderName', 'clientName', 'capital',
+        'interestRate', 'periodInterest', 'totalBruto', 'date', 'dueDate',
+        'status', 'capitalPago', 'jurosPagos', 'asaasCustomerId', 'active', 'updatedAt'
+      ];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             isValidPortalToken(data.token) &&
+             isValidId(data.loanId) &&
+             data.uid is string && data.uid == request.auth.uid && data.uid.size() <= 128 &&
+             data.lenderName is string && data.lenderName.size() > 0 && data.lenderName.size() <= 100 &&
+             data.clientName is string && data.clientName.size() > 0 && data.clientName.size() <= 120 &&
+             data.capital is number && data.capital >= 0 &&
+             data.interestRate is number && data.interestRate >= 0 &&
+             data.periodInterest is number && data.periodInterest >= 0 &&
+             data.totalBruto is number && data.totalBruto >= 0 &&
+             data.date is string && data.date.size() <= 20 &&
+             data.dueDate is string && data.dueDate.size() <= 20 &&
+             data.status in ['Pendente', 'Pago', 'Atrasado', 'Agendado'] &&
+             data.capitalPago is number && data.capitalPago >= 0 &&
+             data.jurosPagos is number && data.jurosPagos >= 0 &&
+             (!('asaasCustomerId' in data) || (data.asaasCustomerId == null || (data.asaasCustomerId is string && data.asaasCustomerId.size() <= 128))) &&
+             data.active is bool &&
+             data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    function isValidPortalCharge(data, portalToken) {
+      let requiredFields = [
+        'id', 'token', 'loanId', 'uid', 'operationType', 'totalAmount',
+        'interestAmount', 'amortizedAmount', 'principalBefore', 'projectedNewCapital',
+        'dueDateBefore', 'dueDateAfter', 'billingType', 'asaasChargeId',
+        'asaasStatus', 'settled', 'createdAt', 'updatedAt'
+      ];
+      let allowedFields = [
+        'id', 'token', 'loanId', 'uid', 'operationType', 'totalAmount',
+        'interestAmount', 'amortizedAmount', 'principalBefore', 'projectedNewCapital',
+        'dueDateBefore', 'dueDateAfter', 'billingType', 'asaasChargeId',
+        'asaasStatus', 'asaasPixPayload', 'asaasPixQrCode', 'asaasInvoiceUrl',
+        'asaasExpirationDate', 'settled', 'settledAt', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             isValidId(data.id) &&
+             data.token == portalToken &&
+             isValidPortalToken(data.token) &&
+             isValidId(data.loanId) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+             data.operationType in ['JUROS', 'AMORTIZACAO', 'QUITACAO'] &&
+             data.totalAmount is number && data.totalAmount > 0 &&
+             data.interestAmount is number && data.interestAmount >= 0 &&
+             data.amortizedAmount is number && data.amortizedAmount >= 0 &&
+             data.principalBefore is number && data.principalBefore >= 0 &&
+             data.projectedNewCapital is number && data.projectedNewCapital >= 0 &&
+             data.dueDateBefore is string && data.dueDateBefore.size() <= 20 &&
+             data.dueDateAfter is string && data.dueDateAfter.size() <= 20 &&
+             data.billingType == 'PIX' &&
+             data.asaasChargeId is string && data.asaasChargeId.size() > 0 && data.asaasChargeId.size() <= 128 &&
+             data.asaasStatus is string && data.asaasStatus.size() > 0 && data.asaasStatus.size() <= 40 &&
+             (!('asaasPixPayload' in data) || (data.asaasPixPayload == null || (data.asaasPixPayload is string && data.asaasPixPayload.size() <= 1000))) &&
+             (!('asaasPixQrCode' in data) || (data.asaasPixQrCode == null || (data.asaasPixQrCode is string && data.asaasPixQrCode.size() <= 200000))) &&
+             (!('asaasInvoiceUrl' in data) || (data.asaasInvoiceUrl == null || (data.asaasInvoiceUrl is string && data.asaasInvoiceUrl.size() <= 500))) &&
+             (!('asaasExpirationDate' in data) || (data.asaasExpirationDate == null || (data.asaasExpirationDate is string && data.asaasExpirationDate.size() <= 50))) &&
+             data.settled is bool &&
+             (!('settledAt' in data) || (data.settledAt == null || (data.settledAt is string && data.settledAt.size() <= 50))) &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    function isValidPortalPayment(data, portalToken) {
+      let requiredFields = [
+        'id', 'token', 'loanId', 'uid', 'operationType', 'amount',
+        'interestAmount', 'amortizedAmount', 'paymentMethod', 'description', 'date'
+      ];
+      let allowedFields = [
+        'id', 'token', 'loanId', 'uid', 'operationType', 'amount',
+        'interestAmount', 'amortizedAmount', 'paymentMethod', 'description',
+        'asaasChargeId', 'date'
+      ];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             isValidId(data.id) &&
+             data.token == portalToken &&
+             isValidPortalToken(data.token) &&
+             isValidId(data.loanId) &&
+             data.uid is string && data.uid == request.auth.uid && data.uid.size() <= 128 &&
+             data.operationType in ['JUROS', 'AMORTIZACAO', 'QUITACAO', 'PAGAMENTO'] &&
+             data.amount is number && data.amount > 0 &&
+             data.interestAmount is number && data.interestAmount >= 0 &&
+             data.amortizedAmount is number && data.amortizedAmount >= 0 &&
+             data.paymentMethod in ['PIX', 'DINHEIRO'] &&
+             data.description is string && data.description.size() <= 500 &&
+             (!('asaasChargeId' in data) || (data.asaasChargeId == null || (data.asaasChargeId is string && data.asaasChargeId.size() <= 128))) &&
+             data.date is string && data.date.size() <= 50;
+    }
+
+    function isValidAsaasIntegration(data, userId) {
+      let requiredFields = [
+        'uid', 'configured', 'environment', 'apiKeyMasked',
+        'hasWebhookToken', 'webhookUrl', 'updatedAt'
+      ];
+      let allowedFields = [
+        'uid', 'configured', 'environment', 'apiKeyMasked',
+        'hasWebhookToken', 'webhookTokenMasked', 'webhookUrl',
+        'lastTestedAt', 'lastTestOk', 'updatedAt'
+      ];
+      return data.keys().hasAll(requiredFields) &&
+             data.keys().hasOnly(allowedFields) &&
+             data.uid is string && data.uid == userId && data.uid == request.auth.uid && data.uid.size() <= 128 &&
+             data.configured is bool &&
+             data.environment in ['sandbox', 'production'] &&
+             data.apiKeyMasked is string && data.apiKeyMasked.size() <= 40 &&
+             data.hasWebhookToken is bool &&
+             (!('webhookTokenMasked' in data) || (data.webhookTokenMasked == null || (data.webhookTokenMasked is string && data.webhookTokenMasked.size() <= 40))) &&
+             data.webhookUrl is string && data.webhookUrl.size() <= 300 &&
+             (!('lastTestedAt' in data) || (data.lastTestedAt == null || (data.lastTestedAt is string && data.lastTestedAt.size() <= 50))) &&
+             (!('lastTestOk' in data) || (data.lastTestOk == null || data.lastTestOk is bool)) &&
+             data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
     // ==========================================
     // Collections
     // ==========================================
@@ -221,6 +354,16 @@ service cloud.firestore {
         allow create, update: if isOwner(userId) && isValidSystemSettings(incoming()) && isValidId(settingId);
         allow delete: if isOwner(userId) && isValidId(settingId);
       }
+
+      match /integrations/{integrationId} {
+        // Strictly owner-only: no cross-user or third-party access
+        allow get, list: if isVerifiedUser() && isOwner(userId) && isValidId(userId);
+        allow create, update: if isVerifiedUser() && isOwner(userId) && isValidId(userId) &&
+                              isValidId(integrationId) && integrationId == 'asaas' &&
+                              isValidAsaasIntegration(incoming(), userId);
+        allow delete: if isVerifiedUser() && isOwner(userId) && isValidId(userId) &&
+                      isValidId(integrationId) && integrationId == 'asaas';
+      }
     }
 
     match /loans/{loanId} {
@@ -234,8 +377,10 @@ service cloud.firestore {
                       (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'capital', 'totalBruto', 'capitalPago', 'jurosPagos', 'date', 'dueDate'])) ||
                       // Action: Asaas Charge Sync/Update
                       (incoming().diff(existing()).affectedKeys().hasOnly(['asaasChargeId', 'asaasCustomerId', 'asaasBillingType', 'asaasStatus', 'asaasInvoiceUrl', 'asaasBankSlipUrl', 'asaasPixPayload', 'asaasPixQrCode', 'asaasBoletoLine', 'asaasLastSyncAt'])) ||
+                      // Action: Client Portal Token Provision/Toggle
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientAccessToken', 'clientPortalEnabled'])) ||
                       // Action: General Info Edit
-                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'clientCpf', 'clientEmail', 'clientUid', 'clientProfession', 'clientMonthlyIncome', 'clientReceivingDetails', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos', 'asaasChargeId', 'asaasCustomerId', 'asaasBillingType', 'asaasStatus', 'asaasInvoiceUrl', 'asaasBankSlipUrl', 'asaasPixPayload', 'asaasPixQrCode', 'asaasBoletoLine', 'asaasLastSyncAt']))
+                      (incoming().diff(existing()).affectedKeys().hasOnly(['clientName', 'clientPhone', 'clientAddress', 'clientCpf', 'clientEmail', 'clientUid', 'clientProfession', 'clientMonthlyIncome', 'clientReceivingDetails', 'clientAccessToken', 'clientPortalEnabled', 'date', 'dueDate', 'capital', 'interestRate', 'totalBruto', 'status', 'capitalPago', 'jurosPagos', 'asaasChargeId', 'asaasCustomerId', 'asaasBillingType', 'asaasStatus', 'asaasInvoiceUrl', 'asaasBankSlipUrl', 'asaasPixPayload', 'asaasPixQrCode', 'asaasBoletoLine', 'asaasLastSyncAt']))
                     )));
       allow delete: if isVerifiedUser() && isDocOwner() && isValidId(loanId);
     }
@@ -284,6 +429,54 @@ service cloud.firestore {
                     incoming().linkId == existing().linkId &&
                     incoming().diff(existing()).affectedKeys().hasOnly(['status', 'approvedAt', 'approvedAmount', 'loanId'])));
       allow delete: if isVerifiedUser() && (isDocOwner() || isAdmin()) && isValidId(registrationId);
+    }
+
+    match /client_portals/{token} {
+      // Non-PII isolated single-contract lookup using unguessable >= 24-char cryptographic token
+      allow get: if isValidPortalToken(token);
+      allow list: if isVerifiedUser() && resource.data.uid == request.auth.uid;
+      allow create: if isVerifiedUser() && isValidPortalToken(token) && isValidClientPortal(incoming()) &&
+                    incoming().token == token &&
+                    exists(/databases/$(database)/documents/loans/$(incoming().loanId)) &&
+                    get(/databases/$(database)/documents/loans/$(incoming().loanId)).data.uid == request.auth.uid;
+      allow update: if isVerifiedUser() && isValidPortalToken(token) && (isAdmin() || (isDocOwner() && isValidClientPortal(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().token == existing().token &&
+                    incoming().loanId == existing().loanId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['lenderName', 'clientName', 'capital', 'interestRate', 'periodInterest', 'totalBruto', 'date', 'dueDate', 'status', 'capitalPago', 'jurosPagos', 'asaasCustomerId', 'active', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isDocOwner() && isValidPortalToken(token);
+
+      match /charges/{chargeId} {
+        allow get: if isValidPortalToken(token) && isValidId(chargeId);
+        allow list: if isValidPortalToken(token) && (resource.data.token == token || (isVerifiedUser() && resource.data.uid == request.auth.uid));
+        allow create: if isValidPortalToken(token) && isValidId(chargeId) && isValidPortalCharge(incoming(), token) &&
+                      exists(/databases/$(database)/documents/client_portals/$(token)) &&
+                      get(/databases/$(database)/documents/client_portals/$(token)).data.active == true &&
+                      get(/databases/$(database)/documents/client_portals/$(token)).data.loanId == incoming().loanId &&
+                      get(/databases/$(database)/documents/client_portals/$(token)).data.uid == incoming().uid && (
+                        (isVerifiedUser() && incoming().uid == request.auth.uid) ||
+                        (incoming().settled == false && incoming().asaasStatus in ['PENDING', 'AWAITING_RISK_ANALYSIS'])
+                      );
+        allow update: if isVerifiedUser() && isValidPortalToken(token) && isValidId(chargeId) &&
+                      (isAdmin() || (isDocOwner() && isValidPortalCharge(incoming(), token) &&
+                      incoming().uid == existing().uid &&
+                      incoming().token == existing().token &&
+                      incoming().loanId == existing().loanId &&
+                      incoming().operationType == existing().operationType &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['asaasStatus', 'settled', 'settledAt', 'updatedAt'])));
+        allow delete: if isVerifiedUser() && isDocOwner() && isValidPortalToken(token) && isValidId(chargeId);
+      }
+
+      match /payments/{paymentId} {
+        allow get: if isValidPortalToken(token) && isValidId(paymentId);
+        allow list: if isValidPortalToken(token) && (resource.data.token == token || (isVerifiedUser() && resource.data.uid == request.auth.uid));
+        allow create: if isVerifiedUser() && isValidPortalToken(token) && isValidId(paymentId) &&
+                      isValidPortalPayment(incoming(), token) &&
+                      exists(/databases/$(database)/documents/client_portals/$(token)) &&
+                      get(/databases/$(database)/documents/client_portals/$(token)).data.uid == request.auth.uid;
+        allow update: if isVerifiedUser() && isValidPortalToken(token) && isValidId(paymentId) && isAdmin();
+        allow delete: if isVerifiedUser() && isDocOwner() && isValidPortalToken(token) && isValidId(paymentId);
+      }
     }
   }
 }

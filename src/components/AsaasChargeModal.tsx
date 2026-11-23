@@ -1,7 +1,24 @@
 import React, { useState } from 'react';
-import { X, QrCode, Copy, Check, ExternalLink, RefreshCw, FileText, CreditCard, AlertCircle } from 'lucide-react';
+import {
+  X,
+  QrCode,
+  Copy,
+  Check,
+  ExternalLink,
+  RefreshCw,
+  FileText,
+  CreditCard,
+  AlertCircle,
+  Settings2
+} from 'lucide-react';
 import { cn } from '../lib/utils';
-import { AsaasBillingType, AsaasChargeInfo, createAsaasCharge, getAsaasStatusMeta, syncAsaasCharge } from '../utils/asaasApi';
+import {
+  AsaasBillingType,
+  AsaasChargeInfo,
+  createAsaasCharge,
+  getAsaasStatusMeta,
+  syncAsaasCharge
+} from '../utils/asaasApi';
 
 export interface AsaasLoanLike {
   id: string;
@@ -28,6 +45,8 @@ interface AsaasChargeModalProps {
   loan: AsaasLoanLike;
   isDark?: boolean;
   canGenerate?: boolean;
+  asaasConfigured?: boolean;
+  onOpenAsaasSettings?: () => void;
   onClose: () => void;
   onChargeUpdated?: (loanId: string, info: AsaasChargeInfo) => Promise<void> | void;
 }
@@ -36,6 +55,8 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
   loan,
   isDark = true,
   canGenerate = false,
+  asaasConfigured = true,
+  onOpenAsaasSettings,
   onClose,
   onChargeUpdated
 }) => {
@@ -58,6 +79,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
   const [billingType, setBillingType] = useState<AsaasBillingType>('UNDEFINED');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [needsConfigNotice, setNeedsConfigNotice] = useState(!asaasConfigured);
   const [copiedKey, setCopiedKey] = useState<'pix' | 'boleto' | null>(null);
 
   const statusMeta = getAsaasStatusMeta(liveCharge?.asaasStatus);
@@ -75,7 +97,11 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
     const res = await syncAsaasCharge(liveCharge.asaasChargeId);
     setIsLoading(false);
     if (!res.ok || !res.data) {
-      setErrorMsg(res.error || 'Não foi possível atualizar a cobrança no Asaas.');
+      if (res.needsUserConfig) {
+        setNeedsConfigNotice(true);
+      } else {
+        setErrorMsg(res.error || 'Não foi possível atualizar a cobrança no Asaas.');
+      }
       return;
     }
     setLiveCharge(res.data);
@@ -99,9 +125,14 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
     });
     setIsLoading(false);
     if (!res.ok || !res.data) {
-      setErrorMsg(res.error || 'Não foi possível gerar a cobrança no Asaas.');
+      if (res.needsUserConfig) {
+        setNeedsConfigNotice(true);
+      } else {
+        setErrorMsg(res.error || 'Não foi possível gerar a cobrança no Asaas.');
+      }
       return;
     }
+    setNeedsConfigNotice(false);
     setLiveCharge(res.data);
     await onChargeUpdated?.(loan.id, res.data);
   };
@@ -120,10 +151,13 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
-            <p className={cn('text-xs font-semibold', isDark ? 'text-[#E5E5E5]' : 'text-slate-700')}>Cobrança Asaas · PIX &amp; Boleto</p>
+            <p className={cn('text-xs font-semibold', isDark ? 'text-[#E5E5E5]' : 'text-slate-700')}>
+              Cobrança Asaas · PIX &amp; Boleto
+            </p>
             <h3 className="text-lg font-bold tracking-tight mt-0.5">{loan.clientName}</h3>
             <p className="text-xs text-slate-400 font-mono tabular-nums mt-0.5">
-              Valor: {formatBRL(loan.totalBruto > 0 ? loan.totalBruto : loan.capital)} · Venc.: {loan.dueDate.split('-').reverse().join('/')}
+              Valor: {formatBRL(loan.totalBruto > 0 ? loan.totalBruto : loan.capital)} · Venc.:{' '}
+              {loan.dueDate.split('-').reverse().join('/')}
             </p>
           </div>
           <button
@@ -135,6 +169,31 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {needsConfigNotice && canGenerate && (
+          <div className="p-4 rounded-2xl bg-white/[0.04] border border-white/15 space-y-3">
+            <div className="flex items-start gap-2.5 text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#F5F5F7]" />
+              <div className="space-y-1">
+                <p className="font-bold text-white">Integração Asaas não configurada</p>
+                <p className="text-slate-400 leading-relaxed">
+                  Para emitir cobranças PIX e Boleto com a sua conta Asaas, cadastre sua API Key na aba{' '}
+                  <strong className="text-slate-200">Ajustes &gt; Integração Asaas</strong>.
+                </p>
+              </div>
+            </div>
+            {onOpenAsaasSettings && (
+              <button
+                type="button"
+                onClick={onOpenAsaasSettings}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#F5F5F7] hover:bg-white text-black text-xs font-bold flex items-center justify-center gap-2 transition-all"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                <span>Configurar em Ajustes · Integração Asaas</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {errorMsg && (
           <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-start gap-2.5">
@@ -256,7 +315,7 @@ export const AsaasChargeModal: React.FC<AsaasChargeModalProps> = ({
             <p className="text-xs text-slate-400 leading-relaxed">
               Este contrato ainda não possui uma cobrança emitida no Asaas.
             </p>
-            {canGenerate && (
+            {canGenerate && !needsConfigNotice && (
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-300 block">Forma de Cobrança Asaas</label>
